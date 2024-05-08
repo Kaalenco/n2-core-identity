@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <Title>N2-Identity</Title>
+    <Company>Kaalenco</Company>
+    <Copyright>(c) 2024 - rights reserved</Copyright>
+    <Authors>gjkaal</Authors>
+    <Description>Data context for identity services</Description>
+    <IncludeSymbols>False</IncludeSymbols>
+    <PackageVersion>1.0.3</PackageVersion>
+    <PackageLicenseExpression>AFL-3.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/kaalenco/n2-core-identity</PackageProjectUrl>
+    <PackageId>n2.core.identity</PackageId>
+
+    <PackageType>Dependency</PackageType>
+    <Product>N2.Core for NET8.0</Product>
+    <ProductName>N2.Core</ProductName>
+    <ProductVersion>1.0.0</ProductVersion>
+
+    <RootNamespace>N2.Identity</RootNamespace>
+    <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
+
+    <NoWarn>
+      CA2007;
+      CA1819;
+      CS1591;
+    </NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <PackageReference Include="n2.core.abstractions" />
+    <PackageReference Include="n2.core.identity.abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\N2.Identity\N2.Identity.csproj" />
+  </ItemGroup>
+
+</Project>
