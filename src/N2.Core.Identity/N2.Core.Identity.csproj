@@ -14,7 +14,7 @@
     <Authors>gjkaal</Authors>
     <Description>Data context for identity services</Description>
     <IncludeSymbols>False</IncludeSymbols>
-    <PackageVersion>1.0.3</PackageVersion>
+    <PackageVersion>1.0.4</PackageVersion>
     <PackageLicenseExpression>AFL-3.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/kaalenco/n2-core-identity</PackageProjectUrl>
     <PackageId>n2.core.identity</PackageId>
@@ -43,11 +43,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
-    <PackageReference Include="n2.core.abstractions" />
-    <PackageReference Include="n2.core.identity.abstractions" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="7.5.1" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.5.1" />
+    <PackageReference Include="n2.core.abstractions"  Version="1.0.3" />
+    <PackageReference Include="n2.core.identity.abstractions"  Version="1.0.3" />
   </ItemGroup>
 
   <ItemGroup>
