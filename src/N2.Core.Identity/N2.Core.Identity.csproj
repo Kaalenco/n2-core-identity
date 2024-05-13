@@ -14,7 +14,7 @@
     <Authors>gjkaal</Authors>
     <Description>Data context for identity services</Description>
     <IncludeSymbols>False</IncludeSymbols>
-    <PackageVersion>1.0.4</PackageVersion>
+    <PackageVersion>1.0.5</PackageVersion>
     <PackageLicenseExpression>AFL-3.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/kaalenco/n2-core-identity</PackageProjectUrl>
     <PackageId>n2.core.identity</PackageId>
@@ -50,8 +50,10 @@
     <PackageReference Include="n2.core.identity.abstractions"  Version="1.0.3" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\N2.Identity\N2.Identity.csproj" />
+  <ItemGroup>    
+    <ProjectReference Include="..\N2.Identity\N2.Identity.csproj">
+      <PrivateAssets>All</PrivateAssets>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>
