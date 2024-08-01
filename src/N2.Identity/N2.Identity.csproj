@@ -16,7 +16,7 @@
     <IncludeSymbols>False</IncludeSymbols>
     <Product>N2.Core for NET8.0</Product>
     <ProductName>N2.Identity</ProductName>
-    <ProductVersion>1.0.4</ProductVersion>
+    <ProductVersion>1.0.6</ProductVersion>
 
     <RootNamespace>N2.Identity</RootNamespace>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
