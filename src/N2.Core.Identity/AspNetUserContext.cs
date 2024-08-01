@@ -1,6 +1,4 @@
-﻿using N2.Identity.Data;
-
-namespace N2.Core.Identity;
+﻿namespace N2.Core.Identity;
 
 public class AspNetUserContext : IUserContext
 {
@@ -16,7 +14,9 @@ public class AspNetUserContext : IUserContext
     private readonly List<UserAlert> alerts = new();
     public Guid UserId => user.Id;
     public string UserName => user.UserName ?? user.Email ?? string.Empty;
-    public bool IsAuthenticated => roles.Length>0;
+
+#pragma warning disable CA1822 // this is a false positive
+    public bool IsAuthenticated => roles.Length > 0;
 
     public string UserDescription => user.DisplayName ?? user.Email ?? string.Empty;
     public string UserPhone => user.PhoneNumber ?? string.Empty;

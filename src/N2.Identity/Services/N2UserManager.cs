@@ -62,7 +62,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
     {
         Contracts.Requires(confirmationToken, nameof(confirmationToken));
         var ctx = await InitializeContextAsync();
-        var dbUser = await ctx.ApplicationUserFirstOrDefaultAsync(user.Id, token);
+        var dbUser = await ctx.ApplicationUserAsync(user.Id, token);
         if (dbUser == null)
         {
             return RequestResult.NotFound();
@@ -115,7 +115,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
     {
         Contracts.NotDefault(userId, nameof(userId));
         var ctx = await InitializeContextAsync();
-        return await ctx.ApplicationUserFirstOrDefaultAsync(userId, token);
+        return await ctx.ApplicationUserAsync(userId, token);
     }
 
     public async Task<ApplicationUser?> FindByNameAsync(string? userName, CancellationToken token)
@@ -123,7 +123,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(userName, nameof(userName));
         var ctx = await InitializeContextAsync();
         var normalizedName = userName.ToUpperInvariant();
-        return await ctx.ApplicationUserFirstOrDefaultAsync(normalizedName, token);
+        return await ctx.ApplicationUserAsync(normalizedName, token);
     }
 
     public async Task<string> GenerateEmailConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token){

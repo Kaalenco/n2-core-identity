@@ -31,10 +31,10 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options) :
     public IQueryable<ApplicationRole> ApplicationRole => Roles;
     public IQueryable<IdentityUserRole<Guid>> IdentityUserRole => UserRoles;
 
-    public Task<ApplicationUser?> ApplicationUserFirstOrDefaultAsync(string normalizedName, CancellationToken token) 
+    public Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token) 
         => Users.Where(u => u.NormalizedUserName == normalizedName).FirstOrDefaultAsync(token);
 
-    public Task<ApplicationUser?> ApplicationUserFirstOrDefaultAsync(Guid userId, CancellationToken token)
+    public Task<ApplicationUser?> ApplicationUserAsync(Guid userId, CancellationToken token)
         => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> ApplicationUserByEmailAsync(string normalizedEmail, CancellationToken token)

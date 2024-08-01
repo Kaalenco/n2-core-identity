@@ -45,9 +45,9 @@ internal static class TestContext {
 
         IdentityMockFactory.Setup(m => m.CreateAsync(It.IsAny<string>())).ReturnsAsync(IdentityMock.Object);
         IdentityMock.Setup(m => m.ApplicationUser).Returns(listUsers.AsQueryable());
-        IdentityMock.Setup(m => m.ApplicationUserFirstOrDefaultAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        IdentityMock.Setup(m => m.ApplicationUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns<Guid, CancellationToken>((s, _) => Task.FromResult(listUsers.Find(m => m.Id == s)));
-        IdentityMock.Setup(m => m.ApplicationUserFirstOrDefaultAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        IdentityMock.Setup(m => m.ApplicationUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns<string, CancellationToken>((s, _) => Task.FromResult(listUsers.Find(m => m.NormalizedUserName==s)));
         IdentityMock.Setup(m => m.ApplicationUserByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns<string, CancellationToken>((s, _) => Task.FromResult(listUsers.Find(m => m.NormalizedEmail == s)));
