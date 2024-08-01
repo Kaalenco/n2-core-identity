@@ -1,11 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using N2.Core.Identity;
 using N2.Core.Extensions;
-using N2.Identity.Data;
-using N2.Identity.Services;
-using N2.Core.Entity;
-using N2.Core;
+using N2.Core.Identity;
 
 namespace N2.Identity.UnitTests;
 
@@ -13,13 +8,11 @@ namespace N2.Identity.UnitTests;
 public class N2AuthenticatorTests
 {
     private readonly ServiceProvider serviceProvider;
-    private readonly IConnectionStringService connectionStringService = new EntityConnectionService();
-    private readonly SettingsService settingsService = new SettingsService();
 
     public N2AuthenticatorTests()
     {
         var serviceCollection = new ServiceCollection();
-        ConfigureServices(serviceCollection);
+        TestContext.ConfigureServices(serviceCollection);
         serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
@@ -41,7 +34,7 @@ public class N2AuthenticatorTests
     [TestMethod]
     public async Task TestUserLoginSuccessAsync()
     {
-        var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
+        var userInfo = new UserLogin { Password = "secret", Username = "admin" };
         var authenticator = serviceProvider.GetRequiredService<IAuthenticator>();
         var user = await authenticator.AuthenticateAsync(userInfo);
         if (user == null)
@@ -53,22 +46,5 @@ public class N2AuthenticatorTests
             Assert.AreEqual(userInfo.Username, user.UserName);
             Console.WriteLine(user.SerializeForView());
         }
-    }
-
-    private void ConfigureServices(ServiceCollection serviceCollection)
-    {
-        serviceCollection.AddLogging(configure =>
-        {
-            configure.SetMinimumLevel(LogLevel.Debug);
-            configure.AddConsole();
-        });
-
-        serviceCollection.AddSingleton(settingsService);
-        serviceCollection.AddSingleton(connectionStringService);    
-
-        serviceCollection.AddScoped<IUserManager<ApplicationUser>>(
-            s => new N2UserManager(s.GetRequiredService<IIdentityContextFactory>(), "UserDbConnection"));
-        serviceCollection.AddScoped<IIdentityContextFactory, N2IdentityContextFactory>();
-        serviceCollection.AddScoped<IAuthenticator, N2AuthenticationService>();
     }
 }

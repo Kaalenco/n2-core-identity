@@ -19,6 +19,7 @@
     <PackageReference Include="n2.core" />
     <PackageReference Include="n2.core.entity" />
     <PackageReference Include="n2.core.entity.abstractions" />
+    <PackageReference Include="moq" />
   </ItemGroup>
 
   <ItemGroup>

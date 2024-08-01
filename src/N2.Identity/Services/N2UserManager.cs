@@ -53,7 +53,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
     public async Task<IRequestResult> DeleteAsync([NotNull] ApplicationUser user, CancellationToken token)
     {
         var ctx = await InitializeContextAsync();
-        ctx.ApplicationUser.Remove(user);
+        ctx.RemoveApplicationUser(user);
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }
@@ -62,7 +62,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
     {
         Contracts.Requires(confirmationToken, nameof(confirmationToken));
         var ctx = await InitializeContextAsync();
-        var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id==user.Id, token);
+        var dbUser = await ctx.ApplicationUserFirstOrDefaultAsync(user.Id, token);
         if (dbUser == null)
         {
             return RequestResult.NotFound();
@@ -106,7 +106,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
         user.EmailConfirmed = false;
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
         user.PasswordHash = GetPasswordHash(user.UserName, user.SecurityStamp, password);
-        await ctx.ApplicationUser.AddAsync(user, token);
+        await ctx.AddApplicationUserAsync(user, token);
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }
@@ -115,7 +115,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
     {
         Contracts.NotDefault(userId, nameof(userId));
         var ctx = await InitializeContextAsync();
-        return await ctx.ApplicationUser.FirstOrDefaultAsync(u => u.Id == userId, token);
+        return await ctx.ApplicationUserFirstOrDefaultAsync(userId, token);
     }
 
     public async Task<ApplicationUser?> FindByNameAsync(string? userName, CancellationToken token)
@@ -123,7 +123,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(userName, nameof(userName));
         var ctx = await InitializeContextAsync();
         var normalizedName = userName.ToUpperInvariant();
-        return await ctx.ApplicationUser.Where(u => u.NormalizedUserName == normalizedName).FirstOrDefaultAsync(token);
+        return await ctx.ApplicationUserFirstOrDefaultAsync(normalizedName, token);
     }
 
     public async Task<string> GenerateEmailConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token){
@@ -263,7 +263,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(role, nameof(role));
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
-        var roleItem = await ctx.ApplicationRole.FirstOrDefaultAsync(r => r.NormalizedName == normalizedName, token);
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem != null)
         {
             return new RequestResult(406, "Already exists");
@@ -273,7 +273,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
             Name = role,
             NormalizedName = normalizedName
         };
-        await ctx.ApplicationRole.AddAsync(roleItem, token);
+        await ctx.AddApplicationRoleAsync(roleItem, token);
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }
@@ -283,7 +283,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(emailAddress, nameof(emailAddress));
         var ctx = await InitializeContextAsync();
         var normalizedName = emailAddress.ToUpperInvariant();
-        return await ctx.ApplicationUser.Where(u => u.NormalizedEmail == normalizedName).FirstOrDefaultAsync(token);
+        return await ctx.ApplicationUserByEmailAsync(normalizedName, token);
     }
 
     public async Task<bool> IsInRoleAsync(ApplicationUser user, string role, CancellationToken token) {
@@ -291,12 +291,13 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(role, nameof(role));
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
-        var roleId = await ctx.ApplicationRole.Where(r => r.NormalizedName == normalizedName).Select(r => r.Id).FirstOrDefaultAsync(token);
-        if (roleId == Guid.Empty)
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
+        if (roleItem == null)
         {
             return false;
         }
-        return await ctx.ApplicationUserRole.AnyAsync(r => r.UserId == user.Id && r.RoleId == roleId, token);
+        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
+        return isAssigned != null;
     }
     public async Task<IRequestResult> RemoveRoleAsync(string role, CancellationToken token)
     {
@@ -308,7 +309,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
         {
             return RequestResult.NotFound();
         }
-        ctx.ApplicationRole.Remove(roleItem);
+        ctx.RemoveApplicationRole(roleItem);
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }
@@ -317,7 +318,8 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(role, nameof(role));
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
-        return await ctx.ApplicationRole.AnyAsync(r => r.NormalizedName == normalizedName, token);
+        var roleId = await ctx.ApplicationRoleAsync(normalizedName, token);
+        return roleId != null;
     }
 
     public async Task<IRequestResult> RemoveFromRoleAsync(ApplicationUser user, string role, CancellationToken token) {
@@ -325,17 +327,17 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(role, nameof(role));
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
-        var roleId = await ctx.ApplicationRole.Where(r => r.NormalizedName == normalizedName).Select(r => r.Id).FirstOrDefaultAsync(token);
-        if (roleId == Guid.Empty)
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
+        if (roleItem == null)
         {
             return new RequestResult(406, $"Role '{role}' does not exist");
         }
-        var isAssigned = await ctx.ApplicationUserRole.FirstOrDefaultAsync(r => r.UserId == user.Id && r.RoleId == roleId, token);
+        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id , roleItem.Id, token);
         if (isAssigned == null)
         {
             return RequestResult.Ok();
         }
-        ctx.ApplicationUserRole.Remove(isAssigned);
+        ctx.RemoveApplicationUserRole(isAssigned);
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }
@@ -345,22 +347,22 @@ public class N2UserManager : IUserManager<ApplicationUser>
         Contracts.Requires(role, nameof(role));
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
-        var roleId = await ctx.ApplicationRole.Where(r => r.NormalizedName == normalizedName).Select(r => r.Id).FirstOrDefaultAsync(token);
-        if (roleId == Guid.Empty)
+        var roleItem = await ctx.ApplicationRoleAsync( normalizedName, token);
+        if (roleItem == null)
         {
             return new RequestResult(406, $"Role '{role}' does not exist");
-        }
-        var isAssigned = await ctx.ApplicationUserRole.AnyAsync(r => r.UserId == user.Id && r.RoleId == roleId, token);
-        if (isAssigned)
+        } 
+        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
+        if (isAssigned != null)
         {
             return RequestResult.Ok();
         }
         var userRole = new IdentityUserRole<Guid>
         {
-            RoleId = roleId,
+            RoleId = roleItem.Id,
             UserId = user.Id
         };
-        await ctx.ApplicationUserRole.AddAsync(userRole, token);
+        await ctx.AddIdentityUserRoleAsync(userRole, token);
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }

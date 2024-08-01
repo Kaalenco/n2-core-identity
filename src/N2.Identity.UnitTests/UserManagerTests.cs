@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Moq;
 using N2.Core;
 using N2.Core.Entity;
 using N2.Core.Identity;
@@ -12,13 +13,11 @@ namespace N2.Identity.UnitTests;
 public class N2UserManagerTests
 {
     private readonly ServiceProvider serviceProvider;
-    private readonly IConnectionStringService connectionStringService = new EntityConnectionService();
-    private readonly SettingsService settingsService = new SettingsService();
 
     public N2UserManagerTests()
     {
         var serviceCollection = new ServiceCollection();
-        ConfigureServices(serviceCollection);
+        TestContext.ConfigureServices(serviceCollection);
         serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
@@ -36,9 +35,9 @@ public class N2UserManagerTests
     public async Task TestValidateEmailConfirmationAsync()
     {
         string? tokenResult;
-        IRequestResult? result=null;
+        IRequestResult? result = null;
         var token = new CancellationToken();
-        var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
+        var userInfo = new UserLogin { Password = "secret", Username = "admin" };
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByNameAsync(userInfo.Username, token);
 
@@ -58,7 +57,7 @@ public class N2UserManagerTests
     public async Task TestFindByEmailAsync()
     {
         var token = new CancellationToken();
-        var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
+        var userInfo = new UserLogin { Password = "secret", Username = "admin@email.com" };
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByEmailAsync(userInfo.Username, token);
         Assert.IsNotNull(user);
@@ -69,7 +68,7 @@ public class N2UserManagerTests
     {
         var isAdmin = false;
         var token = new CancellationToken();
-        var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
+        var userInfo = new UserLogin { Password = "secret", Username = "admin@email.com" };
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByEmailAsync(userInfo.Username, token);
         if (user != null)
@@ -82,9 +81,9 @@ public class N2UserManagerTests
     [TestMethod]
     public async Task TestAddRoleToUserAsyncAsync()
     {
-        IRequestResult? result=null;
+        IRequestResult? result = null;
         var token = new CancellationToken();
-        var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
+        var userInfo = new UserLogin { Password = "secret", Username = "admin@email.com" };
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByEmailAsync(userInfo.Username, token);
         if (user != null)
@@ -102,13 +101,13 @@ public class N2UserManagerTests
     }
 
     [TestMethod]
-    public async Task TestRoleExistsAsync() 
-    {        
-           var token = new CancellationToken();
-           var role = SystemRoles.SysAdmin;
-           var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-           var roleExists = await userManager.RoleExistsAsync(role, token);
-           Assert.IsTrue(roleExists);
+    public async Task TestRoleExistsAsync()
+    {
+        var token = new CancellationToken();
+        var role = SystemRoles.SysAdmin;
+        var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
+        var roleExists = await userManager.RoleExistsAsync(role, token);
+        Assert.IsTrue(roleExists);
     }
 
     [TestMethod]
@@ -132,7 +131,7 @@ public class N2UserManagerTests
     {
         string? tokenResult = null;
         var token = new CancellationToken();
-        var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
+        var userInfo = new UserLogin { Password = "secret", Username = "admin" };
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByNameAsync(userInfo.Username, token);
         if (user != null)
@@ -170,21 +169,5 @@ public class N2UserManagerTests
         Assert.IsTrue(setUserNameResult.IsSuccessCode);
         Assert.IsTrue(setEmailNameResult.IsSuccessCode);
         Assert.IsTrue(createUserResult.IsSuccessCode);
-    }
-
-    private void ConfigureServices(ServiceCollection serviceCollection)
-    {
-        serviceCollection.AddLogging(configure =>
-        {
-            configure.SetMinimumLevel(LogLevel.Debug);
-            configure.AddConsole();
-        });
-
-        serviceCollection.AddSingleton(settingsService);
-        serviceCollection.AddSingleton(connectionStringService);      
-
-        serviceCollection.AddScoped<IUserManager<ApplicationUser>>(
-            s => new N2UserManager(s.GetRequiredService<IIdentityContextFactory>(), "UserDbConnection"));
-        serviceCollection.AddScoped<IIdentityContextFactory, N2IdentityContextFactory>();
-    }
+    }   
 }

@@ -27,9 +27,24 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options) :
         }
     }
 
-    public DbSet<ApplicationUser> ApplicationUser => Users;
-    public DbSet<ApplicationRole> ApplicationRole => Roles;
-    public DbSet<IdentityUserRole<Guid>> ApplicationUserRole => UserRoles;
+    public IQueryable<ApplicationUser> ApplicationUser => Users;
+    public IQueryable<ApplicationRole> ApplicationRole => Roles;
+    public IQueryable<IdentityUserRole<Guid>> IdentityUserRole => UserRoles;
+
+    public Task<ApplicationUser?> ApplicationUserFirstOrDefaultAsync(string normalizedName, CancellationToken token) 
+        => Users.Where(u => u.NormalizedUserName == normalizedName).FirstOrDefaultAsync(token);
+
+    public Task<ApplicationUser?> ApplicationUserFirstOrDefaultAsync(Guid userId, CancellationToken token)
+        => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
+
+    public Task<ApplicationUser?> ApplicationUserByEmailAsync(string normalizedEmail, CancellationToken token)
+        => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
+
+    public Task<ApplicationRole?> ApplicationRoleAsync(string normalizedName, CancellationToken token)
+        => Roles.Where(r => r.NormalizedName == normalizedName).FirstOrDefaultAsync(token);
+
+    public Task<IdentityUserRole<Guid>?> IdentityUserRoleAsync(Guid userId, Guid roleId, CancellationToken token)
+        => UserRoles.Where(ur => ur.UserId == userId && ur.RoleId == roleId).FirstOrDefaultAsync(token);
 
     public Task<List<KeyValuePair<string, string>>> GetSelectListAsync(string tableName)
     => tableName switch
@@ -223,4 +238,11 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options) :
         }
         return result;
     }
+
+    public void RemoveApplicationUser(ApplicationUser user) => Users.Remove(user);
+    public void RemoveApplicationRole(ApplicationRole role) => Roles.Remove(role);
+    public void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole) => UserRoles.Remove(identityRole);
+    public Task AddApplicationUserAsync(ApplicationUser user, CancellationToken token) => Users.AddAsync(user, token).AsTask();
+    public Task AddApplicationRoleAsync(ApplicationRole role, CancellationToken token) => Roles.AddAsync(role, token).AsTask();
+    public Task AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token) => UserRoles.AddAsync(identityRole, token).AsTask();
 }
