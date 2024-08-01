@@ -12,7 +12,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8F88F85B-CEAB-4629-9CE0-272DBA10636D}"
 	ProjectSection(SolutionItems) = preProject
 		Directory.Build.props = Directory.Build.props
+		Directory.Packages.props = Directory.Packages.props
 	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "N2.Identity.UnitTests", "N2.Identity.UnitTests\N2.Identity.UnitTests.csproj", "{76588996-F4C8-4F12-B849-3C7C76E6944D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,6 +35,10 @@ Global
 		{25BE3142-2E91-4D84-9335-83EFB04D0798}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{25BE3142-2E91-4D84-9335-83EFB04D0798}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{25BE3142-2E91-4D84-9335-83EFB04D0798}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76588996-F4C8-4F12-B849-3C7C76E6944D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76588996-F4C8-4F12-B849-3C7C76E6944D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76588996-F4C8-4F12-B849-3C7C76E6944D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76588996-F4C8-4F12-B849-3C7C76E6944D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

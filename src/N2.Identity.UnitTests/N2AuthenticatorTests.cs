@@ -14,7 +14,7 @@ public class N2AuthenticatorTests
 {
     private readonly ServiceProvider serviceProvider;
     private readonly IConnectionStringService connectionStringService = new EntityConnectionService();
-    private readonly ISettingsService settingsService = new SettingsService();
+    private readonly SettingsService settingsService = new SettingsService();
 
     public N2AuthenticatorTests()
     {
@@ -44,9 +44,15 @@ public class N2AuthenticatorTests
         var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
         var authenticator = serviceProvider.GetRequiredService<IAuthenticator>();
         var user = await authenticator.AuthenticateAsync(userInfo);
-        Assert.IsNotNull(user);
-        Assert.AreEqual(userInfo.Username, user.UserName);
-        Console.WriteLine(user.SerializeForView());
+        if (user == null)
+        {
+            Assert.Fail("User not found");
+        }
+        else
+        {
+            Assert.AreEqual(userInfo.Username, user.UserName);
+            Console.WriteLine(user.SerializeForView());
+        }
     }
 
     private void ConfigureServices(ServiceCollection serviceCollection)

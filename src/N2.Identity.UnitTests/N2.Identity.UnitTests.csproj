@@ -17,11 +17,11 @@
     <PackageReference Include="MSTest.TestFramework" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="n2.core" />
+    <PackageReference Include="n2.core.entity" />
+    <PackageReference Include="n2.core.entity.abstractions" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\N2.Core.Entity.Abstractions\N2.Core.Entity.Abstractions.csproj" />
-    <ProjectReference Include="..\N2.Core.Entity\N2.Core.Entity.csproj" />
     <ProjectReference Include="..\N2.Core.Identity\N2.Core.Identity.csproj" />
     <ProjectReference Include="..\N2.Identity\N2.Identity.csproj" />
   </ItemGroup>

@@ -13,7 +13,7 @@ public class N2UserManagerTests
 {
     private readonly ServiceProvider serviceProvider;
     private readonly IConnectionStringService connectionStringService = new EntityConnectionService();
-    private readonly ISettingsService settingsService = new SettingsService();
+    private readonly SettingsService settingsService = new SettingsService();
 
     public N2UserManagerTests()
     {
@@ -35,14 +35,21 @@ public class N2UserManagerTests
     [TestMethod]
     public async Task TestValidateEmailConfirmationAsync()
     {
+        string? tokenResult;
+        IRequestResult? result=null;
         var token = new CancellationToken();
         var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByNameAsync(userInfo.Username, token);
-        Assert.IsNotNull(user);
-        var tokenResult = await userManager.GenerateEmailConfirmationTokenAsync(user, token);
 
-        var result = await userManager.ConfirmEmailAsync(user, tokenResult, token);
+        if (user != null)
+        {
+            tokenResult = await userManager.GenerateEmailConfirmationTokenAsync(user, token);
+            if (!string.IsNullOrEmpty(tokenResult))
+            {
+                result = await userManager.ConfirmEmailAsync(user, tokenResult, token);
+            }
+        }
         Assert.IsNotNull(result);
         Assert.IsTrue(result.IsSuccessCode);
     }
@@ -60,29 +67,36 @@ public class N2UserManagerTests
     [TestMethod]
     public async Task TestRoleValidationAsync()
     {
+        var isAdmin = false;
         var token = new CancellationToken();
         var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByEmailAsync(userInfo.Username, token);
-        Assert.IsNotNull(user);
-        var isAdmin = await userManager.IsInRoleAsync(user, SystemRoles.SysAdmin, token);
+        if (user != null)
+        {
+            isAdmin = await userManager.IsInRoleAsync(user, SystemRoles.SysAdmin, token);
+        }
         Assert.IsTrue(isAdmin);
     }
 
     [TestMethod]
     public async Task TestAddRoleToUserAsyncAsync()
     {
+        IRequestResult? result=null;
         var token = new CancellationToken();
         var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByEmailAsync(userInfo.Username, token);
-        Assert.IsNotNull(user);
-        var isAdmin = await userManager.IsInRoleAsync(user, SystemRoles.Publisher, token);
-        if (isAdmin)
+        if (user != null)
         {
-            _ = await userManager.RemoveFromRoleAsync(user, SystemRoles.Publisher, token);
+            var isAdmin = await userManager.IsInRoleAsync(user, SystemRoles.Publisher, token);
+            if (isAdmin)
+            {
+                _ = await userManager.RemoveFromRoleAsync(user, SystemRoles.Publisher, token);
+            }
+
+            result = await userManager.AddToRoleAsync(user, SystemRoles.Publisher, token);
         }
-        var result = await userManager.AddToRoleAsync(user, SystemRoles.Publisher, token);
         Assert.IsNotNull(result);
         Assert.IsTrue(result.IsSuccessCode);
     }
@@ -116,12 +130,15 @@ public class N2UserManagerTests
     [TestMethod]
     public async Task TestGenerateEmailConfirmationTokenAsync()
     {
+        string? tokenResult = null;
         var token = new CancellationToken();
         var userInfo = settingsService.GetConfigSettings<UserLogin>("AdminUser");
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var user = await userManager.FindByNameAsync(userInfo.Username, token);
-        Assert.IsNotNull(user);
-        var tokenResult = await userManager.GenerateEmailConfirmationTokenAsync(user, token);
+        if (user != null)
+        {
+            tokenResult = await userManager.GenerateEmailConfirmationTokenAsync(user, token);
+        }
         Assert.IsNotNull(tokenResult);
         Console.WriteLine(tokenResult);
     }

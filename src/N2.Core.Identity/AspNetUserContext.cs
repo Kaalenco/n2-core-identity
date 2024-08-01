@@ -16,7 +16,7 @@ public class AspNetUserContext : IUserContext
     private readonly List<UserAlert> alerts = new();
     public Guid UserId => user.Id;
     public string UserName => user.UserName ?? user.Email ?? string.Empty;
-    public bool IsAuthenticated => true;
+    public bool IsAuthenticated => roles.Length>0;
 
     public string UserDescription => user.DisplayName ?? user.Email ?? string.Empty;
     public string UserPhone => user.PhoneNumber ?? string.Empty;

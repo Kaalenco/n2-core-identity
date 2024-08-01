@@ -12,6 +12,7 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
+    <NoWarn>CA2007</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label ="Dotnet build visibility">
@@ -19,19 +20,5 @@
     <CompilerVisibleProperty Include="ProjectDir" />
   </ItemGroup>
 
-  <ItemGroup Label="Analyzers">
-    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.10.48" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeStyle" Version="4.9.2" />
-    <PackageReference Include="Roslynator.Analyzers" Version="4.12.2" />
-    <PackageReference Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.2" />
-    <PackageReference Include="Roslynator.Formatting.Analyzers" Version="4.12.2" />
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="9.25.0.90414" />
-    <PackageReference Include="AsyncFixer" Version="1.6.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Analyzers" Version="8.0.4" />
-    <PackageReference Include="Microsoft.Azure.Functions.Analyzers" Version="1.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.Analyzers" Version="8.0.4" />
-  </ItemGroup>
+
 </Project>

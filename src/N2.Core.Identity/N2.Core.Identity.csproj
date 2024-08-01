@@ -22,7 +22,7 @@
     <PackageType>Dependency</PackageType>
     <Product>N2.Core for NET8.0</Product>
     <ProductName>N2.Core</ProductName>
-    <ProductVersion>1.0.0</ProductVersion>
+    <ProductVersion>1.0.1</ProductVersion>
 
     <RootNamespace>N2.Identity</RootNamespace>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
@@ -43,11 +43,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="7.5.1" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.5.1" />
-    <PackageReference Include="n2.core.abstractions"  Version="1.0.3" />
-    <PackageReference Include="n2.core.identity.abstractions"  Version="1.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <PackageReference Include="n2.core.abstractions" />
+    <PackageReference Include="n2.core.identity.abstractions" />
   </ItemGroup>
 
   <ItemGroup>    
