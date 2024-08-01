@@ -52,7 +52,7 @@
 
   <ItemGroup>    
     <ProjectReference Include="..\N2.Identity\N2.Identity.csproj">
-      <PrivateAssets>All</PrivateAssets>
+      <IncludeAssets>All</IncludeAssets>
     </ProjectReference>
   </ItemGroup>
 
