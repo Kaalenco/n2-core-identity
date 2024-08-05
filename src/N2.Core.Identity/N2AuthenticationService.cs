@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
-using N2.Identity.Data;
+using N2.Core.Identity.Data;
 
 namespace N2.Core.Identity;
 

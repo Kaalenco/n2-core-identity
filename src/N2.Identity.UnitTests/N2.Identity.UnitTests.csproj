@@ -24,7 +24,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\N2.Core.Identity\N2.Core.Identity.csproj" />
-    <ProjectReference Include="..\N2.Identity\N2.Identity.csproj" />
   </ItemGroup>
 
 </Project>
