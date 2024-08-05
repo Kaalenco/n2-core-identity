@@ -31,7 +31,7 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options) :
     public IQueryable<ApplicationRole> ApplicationRole => Roles;
     public IQueryable<IdentityUserRole<Guid>> IdentityUserRole => UserRoles;
 
-    public Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token) 
+    public Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token)
         => Users.Where(u => u.NormalizedUserName == normalizedName).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> ApplicationUserAsync(Guid userId, CancellationToken token)
@@ -240,9 +240,14 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options) :
     }
 
     public void RemoveApplicationUser(ApplicationUser user) => Users.Remove(user);
+
     public void RemoveApplicationRole(ApplicationRole role) => Roles.Remove(role);
+
     public void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole) => UserRoles.Remove(identityRole);
+
     public Task AddApplicationUserAsync(ApplicationUser user, CancellationToken token) => Users.AddAsync(user, token).AsTask();
+
     public Task AddApplicationRoleAsync(ApplicationRole role, CancellationToken token) => Roles.AddAsync(role, token).AsTask();
+
     public Task AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token) => UserRoles.AddAsync(identityRole, token).AsTask();
 }

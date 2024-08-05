@@ -17,15 +17,25 @@ public interface IIdentityContext : ICoreDataContext
     Task<bool> CanSignInAsync(Guid userId);
 
     void RemoveApplicationUser(ApplicationUser user);
+
     void RemoveApplicationRole(ApplicationRole role);
+
     void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole);
+
     Task AddApplicationUserAsync(ApplicationUser user, CancellationToken token);
+
     Task AddApplicationRoleAsync(ApplicationRole role, CancellationToken token);
+
     Task AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token);
+
     Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token);
+
     Task<ApplicationUser?> ApplicationUserAsync(Guid userId, CancellationToken token);
+
     Task<ApplicationUser?> ApplicationUserByEmailAsync(string normalizedEmail, CancellationToken token);
+
     Task<ApplicationRole?> ApplicationRoleAsync(string normalizedName, CancellationToken token);
+
     Task<IdentityUserRole<Guid>?> IdentityUserRoleAsync(Guid userId, Guid roleId, CancellationToken token);
 
     IQueryable<ApplicationUser> ApplicationUser { get; }

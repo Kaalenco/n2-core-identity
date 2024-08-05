@@ -5,55 +5,19 @@
   </PropertyGroup>
   <ItemGroup Label="Generic">
     <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.4" />
-    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="7.5.1" />
-    <PackageVersion Include="N2.Contracts" Version="1.0.7" />
-    <PackageVersion Include="N2.Core" Version="1.0.3" />
-    <PackageVersion Include="N2.Core.Entity" Version="1.0.4" />
-    <PackageVersion Include="n2.core.entity.abstractions" Version="1.0.3" />
-    <PackageVersion Include="n2.core.abstractions" Version="1.0.3" />
-    <PackageVersion Include="n2.core.identity.abstractions" Version="1.0.3" />
-    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="7.5.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.7" />
+    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.0.1" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
+    <PackageVersion Include="n2.core" Version="1.0.9" />
+    <PackageVersion Include="n2.core.abstractions" Version="1.0.9" />
+    <PackageVersion Include="n2.core.entity" Version="1.0.9" />
+    <PackageVersion Include="n2.core.entity.abstractions" Version="1.0.9" />
+    <PackageVersion Include="n2.core.identity.abstractions" Version="1.0.9" />
   </ItemGroup>
-  <ItemGroup Label="Analyzers">
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.10.48">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeStyle" Version="4.9.2">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.2">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.2">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.2">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="9.25.0.90414">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="AsyncFixer" Version="1.6.0">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Analyzers" Version="8.0.4">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Microsoft.Azure.Functions.Analyzers" Version="1.0.0">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-    <PackageVersion Include="Microsoft.AspNetCore.Components.Analyzers" Version="8.0.4">
-      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
-    </PackageVersion>
-  </ItemGroup>
+
   <ItemGroup Label="Testing">
     <PackageVersion Include="Coverlet.Collector" Version="6.0.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
@@ -61,4 +25,56 @@
     <PackageVersion Include="MSTest.TestFramework" Version="3.5.0" />
     <PackageVersion Include="Moq" Version="4.20.70" />
   </ItemGroup>
+
+  <ItemGroup Label="Analyzers">
+    <PackageVersion Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="8.0.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.10.48">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeStyle" Version="4.10.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.12.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.12.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.12.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="9.30.0.95878">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="AsyncFixer" Version="1.6.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Analyzers" Version="8.0.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Microsoft.Azure.Functions.Analyzers" Version="1.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Analyzers" Version="8.0.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageVersion>
+  </ItemGroup>
+  
 </Project>

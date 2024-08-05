@@ -21,7 +21,7 @@ public class WebTokenGenerator : IWebTokenGenerator
 
     public string GenerateWebToken(IUserContext userContext, int timeoutInMinutes)
     {
-        Contracts.Requires(userContext, nameof(userContext));
+        ArgumentNullException.ThrowIfNull(userContext);
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
         var claims = new List<Claim>
         {
@@ -33,10 +33,20 @@ public class WebTokenGenerator : IWebTokenGenerator
         }
 
 #if DEBUG
-        if (timeoutInMinutes <= 0) timeoutInMinutes = 14400;
+        if (timeoutInMinutes <= 0)
+        {
+            timeoutInMinutes = 14400;
+        }
 #endif
-        if (timeoutInMinutes <= 5) timeoutInMinutes = 5;
-        if (timeoutInMinutes > 1440) timeoutInMinutes = 1440;
+        if (timeoutInMinutes <= 5)
+        {
+            timeoutInMinutes = 5;
+        }
+
+        if (timeoutInMinutes > 1440)
+        {
+            timeoutInMinutes = 1440;
+        }
 
         var token = new JwtSecurityToken(
             issuer,

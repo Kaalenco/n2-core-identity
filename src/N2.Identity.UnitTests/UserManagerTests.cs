@@ -1,11 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Moq;
 using N2.Core;
-using N2.Core.Entity;
 using N2.Core.Identity;
 using N2.Identity.Data;
-using N2.Identity.Services;
 
 namespace N2.Identity.UnitTests;
 
@@ -169,5 +165,5 @@ public class N2UserManagerTests
         Assert.IsTrue(setUserNameResult.IsSuccessCode);
         Assert.IsTrue(setEmailNameResult.IsSuccessCode);
         Assert.IsTrue(createUserResult.IsSuccessCode);
-    }   
+    }
 }

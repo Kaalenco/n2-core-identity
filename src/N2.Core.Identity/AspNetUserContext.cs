@@ -15,7 +15,6 @@ public class AspNetUserContext : IUserContext
     public Guid UserId => user.Id;
     public string UserName => user.UserName ?? user.Email ?? string.Empty;
 
-#pragma warning disable CA1822 // this is a false positive
     public bool IsAuthenticated => roles.Length > 0;
 
     public string UserDescription => user.DisplayName ?? user.Email ?? string.Empty;

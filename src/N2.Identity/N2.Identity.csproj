@@ -16,7 +16,7 @@
     <IncludeSymbols>False</IncludeSymbols>
     <Product>N2.Core for NET8.0</Product>
     <ProductName>N2.Identity</ProductName>
-    <ProductVersion>1.0.6</ProductVersion>
+    <ProductVersion>1.0.9</ProductVersion>
 
     <RootNamespace>N2.Identity</RootNamespace>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
@@ -34,7 +34,6 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />
-    <PackageReference Include="N2.Contracts" />
     <PackageReference Include="n2.core.entity.abstractions" />
     <PackageReference Include="n2.core.identity.abstractions" />
   </ItemGroup>

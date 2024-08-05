@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using N2.Core.Extensions;
 using N2.Core.Identity;
 
 namespace N2.Identity.UnitTests;
@@ -44,7 +43,6 @@ public class N2AuthenticatorTests
         else
         {
             Assert.AreEqual(userInfo.Username, user.UserName);
-            Console.WriteLine(user.SerializeForView());
         }
     }
 }

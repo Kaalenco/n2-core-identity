@@ -18,9 +18,10 @@ public sealed class N2AuthenticationService : IAuthenticator
 
     public async Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin)
     {
-        Contracts.Requires(userLogin, "userLogin");
-        Contracts.Requires(userLogin.Username, "userLogin.Username");
-        Contracts.Requires(userLogin.Password, "userLogin.Password");
+        ArgumentNullException.ThrowIfNull(userLogin);
+        ArgumentException.ThrowIfNullOrEmpty(userLogin.Username);
+        ArgumentException.ThrowIfNullOrEmpty(userLogin.Password);
+
         var token = new CancellationToken();
 
         var user = await userManager.FindByNameAsync(userLogin.Username, token);

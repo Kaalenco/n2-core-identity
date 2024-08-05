@@ -13,6 +13,7 @@ public static class JwtExtensions
     private const string PathForAudience = "Jwt:Audience";
     private const string PathForIssuer = "Jwt:Issuer";
     private const string PathForKey = "Jwt:Secret";
+
     public static IHostApplicationBuilder AddJwtBearerAuthentication([NotNull] this IHostApplicationBuilder builder)
     {
         var services = builder.Services;
@@ -21,10 +22,10 @@ public static class JwtExtensions
         var audience = builder.Configuration[PathForAudience];
         var key = builder.Configuration[PathForKey];
 
-        Contracts.Requires(issuer, PathForIssuer);
-        Contracts.Requires(audience, PathForAudience);
-        Contracts.Requires(key, PathForKey);
-        Contracts.MinLength(key, 20, PathForKey);
+        ArgumentException.ThrowIfNullOrEmpty(issuer, PathForIssuer);
+        ArgumentException.ThrowIfNullOrEmpty(audience, PathForAudience);
+        ArgumentException.ThrowIfNullOrEmpty(key, PathForKey);
+        ArgumentOutOfRangeException.ThrowIfLessThan(key.Length, 20, PathForKey);
 
         var symKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
 
@@ -43,7 +44,7 @@ public static class JwtExtensions
                     IssuerSigningKey = symKey
                 };
             });
-        services.AddAuthorization();        
+        services.AddAuthorization();
         services.AddSingleton<IWebTokenGenerator>(new WebTokenGenerator(issuer, audience, key));
         return builder;
     }

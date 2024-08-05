@@ -32,7 +32,11 @@ public sealed class UserContextFactory : IUserContextFactory
             await Task.Delay(100);
             timeOut -= 100;
         }
-        if (result == null) throw new TimeoutException("Could not get a user context withing the alloted time");
+        if (result == null)
+        {
+            throw new TimeoutException("Could not get a user context withing the alloted time");
+        }
+
         return result;
     }
 

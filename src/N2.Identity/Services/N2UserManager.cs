@@ -20,7 +20,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
     public bool SupportsUserEmail { get; }
 
     public N2UserManager(
-        IIdentityContextFactory identityContextFactory, 
+        IIdentityContextFactory identityContextFactory,
         string catalog)
     {
         this.factory = identityContextFactory;
@@ -29,7 +29,10 @@ public class N2UserManager : IUserManager<ApplicationUser>
 
     private async Task<IIdentityContext> InitializeContextAsync()
     {
-        if (context != null) return context;
+        if (context != null)
+        {
+            return context;
+        }
 
         lockObject.Wait();
         try
@@ -42,7 +45,6 @@ public class N2UserManager : IUserManager<ApplicationUser>
         }
         return context;
     }
-
 
     public async Task<bool> CanSignInAsync([NotNull] ApplicationUser user, CancellationToken token)
     {
@@ -60,47 +62,72 @@ public class N2UserManager : IUserManager<ApplicationUser>
 
     public async Task<IRequestResult> ConfirmEmailAsync([NotNull] ApplicationUser user, string confirmationToken, CancellationToken token)
     {
-        Contracts.Requires(confirmationToken, nameof(confirmationToken));
+        ArgumentException.ThrowIfNullOrEmpty(confirmationToken);
         var ctx = await InitializeContextAsync();
         var dbUser = await ctx.ApplicationUserAsync(user.Id, token);
         if (dbUser == null)
         {
             return RequestResult.NotFound();
         }
-        if(dbUser.UserName != user.UserName || dbUser.Email != user.Email)
+        if (dbUser.UserName != user.UserName || dbUser.Email != user.Email)
         {
             return RequestResult.NotFound();
         }
         user = dbUser;
         var parts = confirmationToken.Split('.');
-        if (parts.Length != 2) { 
+        if (parts.Length != 2)
+        {
             return RequestResult.BadRequest();
         }
         var dataPart = Convert.FromBase64String(parts[0]);
         var data = System.Text.Encoding.UTF8.GetString(dataPart).Split(':');
-        if (data.Length != 2) return RequestResult.BadRequest();
-        if (!long.TryParse(data[1], out var timeOut)) return RequestResult.BadRequest();
-        if (data[0] != user.NormalizedEmail) return RequestResult.BadRequest();
-        if (DateTime.UtcNow.Ticks > timeOut) return RequestResult.TimeOut();
+        if (data.Length != 2)
+        {
+            return RequestResult.BadRequest();
+        }
+
+        if (!long.TryParse(data[1], out var timeOut))
+        {
+            return RequestResult.BadRequest();
+        }
+
+        if (data[0] != user.NormalizedEmail)
+        {
+            return RequestResult.BadRequest();
+        }
+
+        if (DateTime.UtcNow.Ticks > timeOut)
+        {
+            return RequestResult.TimeOut();
+        }
+
         var secret = System.Text.Encoding.UTF8.GetBytes($"{user.NormalizedEmail}:{timeOut}:{user.SecurityStamp}");
         var crypted = Convert.ToBase64String(SHA384.HashData(secret));
-        if (parts[1] != crypted) return RequestResult.BadRequest();
+        if (parts[1] != crypted)
+        {
+            return RequestResult.BadRequest();
+        }
+
         dbUser.LockoutEnabled = true;
         dbUser.EmailConfirmed = true;
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }
 
-    public async Task<IRequestResult> CreateAsync([NotNull] ApplicationUser user, string password, CancellationToken token) {
-        Contracts.Requires(password, nameof(password));
+    public async Task<IRequestResult> CreateAsync([NotNull] ApplicationUser user, string password, CancellationToken token)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(password);
+
         var ctx = await InitializeContextAsync();
         var dbUser = await FindByNameAsync(user.UserName ?? string.Empty, token);
-        if (dbUser!=null)
+        if (dbUser != null)
         {
             return new RequestResult(406, "Already exists");
         }
-        Contracts.Requires(user.UserName, "user.UserName");
-        Contracts.Requires(user.Email, "user.Email");
+
+        ArgumentException.ThrowIfNullOrEmpty(user.UserName);
+        ArgumentException.ThrowIfNullOrEmpty(user.Email);
+
         user.NormalizedUserName = user.UserName.ToUpperInvariant();
         user.NormalizedEmail = user.Email.ToUpperInvariant();
         user.EmailConfirmed = false;
@@ -113,20 +140,21 @@ public class N2UserManager : IUserManager<ApplicationUser>
 
     public async Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token)
     {
-        Contracts.NotDefault(userId, nameof(userId));
+        ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
         var ctx = await InitializeContextAsync();
         return await ctx.ApplicationUserAsync(userId, token);
     }
 
     public async Task<ApplicationUser?> FindByNameAsync(string? userName, CancellationToken token)
     {
-        Contracts.Requires(userName, nameof(userName));
+        ArgumentException.ThrowIfNullOrEmpty(userName);
         var ctx = await InitializeContextAsync();
         var normalizedName = userName.ToUpperInvariant();
         return await ctx.ApplicationUserAsync(normalizedName, token);
     }
 
-    public async Task<string> GenerateEmailConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token){
+    public async Task<string> GenerateEmailConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token)
+    {
         if (user.Id == Guid.Empty)
         {
             var dbUser = await FindByNameAsync(user.UserName, token);
@@ -139,17 +167,19 @@ public class N2UserManager : IUserManager<ApplicationUser>
         var secret = System.Text.Encoding.UTF8.GetBytes($"{user.NormalizedEmail}:{timeOut}:{user.SecurityStamp}");
         var crypted = SHA384.HashData(secret);
         var data = System.Text.Encoding.UTF8.GetBytes($"{user.NormalizedEmail}:{timeOut}");
-        return string.Concat( Convert.ToBase64String(data), '.', Convert.ToBase64String(crypted)) ;
+        return string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(crypted));
     }
 
-    public async Task<IList<string>> GetRolesAsync([NotNull] ApplicationUser user, CancellationToken token) {
+    public async Task<IList<string>> GetRolesAsync([NotNull] ApplicationUser user, CancellationToken token)
+    {
         var ctx = await InitializeContextAsync();
         var roles = await ctx.UserRolesAsync(user.Id);
         return roles.ToList();
     }
 
-    public async Task<Guid> GetUserIdAsync(ApplicationUser user, CancellationToken token) {
-        Contracts.Requires(user, nameof(user));
+    public async Task<Guid> GetUserIdAsync(ApplicationUser user, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(user);
         var ctx = await InitializeContextAsync();
         var normalizedName = user.UserName ?? "".ToUpperInvariant();
         var userRecord = await ctx.ApplicationUser.FirstOrDefaultAsync(u => u.NormalizedUserName == normalizedName, token);
@@ -158,7 +188,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
 
     public async Task<IRequestResult> SetEmailAsync([NotNull] ApplicationUser user, string email, CancellationToken token)
     {
-        Contracts.Requires(email, nameof(email));
+        ArgumentException.ThrowIfNullOrEmpty(email);
         var (emailValid, message) = ValidateEmail(email);
         if (!emailValid)
         {
@@ -176,9 +206,11 @@ public class N2UserManager : IUserManager<ApplicationUser>
         return RequestResult.Ok();
     }
 
-    public async Task<IRequestResult> SetUserNameAsync([NotNull] ApplicationUser user, string userName, CancellationToken token) {
+    public async Task<IRequestResult> SetUserNameAsync([NotNull] ApplicationUser user, string userName, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(userName);
         var dbUser = await FindByNameAsync(userName, token);
-        if (dbUser!=null && dbUser.Id != user.Id)
+        if (dbUser != null && dbUser.Id != user.Id)
         {
             return new RequestResult(406, "Already occupied");
         }
@@ -209,13 +241,13 @@ public class N2UserManager : IUserManager<ApplicationUser>
             valid = e.Message;
         }
 
-        return (valid.Length==0, valid);
+        return (valid.Length == 0, valid);
     }
 
     public async Task<IRequestResult> ValidateAsync(ApplicationUser user, string password, CancellationToken token)
     {
-        Contracts.Requires(user, nameof(user));
-        Contracts.Requires(password, nameof(password));
+        ArgumentNullException.ThrowIfNull(user);
+        ArgumentException.ThrowIfNullOrEmpty(password);
         var ctx = await InitializeContextAsync();
         var appUser = await ctx.FindRecordAsync<ApplicationUser>(user.Id);
         if (appUser == null)
@@ -258,9 +290,9 @@ public class N2UserManager : IUserManager<ApplicationUser>
         GC.SuppressFinalize(this);
     }
 
-    public async Task<IRequestResult> CreateRoleAsync(string role, CancellationToken token) 
-    { 
-        Contracts.Requires(role, nameof(role));
+    public async Task<IRequestResult> CreateRoleAsync(string role, CancellationToken token)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(role);
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
@@ -280,15 +312,16 @@ public class N2UserManager : IUserManager<ApplicationUser>
 
     public async Task<ApplicationUser?> FindByEmailAsync(string emailAddress, CancellationToken token)
     {
-        Contracts.Requires(emailAddress, nameof(emailAddress));
+        ArgumentException.ThrowIfNullOrEmpty(emailAddress);
         var ctx = await InitializeContextAsync();
         var normalizedName = emailAddress.ToUpperInvariant();
         return await ctx.ApplicationUserByEmailAsync(normalizedName, token);
     }
 
-    public async Task<bool> IsInRoleAsync(ApplicationUser user, string role, CancellationToken token) {
-        Contracts.Requires(user, nameof(user));
-        Contracts.Requires(role, nameof(role));
+    public async Task<bool> IsInRoleAsync(ApplicationUser user, string role, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        ArgumentException.ThrowIfNullOrEmpty(role);
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
@@ -299,9 +332,10 @@ public class N2UserManager : IUserManager<ApplicationUser>
         var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
         return isAssigned != null;
     }
+
     public async Task<IRequestResult> RemoveRoleAsync(string role, CancellationToken token)
     {
-        Contracts.Requires(role, nameof(role));
+        ArgumentException.ThrowIfNullOrEmpty(role);
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleItem = await ctx.ApplicationRole.FirstOrDefaultAsync(r => r.NormalizedName == normalizedName, token);
@@ -314,17 +348,19 @@ public class N2UserManager : IUserManager<ApplicationUser>
         return new RequestResult(code, message);
     }
 
-    public async Task<bool> RoleExistsAsync(string role, CancellationToken token) {
-        Contracts.Requires(role, nameof(role));
+    public async Task<bool> RoleExistsAsync(string role, CancellationToken token)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(role);
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleId = await ctx.ApplicationRoleAsync(normalizedName, token);
         return roleId != null;
     }
 
-    public async Task<IRequestResult> RemoveFromRoleAsync(ApplicationUser user, string role, CancellationToken token) {
-        Contracts.Requires(user, nameof(user));
-        Contracts.Requires(role, nameof(role));
+    public async Task<IRequestResult> RemoveFromRoleAsync(ApplicationUser user, string role, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        ArgumentException.ThrowIfNullOrEmpty(role);
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
@@ -332,7 +368,7 @@ public class N2UserManager : IUserManager<ApplicationUser>
         {
             return new RequestResult(406, $"Role '{role}' does not exist");
         }
-        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id , roleItem.Id, token);
+        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
         if (isAssigned == null)
         {
             return RequestResult.Ok();
@@ -341,17 +377,18 @@ public class N2UserManager : IUserManager<ApplicationUser>
         var (code, message) = await ctx.SaveChangesAsync();
         return new RequestResult(code, message);
     }
-    
-    public async Task<IRequestResult> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token){
-        Contracts.Requires(user, nameof(user));
-        Contracts.Requires(role, nameof(role));
+
+    public async Task<IRequestResult> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        ArgumentException.ThrowIfNullOrEmpty(role);
         var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
-        var roleItem = await ctx.ApplicationRoleAsync( normalizedName, token);
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem == null)
         {
             return new RequestResult(406, $"Role '{role}' does not exist");
-        } 
+        }
         var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
         if (isAssigned != null)
         {

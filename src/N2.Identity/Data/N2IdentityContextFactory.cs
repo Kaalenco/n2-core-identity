@@ -3,7 +3,6 @@ using N2.Core.Entity;
 
 namespace N2.Identity.Data;
 
-
 public class N2IdentityContextFactory : IIdentityContextFactory
 {
     private readonly IConnectionStringService settingService;
@@ -27,5 +26,4 @@ public class N2IdentityContextFactory : IIdentityContextFactory
         var result = new N2IdentityContext(optionsBuilder.Options);
         return Task.FromResult<IIdentityContext>(result);
     }
-
 }

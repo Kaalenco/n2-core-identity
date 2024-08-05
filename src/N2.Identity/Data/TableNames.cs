@@ -1,6 +1,7 @@
 ﻿namespace N2.Identity.Data;
 
-public enum TableNames { 
+public enum TableNames
+{
     AspNetUsers,
     AspNetRoles,
 }
