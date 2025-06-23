@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+
 using Moq;
-using N2.Core.Identity;
+
+using N2.Core.Commands;
 using N2.Core.Identity.Data;
 using N2.Core.Identity.Services;
 
@@ -12,9 +14,9 @@ internal static class TestContext
 {
     public static void ConfigureServices(ServiceCollection serviceCollection)
     {
-        Mock<IIdentityContextFactory> IdentityMockFactory = new Mock<IIdentityContextFactory>();
-        Mock<IIdentityContext> IdentityMock = new Mock<IIdentityContext>();
-        Mock<IdentityUserRole<Guid>> roleMock = new Mock<IdentityUserRole<Guid>>();
+        Mock<IIdentityContextFactory> IdentityMockFactory = new();
+        Mock<IIdentityContext> IdentityMock = new();
+        Mock<IdentityUserRole<Guid>> roleMock = new();
 
         serviceCollection.AddLogging(configure =>
          {
@@ -26,8 +28,8 @@ internal static class TestContext
         serviceCollection.AddScoped<IAuthenticator, N2AuthenticationService>();
         serviceCollection.AddScoped(_ => IdentityMockFactory.Object);
 
-        var adminGuid = Guid.NewGuid();
-        var listUsers = new List<ApplicationUser>
+        Guid adminGuid = Guid.NewGuid();
+        List<ApplicationUser> listUsers = new()
         {
             new ApplicationUser {
                 Id = adminGuid,
@@ -35,13 +37,13 @@ internal static class TestContext
                 Email = "admin@email.com",
                 NormalizedUserName = "ADMIN",
                 NormalizedEmail = "ADMIN@EMAIL.COM",
-            PasswordHash = "WAHOc9FHgcRnZpCb01LhD8sFcLF5+MPz+sL2Rq/dYTmMiXyXXNNSxztzbqtBdWYX"},
+                PasswordHash = "WAHOc9FHgcRnZpCb01LhD8sFcLF5+MPz+sL2Rq/dYTmMiXyXXNNSxztzbqtBdWYX"},
             new ApplicationUser {
                 Id = Guid.NewGuid(),
                 UserName = "lockedOut",
                 Email = "admin@email.com",
                 NormalizedUserName = "LOCKEDOUT",
-            PasswordHash = "WAHOc9FHgcRnZpCb01LhD8sFcLF5+MPz+sL2Rq/dYTmMiXyXXNNSxztzbqtBdWYX"}
+                PasswordHash = "WAHOc9FHgcRnZpCb01LhD8sFcLF5+MPz+sL2Rq/dYTmMiXyXXNNSxztzbqtBdWYX"}
         };
 
         IdentityMockFactory.Setup(m => m.CreateAsync(It.IsAny<string>())).ReturnsAsync(IdentityMock.Object);
@@ -54,6 +56,13 @@ internal static class TestContext
             .Returns<string, CancellationToken>((s, _) => Task.FromResult(listUsers.Find(m => m.NormalizedEmail == s)));
         IdentityMock.Setup(m => m.FindRecordAsync<ApplicationUser>(It.IsAny<Guid>()))
             .Returns<Guid>((g) => Task.FromResult(listUsers.Find(m => m.Id == g)));
+
+        IdentityMock.Setup(m => m.AddApplicationRoleAsync(It.IsAny<ApplicationRole>(), It.IsAny<CancellationToken>()))
+            .Returns<ApplicationRole, CancellationToken>((r, _) => Task.FromResult<int>(1));
+
+        IdentityMock.Setup(m => m.Complete())
+            .Returns(() => Task.FromResult<(ResponseStatus, string?)>(new(ResponseStatus.Success, null)));
+
         IdentityMock.Setup(m => m.ApplicationRoleAsync("SYSADMIN", It.IsAny<CancellationToken>()))
             .Returns<string, CancellationToken>((_, _) => Task.FromResult((ApplicationRole?)new ApplicationRole { Name = "SysAdmin" }));
         IdentityMock.Setup(m => m.ApplicationRoleAsync("PUBLISHER", It.IsAny<CancellationToken>()))

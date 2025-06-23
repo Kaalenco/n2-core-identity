@@ -1,12 +1,11 @@
-﻿using Microsoft.AspNetCore.Identity;
-using N2.Core;
+using Microsoft.AspNetCore.Identity;
+
 using N2.Core.Entity;
-using N2.Core.Identity;
 using N2.Core.Identity.Data;
 
 namespace N2.Core.Identity;
 
-public interface IIdentityContext : ICoreDataContext
+public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 {
     Task<SelectItemList<HtmlString>> RolesAsync();
 
@@ -22,11 +21,11 @@ public interface IIdentityContext : ICoreDataContext
 
     void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole);
 
-    Task AddApplicationUserAsync(ApplicationUser user, CancellationToken token);
+    Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token);
 
-    Task AddApplicationRoleAsync(ApplicationRole role, CancellationToken token);
+    Task<int> AddApplicationRoleAsync(ApplicationRole role, CancellationToken token);
 
-    Task AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token);
+    Task<int> AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token);
 
     Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token);
 

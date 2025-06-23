@@ -1,7 +1,8 @@
-﻿using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+
+using Microsoft.IdentityModel.Tokens;
 
 namespace N2.Core.Identity;
 
@@ -13,7 +14,7 @@ public class WebTokenGenerator : IWebTokenGenerator
 
     public WebTokenGenerator(string issuer, string audience, string securityKey)
     {
-        var byteData = Encoding.UTF8.GetBytes(securityKey);
+        byte[] byteData = Encoding.UTF8.GetBytes(securityKey);
         this.issuer = issuer;
         this.audience = audience;
         this.securityKey = new SymmetricSecurityKey(byteData);
@@ -22,12 +23,12 @@ public class WebTokenGenerator : IWebTokenGenerator
     public string GenerateWebToken(IUserContext userContext, int timeoutInMinutes)
     {
         ArgumentNullException.ThrowIfNull(userContext);
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-        var claims = new List<Claim>
+        SigningCredentials credentials = new(securityKey, SecurityAlgorithms.HmacSha256);
+        List<Claim> claims = new()
         {
-            new(ClaimTypes.NameIdentifier, userContext.UserName)
+            new(ClaimTypes.NameIdentifier, userContext.PublicId.ToString())
         };
-        foreach (var role in userContext.CurrentRoles())
+        foreach (string role in userContext.CurrentRoles())
         {
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
@@ -48,7 +49,7 @@ public class WebTokenGenerator : IWebTokenGenerator
             timeoutInMinutes = 1440;
         }
 
-        var token = new JwtSecurityToken(
+        JwtSecurityToken token = new(
             issuer,
             audience,
             claims,

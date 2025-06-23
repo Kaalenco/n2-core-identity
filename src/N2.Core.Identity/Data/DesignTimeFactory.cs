@@ -1,5 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace N2.Core.Identity.Data;
 
@@ -19,9 +20,10 @@ internal sealed class DesignTimeFactory : IDesignTimeDbContextFactory<N2Identity
     /// <returns>An instance of SystemContext</returns>
     public N2IdentityContext CreateDbContext(string[] args)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<N2IdentityContext>();
+        DbContextOptionsBuilder<N2IdentityContext> optionsBuilder = new();
+        NullLogger<N2IdentityContext> logger = NullLogger<N2IdentityContext>.Instance;
         optionsBuilder.UseSqlServer(ConnectionString);
 
-        return new N2IdentityContext(optionsBuilder.Options);
+        return new N2IdentityContext(optionsBuilder.Options, logger);
     }
 }

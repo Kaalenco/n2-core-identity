@@ -12,7 +12,7 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
-    <NoWarn>CA2007</NoWarn>
+    <NoWarn>CA2007; CA1515</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Label ="Dotnet build visibility">

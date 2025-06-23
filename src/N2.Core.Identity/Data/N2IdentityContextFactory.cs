@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+
 using N2.Core.Entity;
 
 namespace N2.Core.Identity.Data;
@@ -16,14 +18,15 @@ public class N2IdentityContextFactory : IIdentityContextFactory
 
     public Task<IIdentityContext> CreateAsync(string connectionName)
     {
-        var connectionString = settingService.GetConnectionString(connectionName);
+        string connectionString = settingService.GetConnectionString(connectionName);
         if (string.IsNullOrEmpty(connectionString))
         {
             throw new InvalidOperationException($"Connection string '{connectionName}' not found.");
         }
-        var optionsBuilder = new DbContextOptionsBuilder<N2IdentityContext>();
+        DbContextOptionsBuilder<N2IdentityContext> optionsBuilder = new();
+        NullLogger<N2IdentityContext> logger = NullLogger<N2IdentityContext>.Instance;
         optionsBuilder.UseSqlServer(connectionString);
-        var result = new N2IdentityContext(optionsBuilder.Options);
+        N2IdentityContext result = new(optionsBuilder.Options, logger);
         return Task.FromResult<IIdentityContext>(result);
     }
 }

@@ -1,26 +1,47 @@
-﻿namespace N2.Core.Identity;
+namespace N2.Core.Identity;
 
 public class AspNetUserContext : IUserContext
 {
-    private readonly IIdentityUser user;
     private readonly string[] roles;
 
     public AspNetUserContext(IIdentityUser user, IList<string> roles)
     {
-        this.user = user;
-        this.roles = roles.ToArray();
+        this.roles = [.. roles];
+        if (user != null)
+        {
+            PublicId = user.Id;
+            UserName = user.UserName ?? string.Empty;
+            Description = user.DisplayName ?? user.Email ?? string.Empty;
+            PhoneNumber = user.PhoneNumber ?? string.Empty;
+            Email = user.Email ?? string.Empty;
+            Name = user.UserName ?? user.Email ?? string.Empty;
+        }
+        else
+        {
+            UserName = "anonymous";
+            Name = "anonymous";
+            Description = string.Empty;
+            PhoneNumber = string.Empty;
+            Email = string.Empty;
+        }
     }
 
     private readonly List<UserAlert> alerts = new();
-    public Guid UserId => user.Id;
-    public string UserName => user.UserName ?? user.Email ?? string.Empty;
+    public Guid PublicId { get; private set; }
+    public string UserName { get; private set; }
 
     public bool IsAuthenticated => roles.Length > 0;
 
-    public string UserDescription => user.DisplayName ?? user.Email ?? string.Empty;
-    public string UserPhone => user.PhoneNumber ?? string.Empty;
-    public string UserEmail => user.Email ?? string.Empty;
+    public string Description { get; private set; }
+    public string PhoneNumber { get; private set; }
+    public string Email { get; private set; }
     public IEnumerable<UserAlert> Alerts => alerts;
+
+    public string Name { get; private set; }
+    public string? ProfileImagePath { get; }
+    public string? ProfileThumbnailPath { get; }
+    public string? ProfileBackgroundImagePath { get; }
+    public int PrimaryPartitionKey { get; }
 
     public void Alert(string message, Priority priority) => throw new NotImplementedException();
 
@@ -29,9 +50,13 @@ public class AspNetUserContext : IUserContext
         return roles.Contains(SystemRoles.Designer) || roles.Contains(SystemRoles.Admin);
     }
 
-    public bool CanModifyRights() => throw new NotImplementedException();
+    public bool CanModifyRights() => roles.Contains(SystemRoles.Admin) || roles.Contains(SystemRoles.AuthManager);
 
-    public bool CanPublish() => throw new NotImplementedException();
+    public bool CanPublish() => roles.Contains(SystemRoles.Admin) || roles.Contains(SystemRoles.Publisher);
 
     public IEnumerable<string> CurrentRoles() => roles;
+    public bool IsAdmin() => roles.Contains(SystemRoles.Admin);
+    public bool IsInRole(string role) => roles.Contains(role);
+    public bool HasPolicy(string policy) => throw new NotImplementedException();
+    public T? PolicyValue<T>(string policy) => throw new NotImplementedException();
 }

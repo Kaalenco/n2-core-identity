@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+
+using N2.Core.Commands;
 using N2.Core.Identity.Data;
 
 namespace N2.Core.Identity;
@@ -22,21 +24,23 @@ public sealed class N2AuthenticationService : IAuthenticator
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Username);
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Password);
 
-        var token = new CancellationToken();
+        CancellationToken token = new();
 
-        var user = await userManager.FindByNameAsync(userLogin.Username, token);
+        ICommandResponse<ApplicationUser> userResponse = await userManager.FindByNameAsync(userLogin.Username, token);
+        ApplicationUser? user = userResponse.Value;
         if (user == null)
         {
             LoginAttempt(logger, userLogin.Username, userNotFoundException);
             return null;
         }
-        var result = await userManager.ValidateAsync(user, userLogin.Password, token);
+
+        ICommandResponse result = await userManager.ValidateAsync(user, userLogin.Password, token);
         if (result == null)
         {
             LoginAttempt(logger, userLogin.Username, unexpectedResult);
             return null;
         }
-        if (!result.IsSuccessCode)
+        if (!result.Status.IsSuccess())
         {
             LoginAttempt(logger, userLogin.Username, loginFailed);
             return null;
@@ -48,8 +52,12 @@ public sealed class N2AuthenticationService : IAuthenticator
             return null;
         }
 
-        var roles = await userManager.GetRolesAsync(user, token);
-        return new AspNetUserContext(user, roles);
+        IListResponse<string> roles = await userManager.GetRolesAsync(user, token);
+        if (roles == null || roles.Value == null || roles.Value.Count == 0)
+        {
+            return new AspNetUserContext(user, []);
+        }
+        return new AspNetUserContext(user, [.. roles.Value]);
     }
 
     private static readonly AuthenticationException userNotFoundException = new("Login attempt with invalid username.");
