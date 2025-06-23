@@ -1,3 +1,4 @@
+@@ -0,0 +1,42 @@
 # This workflow will build a .NET project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
 
@@ -15,11 +16,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - uses: Firenza/secrets-to-env@v1.3.0
+      name: Set secrets as environment variables
+      with:
+        secrets: ${{ toJSON(secrets) }}
+        secret_filter_regex: ENV_*
     - uses: actions/checkout@v4
-    - name: Setup .NET
+
+    - name: Setup .NET 8.0
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
+
+    - name: Setup .NET 9.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
     - name: Restore dependencies
       run: dotnet restore src
     - name: Build
