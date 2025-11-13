@@ -86,11 +86,11 @@ internal static class TestContext {
         var tempProvider = serviceCollection.BuildServiceProvider();
         using var scope = tempProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<N2IdentityContext>();
-
-        SeedTestData(context);
+        var hasher = scope.ServiceProvider.GetService<IPasswordHasher<ApplicationUser>>();
+        SeedTestData(context, hasher);
     }
 
-    private static void SeedTestData(N2IdentityContext context) {
+    private static void SeedTestData(N2IdentityContext context, IPasswordHasher<ApplicationUser> passwordHasher) {
         // Add test roles
         context.Roles.Add(new ApplicationRole {
             Id = SysAdminRoleGuid,
@@ -106,9 +106,7 @@ internal static class TestContext {
 
         // Add test users
         // Password hash calculated for: ADMIN:secret:TestSecurityStamp using SHA384
-        var adminPasswordHash = CalculatePasswordHash("admin", "secret", "TestSecurityStamp");
-
-        context.Users.Add(new ApplicationUser {
+        var adminUser = new ApplicationUser {
             Id = AdminGuid,
             UserName = "admin",
             Email = "admin@email.com",
@@ -116,10 +114,12 @@ internal static class TestContext {
             NormalizedEmail = "ADMIN@EMAIL.COM",
             EmailConfirmed = true,
             SecurityStamp = "TestSecurityStamp",
-            PasswordHash = adminPasswordHash
-        });
+        };
+        var adminPasswordHash = passwordHasher.HashPassword(adminUser, "secret");
+        adminUser.PasswordHash = adminPasswordHash;
+        context.Users.Add(adminUser);
 
-        context.Users.Add(new ApplicationUser {
+        var lockedoutUser = new ApplicationUser {
             Id = Guid.NewGuid(),
             UserName = "lockedOut",
             Email = "lockedout@email.com",
@@ -129,8 +129,10 @@ internal static class TestContext {
             LockoutEnabled = true,
             LockoutEnd = DateTimeOffset.UtcNow.AddDays(1),
             SecurityStamp = "TestSecurityStamp",
-            PasswordHash = adminPasswordHash
-        });
+        };
+        var lockedoutUserHash = passwordHasher.HashPassword(lockedoutUser, "secret");
+        lockedoutUser.PasswordHash = lockedoutUserHash;
+        context.Users.Add(lockedoutUser);
 
         // Assign admin role to admin user
         context.UserRoles.Add(new IdentityUserRole<Guid> {
@@ -139,17 +141,6 @@ internal static class TestContext {
         });
 
         context.SaveChanges();
-    }
-
-    /// <summary>
-    /// Calculate password hash using the same algorithm as N2UserManager.GetPasswordHash
-    /// </summary>
-    private static string CalculatePasswordHash(string userName, string password, string securityStamp) {
-        var normalizedName = userName.ToUpperInvariant();
-        var source = string.Concat(normalizedName, ':', password, ':', securityStamp);
-        var secret = System.Text.Encoding.UTF8.GetBytes(source);
-        var crypted = System.Security.Cryptography.SHA384.HashData(secret);
-        return Convert.ToBase64String(crypted);
     }
 }
 
