@@ -54,10 +54,10 @@ public class N2AuthenticatorTests {
         var validUserTimes = new List<long>();
         var invalidUserTimes = new List<long>();
         var authService = serviceProvider.GetRequiredService<IAuthenticator>();
-
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         // Act
         for (var i = 0; i < iterations; i++) {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            sw.Restart();
             await authService.AuthenticateAsync(new UserLogin {
                 Username = "validuser",
                 Password = "WrongPassword"
