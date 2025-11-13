@@ -158,7 +158,9 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         var timeOut = DateTime.UtcNow.AddDays(5).Ticks;
 
         var secret = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{user.SecurityStamp}");
-        var crypted = SHA384.HashData(secret);
+        var key = System.Text.Encoding.UTF8.GetBytes(user.MfaSecret ?? "");
+        var crypted = HMACSHA256.HashData(key, secret);
+
         var data = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}");
         var result = string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(crypted));
         return StringResponse.Accept(result);
@@ -421,7 +423,10 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                 }
 
                 var secret = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{user.SecurityStamp}");
-                var crypted = SHA384.HashData(secret);
+                var key = System.Text.Encoding.UTF8.GetBytes(user.MfaSecret);
+                var crypted = HMACSHA256.HashData(key, secret);
+
+
                 var verify = Convert.FromBase64String(splitCode[1]);
                 var arraysEqual = await crypted.ArraysAreEqual(verify);
                 await timer.Wait();

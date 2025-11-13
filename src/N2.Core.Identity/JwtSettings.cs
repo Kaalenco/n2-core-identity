@@ -1,7 +1,6 @@
-﻿namespace N2.Core.Identity;
+namespace N2.Core.Identity;
 
-public sealed class JwtSettings
-{
+public sealed class JwtSettings {
     public string Secret { get; set; } = string.Empty;
     public string Audience { get; set; } = string.Empty;
     public string Issuer { get; set; } = string.Empty;
@@ -14,7 +13,7 @@ public sealed class JwtSettings
     /// <summary>
     /// The scheme to use for challenge / response. Default is Bearer, but it can be set in the configuration.
     /// </summary>
-    public string ChallengeScheme { get; set; } = "vearer";
+    public string ChallengeScheme { get; set; } = "bearer";
 
     public int TokenExpirationInMinutes { get; set; } = 5;
 

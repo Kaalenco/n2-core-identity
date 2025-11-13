@@ -1,21 +1,20 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
+
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace N2.Core.Identity;
 
-public static class JwtExtensions
-{
+public static class JwtExtensions {
     private const string PathForAudience = "Jwt:Audience";
     private const string PathForIssuer = "Jwt:Issuer";
     private const string PathForKey = "Jwt:Secret";
 
-    public static IHostApplicationBuilder AddJwtBearerAuthentication([NotNull] this IHostApplicationBuilder builder)
-    {
+    public static IHostApplicationBuilder AddJwtBearerAuthentication([NotNull] this IHostApplicationBuilder builder) {
         var services = builder.Services;
 
         var issuer = builder.Configuration[PathForIssuer];
@@ -25,16 +24,14 @@ public static class JwtExtensions
         ArgumentException.ThrowIfNullOrEmpty(issuer, PathForIssuer);
         ArgumentException.ThrowIfNullOrEmpty(audience, PathForAudience);
         ArgumentException.ThrowIfNullOrEmpty(key, PathForKey);
-        ArgumentOutOfRangeException.ThrowIfLessThan(key.Length, 20, PathForKey);
+        ArgumentOutOfRangeException.ThrowIfLessThan(key.Length, 32, PathForKey);
 
         var symKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
 
         services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
+            .AddJwtBearer(options => {
+                options.TokenValidationParameters = new TokenValidationParameters {
                     ValidateIssuer = true,
                     ValidateAudience = true,
                     ValidateLifetime = true,
@@ -49,11 +46,9 @@ public static class JwtExtensions
         return builder;
     }
 
-    public static IUserContext? HttpCurrentUser(this IHttpContextAccessor httpContext)
-    {
+    public static IUserContext? HttpCurrentUser(this IHttpContextAccessor httpContext) {
         var principal = httpContext?.HttpContext?.User;
-        if (principal == null)
-        {
+        if (principal == null) {
             return null;
         }
         return new IdentityUserContext(principal);
