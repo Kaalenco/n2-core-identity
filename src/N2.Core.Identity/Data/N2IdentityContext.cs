@@ -1,7 +1,3 @@
-using System.Collections.Concurrent;
-using System.Data;
-using System.Data.Common;
-
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -11,21 +7,22 @@ using N2.Core.Commands;
 using N2.Core.Entity;
 using N2.Core.Identity.Commands;
 
+using System.Collections.Concurrent;
+using System.Data;
+using System.Data.Common;
+
 namespace N2.Core.Identity.Data;
 
 public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILogger<N2IdentityContext> logger) :
-    IdentityDbContext<ApplicationUser, ApplicationRole, Guid>(options), IIdentityContext
-{
+    IdentityDbContext<ApplicationUser, ApplicationRole, Guid>(options), IIdentityContext {
     public const int DefaultMaxLogSize = 1000;
     public int MaxLogSize { get; set; } = DefaultMaxLogSize;
     private readonly ConcurrentQueue<IChangeLog> logQueue = new();
     private readonly object logLock = new();
     private int logCount;
 
-    private int NextLogId()
-    {
-        lock (logLock)
-        {
+    private int NextLogId() {
+        lock (logLock) {
             return ++logCount;
         }
     }
@@ -38,9 +35,8 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
 
     // Use the 'StringComparison' method overloads to perform case-insensitive string comparisons
     // Except for linq2sql queryables, where stringcomparison method can have side effects.
-    public async Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string normalizedName, CancellationToken token)
-    {
-        ApplicationUser? result = await ApplicationUserAsync(normalizedName, token);
+    public async Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string normalizedName, CancellationToken token) {
+        var result = await ApplicationUserAsync(normalizedName, token);
         return new ApplicationUserResponse(result);
     }
 
@@ -66,8 +62,7 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
         => UserRoles.Where(ur => ur.UserId == userId && ur.RoleId == roleId).FirstOrDefaultAsync(token);
 
     public Task<List<KeyValuePair<string, string>>> GetSelectListAsync(string tableName)
-    => tableName switch
-    {
+    => tableName switch {
         nameof(TableNames.AspNetUsers) => base.Users
                 .Where(m => m.EmailConfirmed && m.UserName != null)
                 .Select(x => new KeyValuePair<string, string>(x.Id.ToString(), x.UserName ?? string.Empty))
@@ -79,9 +74,8 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
         _ => throw new ArgumentOutOfRangeException(tableName, tableName, null)
     };
 
-    public async Task<string> GetNameForUserAsync(Guid userId)
-    {
-        string? user = await base.Users
+    public async Task<string> GetNameForUserAsync(Guid userId) {
+        var user = await base.Users
             .Where(u => u.Id == userId)
             .Select(u => u.DisplayName ?? u.UserName ?? "???")
             .FirstOrDefaultAsync();
@@ -90,11 +84,9 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
 
     public IQueryable<IChangeLog> ChangeLogs => logQueue.AsQueryable();
 
-    public void AddChangeLog(IChangeLog changeLog)
-    {
+    public void AddChangeLog(IChangeLog changeLog) {
         logQueue.Enqueue(changeLog);
-        while (logQueue.Count > MaxLogSize)
-        {
+        while (logQueue.Count > MaxLogSize) {
             logQueue.TryDequeue(out _);
         }
     }
@@ -104,10 +96,8 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
         string message,
         Guid userId,
         string userName)
-        where T : class
-    {
-        QueueLogEntry logEntry = new()
-        {
+        where T : class {
+        QueueLogEntry logEntry = new() {
             Id = NextLogId(),
             LogRecordId = Guid.NewGuid(),
             TableName = typeof(T).Name,
@@ -124,12 +114,10 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
 
     public Task<T?> FindRecordAsync<T>(Guid publicId) where T : class => Set<T>().FindAsync(publicId).AsTask();
 
-    public async Task<(ResponseStatus status, string message)> DeleteAsync<T>(Guid publicId) where T : class
-    {
-        DbSet<T> dbSet = Set<T>();
-        T? dbItem = await dbSet.FindAsync(publicId);
-        if (dbItem == null)
-        {
+    public async Task<(ResponseStatus status, string message)> DeleteAsync<T>(Guid publicId) where T : class {
+        var dbSet = Set<T>();
+        var dbItem = await dbSet.FindAsync(publicId);
+        if (dbItem == null) {
             return (ResponseStatus.NotFound, "Not found");
         }
         dbSet.Remove(dbItem);
@@ -140,39 +128,30 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
 
     public bool IsActive => base.Database.CanConnect();
 
-    public async Task<(ResponseStatus status, string? message)> Complete()
-    {
-        try
-        {
-            int modified = await base.SaveChangesAsync();
+    public async Task<(ResponseStatus status, string? message)> Complete() {
+        try {
+            var modified = await base.SaveChangesAsync();
             return new(ResponseStatus.Success, $"{modified} records modified");
-        }
-        catch (DbException ex)
-        {
+        } catch (DbException ex) {
             return new(ResponseStatus.ServerError, ex.Message);
         }
     }
 
-    public async Task<SelectItemList<HtmlString>> RolesAsync()
-    {
+    public async Task<SelectItemList<HtmlString>> RolesAsync() {
         SelectItemList<HtmlString> result = new();
         var roles = await base.Roles
             .Where(r => r.Name != null)
-            .Select(m => new
-            {
+            .Select(m => new {
                 m.Id,
                 m.Name
             })
             .ToArrayAsync();
-        if (roles == null)
-        {
+        if (roles == null) {
             return result;
         }
 
-        foreach (var role in roles)
-        {
-            if (role == null || role.Name == null)
-            {
+        foreach (var role in roles) {
+            if (role == null || role.Name == null) {
                 continue;
             }
             result.Add(new SelectItem<HtmlString> { Key = role.Id, Value = new HtmlString(role.Name) });
@@ -180,17 +159,14 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
         return result;
     }
 
-    public async Task<SelectItemList<UserSelectItem>> UsersAsync()
-    {
+    public async Task<SelectItemList<UserSelectItem>> UsersAsync() {
         SelectItemList<UserSelectItem> result = new();
         var users = await
             base.Users
             .Where(r => r.EmailConfirmed)
-            .Select(m => new
-            {
+            .Select(m => new {
                 Key = m.Id,
-                Value = new UserSelectItem
-                {
+                Value = new UserSelectItem {
                     Key = m.Id,
                     ImagePath = m.ImagePath,
                     DisplayName = m.DisplayName ?? m.UserName ?? "???",
@@ -198,15 +174,12 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
                 }
             })
             .ToArrayAsync();
-        if (users == null)
-        {
+        if (users == null) {
             return result;
         }
 
-        foreach (var user in users)
-        {
-            if (user == null)
-            {
+        foreach (var user in users) {
+            if (user == null) {
                 continue;
             }
             result.Add(new SelectItem<UserSelectItem> { Key = user.Key, Value = user.Value });
@@ -214,8 +187,7 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
         return result;
     }
 
-    public Task<bool> CanSignInAsync(Guid userId)
-    {
+    public Task<bool> CanSignInAsync(Guid userId) {
         return base.Users
             .Where(u => u.Id == userId &&
                 (
@@ -229,30 +201,25 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
             .FirstOrDefaultAsync();
     }
 
-    public async Task<IEnumerable<string>> UserRolesAsync(Guid userId)
-    {
-        ApplicationUser? user = await base.Users
+    public async Task<IEnumerable<string>> UserRolesAsync(Guid userId) {
+        var user = await base.Users
             .Where(m => m.EmailConfirmed && m.UserName != null && m.Id == userId)
             .FirstOrDefaultAsync();
-        if (user == null)
-        {
+        if (user == null) {
             return Enumerable.Empty<string>();
         }
 
-        string?[] roles = await base.UserRoles
+        var roles = await base.UserRoles
             .Where(m => m.UserId == userId)
             .Join(base.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
             .ToArrayAsync();
-        if (roles == null)
-        {
+        if (roles == null) {
             return Enumerable.Empty<string>();
         }
 
         List<string> result = new();
-        foreach (string? role in roles)
-        {
-            if (role == null)
-            {
+        foreach (var role in roles) {
+            if (role == null) {
                 continue;
             }
             result.Add(role);
@@ -266,42 +233,50 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
 
     public void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole) => base.UserRoles.Remove(identityRole);
 
-    public async Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token)
-    {
-        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ApplicationUser> result = await base.Users.AddAsync(user, token);
-        int count = await base.SaveChangesAsync(token);
-        return count;
+    public async Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token) {
+        try {
+            var result = await base.Users.AddAsync(user, token);
+            var count = await base.SaveChangesAsync(token);
+            return count;
+        } catch (System.InvalidOperationException e) {
+            N2IdentityContextLoggingExtensions.LogAddApplicationUserFailed(logger, e.Message, e);
+            return -1;
+        }
 
     }
 
-    public async Task<int> AddApplicationRoleAsync(ApplicationRole role, CancellationToken token)
-    {
-        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<ApplicationRole> result = await base.Roles.AddAsync(role, token);
-        int count = await base.SaveChangesAsync(token);
-        return count;
+    public async Task<int> AddApplicationRoleAsync(ApplicationRole role, CancellationToken token) {
+        try {
+            await base.Roles.AddAsync(role, token);
+            var count = await base.SaveChangesAsync(token);
+            return count;
+        } catch (System.InvalidOperationException e) {
+            N2IdentityContextLoggingExtensions.LogAddApplicationRoleFailed(logger, e.Message, e);
+            return -1;
+        }
     }
 
-    public async Task<int> AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token)
-    {
-        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<IdentityUserRole<Guid>> result = await base.UserRoles.AddAsync(identityRole, token);
-        int count = await base.SaveChangesAsync(token);
-        return count;
+    public async Task<int> AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token) {
+        try {
+            await base.UserRoles.AddAsync(identityRole, token);
+            var count = await base.SaveChangesAsync(token);
+            return count;
+        } catch (System.InvalidOperationException e) {
+            N2IdentityContextLoggingExtensions.LogAddIdentityUserRoleFailed(logger, e.Message, e);
+            return -1;
+        }
     }
 
     // Update the Health method to use the LoggerMessage delegate
-    public DataContextHealthStatus Health()
-    {
+    public DataContextHealthStatus Health() {
         string? dbName = null;
 #pragma warning disable CA1031 // Do not catch general exception types
-        try
-        {
+        try {
             // execute a query to verify the database
             dbName = base.Database.ProviderName ?? "No Provider";
             _ = base.Users.FirstOrDefault(m => m.EmailConfirmed);
             return new DataContextHealthStatus(ResponseStatus.Success, dbName);
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             N2IdentityContextLoggingExtensions.LogHealthStatusFailed(logger, ex.Message, ex);
             return new DataContextHealthStatus(ResponseStatus.PreconditionFailed, dbName ?? "Failed to connect");
         }
@@ -309,16 +284,46 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
     }
 }
 
-public static class N2IdentityContextLoggingExtensions
-{
+public static class N2IdentityContextLoggingExtensions {
     private static readonly Action<ILogger, string, Exception?> LogHealthStatusFail =
         LoggerMessage.Define<string>(
             LogLevel.Warning,
             new EventId(1, nameof(LogHealthStatusFailed)),
             "Health Status failed with exception: {Message}");
 
-    public static void LogHealthStatusFailed(ILogger logger, string message, Exception? exception)
-    {
+    private static readonly Action<ILogger, string, Exception?> LogAddApplicationRoleFail =
+        LoggerMessage.Define<string>(
+            LogLevel.Warning,
+            new EventId(2, nameof(LogAddApplicationRoleFailed)),
+            "AddApplicationRoleAsync failed with {Message}");
+
+    private static readonly Action<ILogger, string, Exception?> LogAddIdentityUserRoleFail =
+    LoggerMessage.Define<string>(
+        LogLevel.Warning,
+        new EventId(3, nameof(LogAddIdentityUserRoleFailed)),
+        "AddApplicationRoleAsync failed with {Message}");
+
+    private static readonly Action<ILogger, string, Exception?> LogAddApplicationUserFail =
+    LoggerMessage.Define<string>(
+        LogLevel.Warning,
+        new EventId(4, nameof(LogAddApplicationUserFailed)),
+        "AddApplicationUserAsync failed with {Message}");
+
+    public static void LogHealthStatusFailed(ILogger logger, string message, Exception? exception) {
         LogHealthStatusFail(logger, message, exception);
     }
+
+    public static void LogAddApplicationRoleFailed(ILogger logger, string message, Exception? exception) {
+        LogAddApplicationRoleFail(logger, message, exception);
+    }
+
+    public static void LogAddApplicationUserFailed(ILogger logger, string message, Exception? exception) {
+        LogAddApplicationUserFail(logger, message, exception);
+    }
+
+    public static void LogAddIdentityUserRoleFailed(ILogger logger, string message, Exception? exception) {
+        LogAddIdentityUserRoleFail(logger, message, exception);
+    }
+
+
 }

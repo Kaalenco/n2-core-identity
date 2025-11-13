@@ -1,129 +1,130 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Net.Mail;
-using System.Security.Cryptography;
-
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Commands;
 using N2.Core.Identity.Data;
 
+using OtpNet;
+
+using QRCoder;
+
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Net.Mail;
+using System.Security.Cryptography;
+
 namespace N2.Core.Identity.Services;
 
-public class N2UserManager : IUserManager<ApplicationUser>
-{
+public class N2UserManager : IUserManager<ApplicationUser> {
     private readonly IIdentityContextFactory factory;
     private readonly string catalog;
+    private readonly ILogger<N2UserManager> logger;
     private bool disposedValue;
     private readonly Semaphore lockObject = new(1, 1);
     private IIdentityContext? context;
+    private readonly AuthenticationConfig configuration = new();
+    private readonly RandomNumberGenerator rng = RandomNumberGenerator.Create();
 
     public bool SupportsUserEmail { get; }
 
     public N2UserManager(
         IIdentityContextFactory identityContextFactory,
-        string catalog)
-    {
+        IConfiguration configuration,
+        string catalog,
+        ILogger<N2UserManager> logger) {
         this.factory = identityContextFactory;
         this.catalog = catalog;
+        this.logger = logger;
+
+        var appConfigSection = configuration?.GetSection(AuthenticationConfig.SectionName);
+        if (appConfigSection != null) {
+            appConfigSection.Bind(this.configuration);
+        }
     }
 
-    private async Task<IIdentityContext> InitializeContextAsync()
-    {
-        if (context != null)
-        {
+    private async Task<IIdentityContext> InitializeContextAsync() {
+        if (context != null) {
             return context;
         }
 
         lockObject.WaitOne();
-        try
-        {
+        try {
             context = await factory.CreateAsync(catalog);
-        }
-        finally
-        {
+        } finally {
             lockObject.Release();
         }
         return context;
     }
 
-    public async Task<bool> CanSignInAsync([NotNull] ApplicationUser user, CancellationToken token)
-    {
-        IIdentityContext ctx = await InitializeContextAsync();
+    public async Task<bool> CanSignInAsync([NotNull] ApplicationUser user, CancellationToken token) {
+        var ctx = await InitializeContextAsync();
         return await ctx.CanSignInAsync(user.Id);
     }
 
-    public async Task<ICommandResponse> DeleteAsync([NotNull] ApplicationUser user, CancellationToken token)
-    {
-        IIdentityContext ctx = await InitializeContextAsync();
+    public async Task<ICommandResponse> DeleteAsync([NotNull] ApplicationUser user, CancellationToken token) {
+        var ctx = await InitializeContextAsync();
         ctx.RemoveApplicationUser(user);
-        (ResponseStatus code, string? message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> ConfirmEmailAsync([NotNull] ApplicationUser user, string confirmationToken, CancellationToken token)
-    {
+    public async Task<ICommandResponse> ConfirmEmailAsync([NotNull] ApplicationUser user, string confirmationToken, CancellationToken token) {
+        var ctx = await InitializeContextAsync();
+        var (flowControl, value, dbUser) = await ValidateConfirmationToken(ctx, user.Id, user.UserName, MultiFactorType.Email, user.Email, confirmationToken, token);
+        if (!flowControl) {
+            return value;
+        }
+
+        // dbUser should be set
+        dbUser!.LockoutEnabled = true;
+        dbUser!.EmailConfirmed = true;
+        (var code, var message) = await ctx.Complete();
+        return new RequestResult(code, message ?? string.Empty);
+    }
+
+    private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
+    private async Task<(bool flowControl, ICommandResponse value, ApplicationUser? dbUser)> ValidateConfirmationToken(
+        IIdentityContext ctx,
+        Guid userId,
+        string? userName,
+        MultiFactorType multiFactorType,
+        string? property,
+        string confirmationToken,
+        CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(confirmationToken);
-        IIdentityContext ctx = await InitializeContextAsync();
-        ApplicationUser? dbUser = await ctx.ApplicationUserAsync(user.Id, token);
-        if (dbUser == null)
-        {
-            return RequestResult.NotFound();
-        }
-        if (dbUser.UserName != user.UserName || dbUser.Email != user.Email)
-        {
-            return RequestResult.NotFound();
-        }
-        user = dbUser;
-        string[] parts = confirmationToken.Split('.');
-        if (parts.Length != 2)
-        {
-            return RequestResult.BadRequest();
-        }
-        byte[] dataPart = Convert.FromBase64String(parts[0]);
-        string[] data = System.Text.Encoding.UTF8.GetString(dataPart).Split(':');
-        if (data.Length != 2)
-        {
-            return RequestResult.BadRequest();
+
+        if (!allowedConfirmation.Contains(multiFactorType)) {
+            return (flowControl: false, value: RequestResult.Unexpected($"Not supported here: {multiFactorType}"), null);
         }
 
-        if (!long.TryParse(data[1], out long timeOut))
-        {
-            return RequestResult.BadRequest();
+        var dbUser = await ctx.ApplicationUserAsync(userId, token);
+        if (dbUser == null) {
+            return (flowControl: false, value: RequestResult.NotFound(), null);
+        }
+        if (multiFactorType == MultiFactorType.Email && (dbUser.UserName != userName || dbUser.Email != property)) {
+            return (flowControl: false, value: RequestResult.NotFound(), null);
+        }
+        if (multiFactorType == MultiFactorType.Sms && (dbUser.UserName != userName || dbUser.PhoneNumber != property)) {
+            return (flowControl: false, value: RequestResult.NotFound(), null);
         }
 
-        if (data[0] != user.NormalizedEmail)
-        {
-            return RequestResult.BadRequest();
+        var verified = await ValidateMultifactorAsync(dbUser, confirmationToken, token);
+        if (verified == null) {
+            return (flowControl: false, value: RequestResult.NotFound(), dbUser);
         }
 
-        if (DateTime.UtcNow.Ticks > timeOut)
-        {
-            return RequestResult.TimeOut();
-        }
-
-        byte[] secret = System.Text.Encoding.UTF8.GetBytes($"{user.NormalizedEmail}:{timeOut}:{user.SecurityStamp}");
-        string crypted = Convert.ToBase64String(SHA384.HashData(secret));
-        if (parts[1] != crypted)
-        {
-            return RequestResult.BadRequest();
-        }
-
-        dbUser.LockoutEnabled = true;
-        dbUser.EmailConfirmed = true;
-        (ResponseStatus code, string? message) = await ctx.Complete();
-        return new RequestResult(code, message ?? string.Empty);
+        return (flowControl: verified.Status.IsSuccess(), value: verified, dbUser);
     }
 
-    public async Task<ICommandResponse> CreateAsync([NotNull] ApplicationUser user, string password, CancellationToken token)
-    {
+    public async Task<ICommandResponse> CreateAsync([NotNull] ApplicationUser user, string password, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(password);
 
-        IIdentityContext ctx = await InitializeContextAsync();
-        ApplicationUser? dbUser = await ApplicationUserByNameAsync(user.UserName ?? string.Empty, token);
-        if (dbUser != null)
-        {
+        var ctx = await InitializeContextAsync();
+        var dbUser = await ApplicationUserByNameAsync(user.UserName ?? string.Empty, token);
+        if (dbUser != null) {
             return new RequestResult(406, "Already exists");
         }
 
@@ -136,302 +137,455 @@ public class N2UserManager : IUserManager<ApplicationUser>
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
         user.PasswordHash = GetPasswordHash(user.UserName, user.SecurityStamp, password);
         await ctx.AddApplicationUserAsync(user, token);
-        (ResponseStatus code, string? message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    private async Task<ApplicationUser?> ApplicationUserByIdAsync(Guid userId, CancellationToken token)
-    {
+    private async Task<ApplicationUser?> ApplicationUserByIdAsync(Guid userId, CancellationToken token) {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
-        IIdentityContext ctx = await InitializeContextAsync();
+        var ctx = await InitializeContextAsync();
         return await ctx.ApplicationUserAsync(userId, token);
     }
 
-    public async Task<ICommandResponse<ApplicationUser>> FindByIdAsync(Guid userId, CancellationToken token)
-    {
-        ApplicationUser? user = await ApplicationUserByIdAsync(userId, token);
+    public async Task<ICommandResponse<ApplicationUser>> FindByIdAsync(Guid userId, CancellationToken token) {
+        var user = await ApplicationUserByIdAsync(userId, token);
         return new ApplicationUserResponse(user);
     }
 
-    private async Task<ApplicationUser?> ApplicationUserByNameAsync(string? userName, CancellationToken token)
-    {
+    private async Task<ApplicationUser?> ApplicationUserByNameAsync(string? userName, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(userName);
-        IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = userName.ToUpperInvariant();
+        var ctx = await InitializeContextAsync();
+        var normalizedName = userName.ToUpperInvariant();
         return await ctx.ApplicationUserAsync(normalizedName, token);
     }
 
-    public async Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string? userName, CancellationToken token)
-    {
-        ApplicationUser? user = await ApplicationUserByNameAsync(userName, token);
+    public async Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string? userName, CancellationToken token) {
+        var user = await ApplicationUserByNameAsync(userName, token);
         return new ApplicationUserResponse(user);
     }
 
-    public async Task<ICommandResponse<string>> GenerateEmailConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token)
-    {
-        if (user.Id == Guid.Empty)
-        {
-            ApplicationUser? dbUser = await ApplicationUserByNameAsync(user.UserName, token);
-            if (dbUser == null)
-            {
+    public async Task<ICommandResponse<string>> GenerateConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token) {
+        if (user.Id == Guid.Empty) {
+            var dbUser = await ApplicationUserByNameAsync(user.UserName, token);
+            if (dbUser == null) {
                 throw new InvalidOperationException("Invalid user");
             }
         }
-        long timeOut = DateTime.UtcNow.AddDays(5).Ticks;
-        byte[] secret = System.Text.Encoding.UTF8.GetBytes($"{user.NormalizedEmail}:{timeOut}:{user.SecurityStamp}");
-        byte[] crypted = SHA384.HashData(secret);
-        byte[] data = System.Text.Encoding.UTF8.GetBytes($"{user.NormalizedEmail}:{timeOut}");
-        string result = string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(crypted));
+
+        var nonce = RandomNumberGenerator.GetItems("ABCDEFGHIJKLMNOP1234567890".AsSpan(), 30).ToString();
+        var timeOut = DateTime.UtcNow.AddDays(5).Ticks;
+
+        var secret = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{user.SecurityStamp}");
+        var crypted = SHA384.HashData(secret);
+        var data = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}");
+        var result = string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(crypted));
         return StringResponse.Accept(result);
     }
 
-    public async Task<IListResponse<string>> GetRolesAsync([NotNull] ApplicationUser user, CancellationToken token)
-    {
-        IIdentityContext ctx = await InitializeContextAsync();
-        IEnumerable<string> roles = await ctx.UserRolesAsync(user.Id);
+    public async Task<IListResponse<string>> GetRolesAsync([NotNull] ApplicationUser user, CancellationToken token) {
+        var ctx = await InitializeContextAsync();
+        var roles = await ctx.UserRolesAsync(user.Id);
         ListResponse<string> response = new(roles);
         return response;
     }
 
-    public async Task<ICommandResponse<Guid>> GetUserIdAsync(ApplicationUser user, CancellationToken token)
-    {
+    public async Task<ICommandResponse<Guid>> GetUserIdAsync(ApplicationUser user, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
-        IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = user.UserName ?? "".ToUpperInvariant();
-        ApplicationUser? userRecord = await ctx.ApplicationUser.FirstOrDefaultAsync(u => u.NormalizedUserName == normalizedName, token);
-        Guid result = userRecord?.Id ?? Guid.Empty;
+        var ctx = await InitializeContextAsync();
+        var normalizedName = user.UserName ?? "".ToUpperInvariant();
+        var userRecord = await ctx.ApplicationUser.FirstOrDefaultAsync(u => u.NormalizedUserName == normalizedName, token);
+        var result = userRecord?.Id ?? Guid.Empty;
         return GuidResponse.Accept(result);
     }
 
-    public async Task<ICommandResponse> SetEmailAsync([NotNull] ApplicationUser user, string email, CancellationToken token)
-    {
+    public async Task<ICommandResponse> SetEmailAsync([NotNull] ApplicationUser user, string email, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(email);
-        (bool emailValid, string message) = ValidateEmail(email);
-        if (!emailValid)
-        {
+        (var emailValid, var message) = ValidateEmail(email);
+        if (!emailValid) {
             return new RequestResult(406, message);
         }
-        ApplicationUser? dbUser = await ApplicationUserByNameAsync(user.UserName ?? string.Empty, token);
-        if (dbUser != null && dbUser.Id != user.Id)
-        {
+        var dbUser = await ApplicationUserByNameAsync(user.UserName ?? string.Empty, token);
+        if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
         user.Email = email;
         user.NormalizedEmail = email.ToUpperInvariant();
         user.EmailConfirmed = false;
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
-        return RequestResult.Ok();
+
+        (var status, var commitMessage) = await SaveChangesAsync();
+        return status.IsSuccess()
+            ? RequestResult.Ok()
+            : new RequestResult(status, $"Email not set for {user.Id}, {commitMessage}");
     }
 
-    public async Task<ICommandResponse> SetUserNameAsync([NotNull] ApplicationUser user, string userName, CancellationToken token)
-    {
+    private async Task<(ResponseStatus, string?)> SaveChangesAsync() {
+        var ctx = await InitializeContextAsync();
+        var result = await ctx.Complete();
+        return result;
+    }
+
+    public async Task<ICommandResponse> SetUserNameAsync([NotNull] ApplicationUser user, string userName, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(userName);
-        ApplicationUser? dbUser = await ApplicationUserByNameAsync(userName, token);
-        if (dbUser != null && dbUser.Id != user.Id)
-        {
+        var dbUser = await ApplicationUserByNameAsync(userName, token);
+        if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
         user.UserName = userName;
         user.NormalizedUserName = userName.ToUpperInvariant();
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
-        return RequestResult.Ok();
+
+        (var status, var commitMessage) = await SaveChangesAsync();
+        return status.IsSuccess()
+            ? RequestResult.Ok()
+            : new RequestResult(status, $"Username not set for {user.Id}, {commitMessage}");
     }
 
-    private static (bool valid, string message) ValidateEmail(string email)
-    {
-        string valid = string.Empty;
+    private static (bool valid, string message) ValidateEmail(string email) {
+        var valid = string.Empty;
 
-        try
-        {
+        try {
             _ = new MailAddress(email);
-        }
-        catch (FormatException)
-        {
+        } catch (FormatException) {
             valid = "Invalid email format";
-        }
-        catch (ArgumentNullException)
-        {
+        } catch (ArgumentNullException) {
             valid = "Value is null or empty";
-        }
-        catch (ArgumentException e)
-        {
+        } catch (ArgumentException e) {
             valid = e.Message;
         }
 
         return (valid.Length == 0, valid);
     }
 
-    public async Task<ICommandResponse> ValidateAsync(ApplicationUser user, string password, CancellationToken token)
-    {
+    public async Task<ICommandResponse> ValidateAsync(ApplicationUser user, string password, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(password);
-        IIdentityContext ctx = await InitializeContextAsync();
-        ApplicationUser? appUser = await ctx.FindRecordAsync<ApplicationUser>(user.Id);
-        if (appUser == null)
-        {
+        var ctx = await InitializeContextAsync();
+        var normalizedUserName = user.UserName?.ToUpperInvariant() ?? string.Empty;
+        var appUser = await ctx.ApplicationUser
+            .Where(m => m.NormalizedUserName == normalizedUserName &&
+                (m.LockoutEnd == null || m.LockoutEnd < DateTime.UtcNow)
+            ).FirstOrDefaultAsync(token);
+        if (appUser == null) {
             return new RequestResult(404, "Not accepted");
         }
-        string passwordHash = GetPasswordHash(appUser.UserName, appUser.SecurityStamp, password);
-        if (passwordHash != appUser.PasswordHash)
-        {
+        var passwordHash = GetPasswordHash(appUser.UserName, appUser.SecurityStamp, password);
+        if (passwordHash != appUser.PasswordHash) {
             return new RequestResult(404, "Not accepted");
         }
         return new RequestResult(200, user.UserName ?? string.Empty);
     }
 
-    private static string GetPasswordHash(string? userName, string? salt, string password)
-    {
-        string normalizedName = userName?.ToUpperInvariant() ?? "";
-        string source = string.Concat(normalizedName, ':', password, ':', salt);
-        byte[] secret = System.Text.Encoding.UTF8.GetBytes(source);
-        byte[] crypted = SHA384.HashData(secret);
+    private static string GetPasswordHash(string? userName, string? salt, string password) {
+        var normalizedName = userName?.ToUpperInvariant() ?? "";
+        var source = string.Concat(normalizedName, ':', password, ':', salt);
+        var secret = System.Text.Encoding.UTF8.GetBytes(source);
+        var crypted = SHA384.HashData(secret);
         return Convert.ToBase64String(crypted);
     }
 
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!disposedValue)
-        {
-            if (disposing)
-            {
+    protected virtual void Dispose(bool disposing) {
+        if (!disposedValue) {
+            if (disposing) {
                 context?.Dispose();
                 lockObject?.Dispose();
+                rng?.Dispose();
             }
             disposedValue = true;
         }
     }
 
-    public void Dispose()
-    {
+    public void Dispose() {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 
-    public async Task<ICommandResponse> CreateRoleAsync(string role, CancellationToken token)
-    {
+    public async Task<ICommandResponse> CreateRoleAsync(string role, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(role);
-        IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = role.ToUpperInvariant();
-        ApplicationRole? roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
-        if (roleItem != null)
-        {
+        var ctx = await InitializeContextAsync();
+        var normalizedName = role.ToUpperInvariant();
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
+        if (roleItem != null) {
             return new RequestResult(406, "Already exists");
         }
-        roleItem = new ApplicationRole
-        {
+        roleItem = new ApplicationRole {
             Name = role,
             NormalizedName = normalizedName
         };
         await ctx.AddApplicationRoleAsync(roleItem, token);
-        (ResponseStatus code, string? message) = await ctx.Complete();
+
+        (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse<ApplicationUser>> FindByEmailAsync(string emailAddress, CancellationToken token)
-    {
-        ApplicationUser? result = await ApplicationUserByEmailAsync(emailAddress, token);
+    public async Task<ICommandResponse<ApplicationUser>> FindByEmailAsync(string emailAddress, CancellationToken token) {
+        var result = await ApplicationUserByEmailAsync(emailAddress, token);
         return new ApplicationUserResponse(result);
     }
 
-    private async Task<ApplicationUser?> ApplicationUserByEmailAsync(string emailAddress, CancellationToken token)
-    {
+    private async Task<ApplicationUser?> ApplicationUserByEmailAsync(string emailAddress, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(emailAddress);
-        using IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = emailAddress.ToUpperInvariant();
+        using var ctx = await InitializeContextAsync();
+        var normalizedName = emailAddress.ToUpperInvariant();
         return await ctx.ApplicationUserByEmailAsync(normalizedName, token);
     }
 
-    public async Task<ICommandResponse> IsInRoleAsync(ApplicationUser user, string role, CancellationToken token)
-    {
+    public async Task<ICommandResponse> IsInRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = role.ToUpperInvariant();
-        ApplicationRole? roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
-        if (roleItem == null)
-        {
+        using var ctx = await InitializeContextAsync();
+        var normalizedName = role.ToUpperInvariant();
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
+        if (roleItem == null) {
             return new GuidResponse(Guid.Empty, (int)ResponseStatus.NotFound, $"Role not found: {role}");
         }
-        IdentityUserRole<Guid>? isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
-        if (isAssigned != null)
-        {
+        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
+        if (isAssigned != null) {
             return new GuidResponse(roleItem.Id, (int)ResponseStatus.Success, role);
-        }
-        else
-        {
+        } else {
             return new GuidResponse(roleItem.Id, (int)ResponseStatus.NotAccepted, role);
         }
     }
 
-    public async Task<ICommandResponse> RemoveRoleAsync(string role, CancellationToken token)
-    {
+    public async Task<ICommandResponse> RemoveRoleAsync(string role, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = role.ToUpperInvariant();
-        ApplicationRole? roleItem = await ctx.ApplicationRole.FirstOrDefaultAsync(r => r.NormalizedName == normalizedName, token);
-        if (roleItem == null)
-        {
+        using var ctx = await InitializeContextAsync();
+        var normalizedName = role.ToUpperInvariant();
+        var roleItem = await ctx.ApplicationRole.FirstOrDefaultAsync(r => r.NormalizedName == normalizedName, token);
+        if (roleItem == null) {
             return RequestResult.NotFound();
         }
         ctx.RemoveApplicationRole(roleItem);
-        (ResponseStatus code, string? message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<bool> RoleExistsAsync(string role, CancellationToken token)
-    {
+    public async Task<bool> RoleExistsAsync(string role, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = role.ToUpperInvariant();
-        ApplicationRole? roleId = await ctx.ApplicationRoleAsync(normalizedName, token);
+        using var ctx = await InitializeContextAsync();
+        var normalizedName = role.ToUpperInvariant();
+        var roleId = await ctx.ApplicationRoleAsync(normalizedName, token);
         return roleId != null;
     }
 
-    public async Task<ICommandResponse> RemoveFromRoleAsync(ApplicationUser user, string role, CancellationToken token)
-    {
+    public async Task<ICommandResponse> RemoveFromRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = role.ToUpperInvariant();
-        ApplicationRole? roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
-        if (roleItem == null)
-        {
+        var ctx = await InitializeContextAsync();
+        var normalizedName = role.ToUpperInvariant();
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
+        if (roleItem == null) {
             return new RequestResult(406, $"Role '{role}' does not exist");
         }
-        IdentityUserRole<Guid>? isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
-        if (isAssigned == null)
-        {
+        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
+        if (isAssigned == null) {
             return RequestResult.Ok();
         }
         ctx.RemoveApplicationUserRole(isAssigned);
-        (ResponseStatus code, string? message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token)
-    {
+    public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        IIdentityContext ctx = await InitializeContextAsync();
-        string normalizedName = role.ToUpperInvariant();
-        ApplicationRole? roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
-        if (roleItem == null)
-        {
+        var ctx = await InitializeContextAsync();
+        var normalizedName = role.ToUpperInvariant();
+        var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
+        if (roleItem == null) {
             return new RequestResult(406, $"Role '{role}' does not exist");
         }
-        IdentityUserRole<Guid>? isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
-        if (isAssigned != null)
-        {
+        var isAssigned = await ctx.IdentityUserRoleAsync(user.Id, roleItem.Id, token);
+        if (isAssigned != null) {
             return RequestResult.Ok();
         }
-        IdentityUserRole<Guid> userRole = new()
-        {
+        IdentityUserRole<Guid> userRole = new() {
             RoleId = roleItem.Id,
             UserId = user.Id
         };
         await ctx.AddIdentityUserRoleAsync(userRole, token);
-        (ResponseStatus code, string? message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
+    }
+
+    private static readonly Action<ILogger, string, Exception?> LogMfaSecretNotSet =
+        LoggerMessage.Define<string>(
+            LogLevel.Critical,
+            new EventId(1, nameof(LogMfaSecretNotSet)),
+            "MfaSecret is not set for user {UserName}");
+
+    // Add this field to the N2UserManager class (preferably near other LoggerMessage delegates)
+    private static readonly Action<ILogger, string, string, string, Exception?> logMfaVerificationWarning =
+        LoggerMessage.Define<string, string, string>(
+            LogLevel.Warning,
+            new EventId(2, nameof(logMfaVerificationWarning)),
+            "Error {Message} while verifying MFA token [{MultifactorCode}] for user [{UserName}].");
+
+    public async Task<ICommandResponse> ValidateMultifactorAsync(ApplicationUser user, string multifactorCode, CancellationToken token) {
+        if (user == null || string.IsNullOrEmpty(user.UserName)) {
+            return MultifactorResponse.Failed("User name is not valid.");
+        }
+
+        var dbUser = await ApplicationUserByNameAsync(user.UserName, token);
+        if (dbUser is null) {
+            return new MultifactorResponse(ResponseStatus.NotFound, $"Could not find user {user.UserName}");
+        }
+        if (dbUser.MfaType == MultiFactorType.None) {
+            return new MultifactorResponse(ResponseStatus.Accepted, "No multifactor required.");
+        }
+        if (string.IsNullOrEmpty(multifactorCode)) {
+            return new MultifactorResponse(ResponseStatus.BadRequest, "No multifactor code provided.");
+        }
+        if (string.IsNullOrEmpty(user.MfaSecret)) {
+            LogMfaSecretNotSet(logger, user.UserName, null);
+            return new MultifactorResponse(ResponseStatus.Conflict, "Multifactor is not configured.");
+        }
+        if (user.MfaType == MultiFactorType.Totp) {
+            return !VerifyTwoFactorAuthentication(multifactorCode, user.MfaSecret)
+                ? new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid Totp code.")
+                : MultifactorResponse.Ok();
+        } else if (user.MfaType is MultiFactorType.Sms or MultiFactorType.Email) {
+
+#pragma warning disable CA1031 // Do not catch general exception types
+            try {
+                var splitCode = multifactorCode.Split('.', StringSplitOptions.RemoveEmptyEntries);
+                if (splitCode.Length != 2) {
+                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid Mfa code parts.");
+                }
+                var publicPart = Convert.FromBase64String(splitCode[0]);
+                var publicTestPart = System.Text.Encoding.UTF8.GetString(publicPart);
+                var nonce = publicTestPart.Split(':')[0];
+                var timeout = long.Parse(publicTestPart.Split(':')[1], CultureInfo.InvariantCulture);
+                var timeOutDate = new DateTime(timeout);
+                if (timeOutDate < DateTime.UtcNow) {
+                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Timeout.");
+                }
+
+                var secret = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{user.SecurityStamp}");
+                var crypted = SHA384.HashData(secret);
+                var verify = Convert.FromBase64String(splitCode[1]);
+
+                return ArraysAreEqual(crypted, verify)
+                    ? new MultifactorResponse(ResponseStatus.Unauthorized, "Validation failed")
+                    : MultifactorResponse.Ok();
+            } catch (Exception ex) {
+                logMfaVerificationWarning(logger, ex.Message, multifactorCode, user.UserName, ex);
+                return new MultifactorResponse(ResponseStatus.Unauthorized, "Validation error");
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
+
+        } else {
+            return new MultifactorResponse(
+                ResponseStatus.NotImplemented,
+                $"Mutifactor {user.MfaType} is not available for {user.UserName}");
+        }
+    }
+
+    private static bool ArraysAreEqual<T>(T[] lValue, T[] rValue) where T : IEquatable<T> {
+        if (lValue == null || rValue == null) {
+            return false;
+        }
+
+        if (lValue.Length < rValue.Length) {
+            return false;
+        }
+
+        if (lValue.Length > rValue.Length) {
+            return false;
+        }
+
+        for (var i = 0; i < lValue.Length; i++) {
+            if (!lValue[i].Equals(rValue[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool VerifyTwoFactorAuthentication(string code, string userTwoFactorSecret) {
+        Totp otp = new(Base32Encoding.ToBytes(userTwoFactorSecret));
+        return otp.VerifyTotp(code, out var _, new VerificationWindow(1, 1));
+    }
+
+    public async Task<ICommandResponse<MultiFactorProperties>> SetMultifactorAsync(
+        ApplicationUser user,
+        MultiFactorType mfaType,
+        string mfaToken,
+        CancellationToken token) {
+        ArgumentNullException.ThrowIfNull(user);
+        ArgumentException.ThrowIfNullOrEmpty(mfaToken);
+
+        if (string.IsNullOrEmpty(user.UserName)) {
+            return MultifactorResponse.Failed("User name is not valid.");
+        }
+
+        byte[]? qrCode = null;
+        var userUri = string.Empty;
+
+        var code = new byte[10];
+        rng.GetBytes(code);
+        var rngCode = Convert.ToBase64String(code);
+
+        switch (mfaType) {
+            case MultiFactorType.None:
+                break;
+
+            case MultiFactorType.Sms:
+                // verify that the user has a validated phone
+                if (!user.PhoneNumberConfirmed) {
+                    return MultifactorResponse.Failed("Phone number is not confirmed.");
+                }
+                break;
+
+            case MultiFactorType.Email:
+                // verify that the user has a validated email
+                if (!user.EmailConfirmed) {
+                    return MultifactorResponse.Failed("Email address is not confirmed.");
+                }
+                userUri = $"mailto://{user.Email}?subject=ValidationCode";
+                break;
+
+            case MultiFactorType.Totp:
+
+                userUri = GenerateQrCodeUri(user.UserName, rngCode, configuration.TwoFactorTotpName);
+                qrCode = GenerateQrCode(userUri);
+                break;
+
+            default:
+                return MultifactorResponse.Failed($"Not supported : {mfaType}.");
+        }
+
+        var ctx = await InitializeContextAsync();
+        var dbUser = await ApplicationUserByNameAsync(user.UserName, token);
+        if (dbUser is null) {
+            return new MultifactorResponse(ResponseStatus.NotFound, $"Could not find user {user.UserName}");
+        }
+        dbUser.MfaSecret = rngCode;
+        dbUser.MfaType = mfaType;
+        (var responseCode, var message) = await ctx.Complete();
+
+        if (responseCode.IsSuccess()) {
+            MultiFactorProperties result = new() {
+                MultiFactorType = mfaType,
+                QrCode = qrCode,
+                Uri = new Uri(userUri)
+            };
+            return new MultifactorResponse(responseCode, result);
+        } else {
+            return new MultifactorResponse(responseCode, message ?? "");
+        }
+    }
+
+    private static string GenerateQrCodeUri(string username, string secret, string appName) {
+        return $"otpauth://totp/{appName}:{username}?secret={secret}&issuer={appName}&digits=6";
+    }
+
+    private static byte[] GenerateQrCode(string uri) {
+        using QRCodeGenerator qrGenerator = new();
+        var qrCodeData = qrGenerator.CreateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
+
+        using BitmapByteQRCode qrCode = new(qrCodeData);
+        return qrCode.GetGraphic(20);
     }
 }

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
 

@@ -1,5 +1,6 @@
-using Microsoft.AspNetCore.Identity;
 using System.ComponentModel.DataAnnotations;
+
+using Microsoft.AspNetCore.Identity;
 
 namespace N2.Core.Identity.Data;
 
@@ -21,7 +22,15 @@ public class ApplicationUser : IdentityUser<Guid>, IIdentityUser
 
     [MaxLength(300)]
     public string? ImagePath { get; set; }
+
+    public MultiFactorType MfaType { get; set; }
+
+    public bool MfaConfirmed { get; set; }
+
+    [MaxLength(80)]
+    public string? MfaSecret { get; set; }
 }
+
 
 public class ApplicationRole : IdentityRole<Guid>, IIdentityRole
 {

@@ -1,5 +1,6 @@
-﻿using Microsoft.AspNetCore.Components.Authorization;
 using System.Security.Claims;
+
+using Microsoft.AspNetCore.Components.Authorization;
 
 namespace N2.Core.Identity;
 
@@ -7,7 +8,7 @@ public sealed class UserContextFactory : IUserContextFactory
 {
     private readonly AuthenticationStateProvider authenticationStateProvider;
     private IdentityUserContext? identityUserContext;
-    private readonly object syncRoot = new object();
+    private readonly object syncRoot = new();
     public bool Initializing { get; private set; }
     public bool Initialized { get; private set; }
 
@@ -20,7 +21,7 @@ public sealed class UserContextFactory : IUserContextFactory
 
     public async Task<IUserContext> CreateAsync()
     {
-        var timeOut = 10000;
+        int timeOut = 10000;
         IUserContext? result = await UserContextInitAsync();
         if (result != null)
         {
@@ -63,7 +64,7 @@ public sealed class UserContextFactory : IUserContextFactory
         }
         else
         {
-            var state = await authenticationStateProvider.GetAuthenticationStateAsync();
+            AuthenticationState state = await authenticationStateProvider.GetAuthenticationStateAsync();
             identityUserContext = new IdentityUserContext(state.User);
         }
 

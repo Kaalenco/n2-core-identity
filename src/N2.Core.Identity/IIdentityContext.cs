@@ -42,6 +42,8 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
     IQueryable<IdentityUserRole<Guid>> IdentityUserRole { get; }
 
     Task<IEnumerable<string>> UserRolesAsync(Guid userId);
+
+
 }
 
 public interface IIdentityContextFactory : ICoreDataContextFactory<IIdentityContext>;
