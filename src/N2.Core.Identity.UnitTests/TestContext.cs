@@ -87,7 +87,7 @@ internal static class TestContext {
         using var scope = tempProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<N2IdentityContext>();
         var hasher = scope.ServiceProvider.GetService<IPasswordHasher<ApplicationUser>>();
-        SeedTestData(context, hasher);
+        SeedTestData(context, hasher!);
     }
 
     private static void SeedTestData(N2IdentityContext context, IPasswordHasher<ApplicationUser> passwordHasher) {
