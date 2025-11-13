@@ -23,6 +23,16 @@ internal static class TestContext {
             .AddEnvironmentVariables()
             .AddUserSecrets(typeof(TestContext).Assembly);
 
+        serviceCollection.AddScoped<IPasswordHasher<ApplicationUser>>(s => {
+            // Configure PasswordHasherOptions using IOptions<PasswordHasherOptions>
+            var options = new PasswordHasherOptions {
+                CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3,
+                IterationCount = 310000 // OWASP 2023 recommendation
+            };
+            return new PasswordHasher<ApplicationUser>(Microsoft.Extensions.Options.Options.Create(options));
+        });
+
+
         serviceCollection.AddSingleton<IConfiguration>(config.Build());
 
         serviceCollection.AddLogging(configure => {
@@ -64,9 +74,10 @@ internal static class TestContext {
         // Register user manager
         serviceCollection.AddScoped<IUserManager<ApplicationUser>>((s) => {
             var logger = s.GetRequiredService<ILogger<N2UserManager>>();
-            var c = s.GetRequiredService<IConfiguration>();
+            var config = s.GetRequiredService<IConfiguration>();
+            var hasher = s.GetRequiredService<IPasswordHasher<ApplicationUser>>();
             var factory = s.GetRequiredService<IIdentityContextFactory>();
-            return new N2UserManager(factory, c, "IdentityDb", logger);
+            return new N2UserManager(factory, config, hasher, "IdentityDb", logger);
         });
 
         serviceCollection.AddScoped<IAuthenticator, N2AuthenticationService>();

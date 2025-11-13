@@ -3,60 +3,94 @@ using Microsoft.Extensions.Logging;
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
 
+using System.Diagnostics;
+
 namespace N2.Core.Identity;
 
-public sealed class N2AuthenticationService : IAuthenticator
-{
+internal sealed class TimeoutTimer {
+    private readonly Stopwatch timer;
+    private readonly int timeToWait;
+    private readonly int step;
+
+    public TimeoutTimer(int timeToWait) {
+        this.timeToWait = timeToWait;
+        this.step = timeToWait / 20;
+        if (this.step > 1) {
+            this.step = 1;
+        }
+
+        this.timer = new Stopwatch();
+        this.timer.Start();
+    }
+
+    public async Task Wait() {
+        if (timer.ElapsedMilliseconds > timeToWait) {
+            return;
+        }
+
+        while (timer.ElapsedMilliseconds < timeToWait) {
+            await Task.Delay(step);
+        }
+    }
+}
+
+public sealed class N2AuthenticationService : IAuthenticator {
     private readonly IUserManager<ApplicationUser> userManager;
     private readonly ILogger<N2AuthenticationService> logger;
 
+    private const int TimeForAuthenticationMs = 200;
+
     public N2AuthenticationService(
         IUserManager<ApplicationUser> userManager,
-        ILogger<N2AuthenticationService> logger)
-    {
+        ILogger<N2AuthenticationService> logger) {
         this.userManager = userManager;
         this.logger = logger;
     }
 
-    public async Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin)
-    {
+    public async Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin) {
         ArgumentNullException.ThrowIfNull(userLogin);
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Username);
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Password);
 
         CancellationToken token = new();
 
-        ICommandResponse<ApplicationUser> userResponse = await userManager.FindByNameAsync(userLogin.Username, token);
-        ApplicationUser? user = userResponse.Value;
-        if (user == null)
-        {
+        var timer = new TimeoutTimer(TimeForAuthenticationMs);
+
+        var userResponse = await userManager.FindByNameAsync(userLogin.Username, token);
+        var user = userResponse.Value;
+        ICommandResponse? result = null;
+        if (user == null) {
             LoginAttempt(logger, userLogin.Username, userNotFoundException);
+            await timer.Wait();
             return null;
         }
 
-        ICommandResponse result = await userManager.ValidateAsync(user, userLogin.Password, token);
-        if (result == null)
-        {
+        result = await userManager.ValidateAsync(user, userLogin.Password, token);
+        if (result == null) {
             LoginAttempt(logger, userLogin.Username, unexpectedResult);
+            await timer.Wait();
             return null;
         }
-        if (!result.Status.IsSuccess())
-        {
+        if (!result.Status.IsSuccess()) {
             LoginAttempt(logger, userLogin.Username, loginFailed);
+            await timer.Wait();
+
             return null;
         }
 
-        if (!await userManager.CanSignInAsync(user, token))
-        {
+        if (!await userManager.CanSignInAsync(user, token)) {
             LoginAttempt(logger, userLogin.Username, userLockedOutException);
+            await timer.Wait();
             return null;
         }
 
-        IListResponse<string> roles = await userManager.GetRolesAsync(user, token);
-        if (roles == null || roles.Value == null || roles.Value.Count == 0)
-        {
+        var roles = await userManager.GetRolesAsync(user, token);
+        await timer.Wait();
+
+        if (roles == null || roles.Value == null || roles.Value.Count == 0) {
             return new AspNetUserContext(user, []);
         }
+
         return new AspNetUserContext(user, [.. roles.Value]);
     }
 

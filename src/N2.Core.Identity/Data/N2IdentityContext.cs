@@ -197,7 +197,7 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
                     )
                 )
             )
-            .Select(u => u.EmailConfirmed)
+            .Select(u => u.EmailConfirmed || u.PhoneNumberConfirmed || u.MfaType == MultiFactorType.None)
             .FirstOrDefaultAsync();
     }
 
