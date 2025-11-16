@@ -3,36 +3,7 @@ using Microsoft.Extensions.Logging;
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
 
-using System.Diagnostics;
-
 namespace N2.Core.Identity;
-
-internal sealed class TimeoutTimer {
-    private readonly Stopwatch timer;
-    private readonly int timeToWait;
-    private readonly int step;
-
-    public TimeoutTimer(int timeToWait) {
-        this.timeToWait = timeToWait;
-        this.step = timeToWait / 20;
-        if (this.step > 1) {
-            this.step = 1;
-        }
-
-        this.timer = new Stopwatch();
-        this.timer.Start();
-    }
-
-    public async Task Wait() {
-        if (timer.ElapsedMilliseconds > timeToWait) {
-            return;
-        }
-
-        while (timer.ElapsedMilliseconds < timeToWait) {
-            await Task.Delay(step);
-        }
-    }
-}
 
 public sealed class N2AuthenticationService : IAuthenticator {
     private readonly IUserManager<ApplicationUser> userManager;
@@ -73,6 +44,11 @@ public sealed class N2AuthenticationService : IAuthenticator {
         }
         if (!result.Status.IsSuccess()) {
             LoginAttempt(logger, userLogin.Username, loginFailed);
+            if (result.Status == ResponseStatus.Locked) {
+                LoginAttempt(logger, userLogin.Username, accountLocked);
+            } else {
+                LoginAttempt(logger, userLogin.Username, loginFailed);
+            }
             await timer.Wait();
 
             return null;
@@ -98,6 +74,7 @@ public sealed class N2AuthenticationService : IAuthenticator {
     private static readonly AuthenticationException userLockedOutException = new("User is locked out.");
     private static readonly AuthenticationException unexpectedResult = new("No result from sign in manager.");
     private static readonly AuthenticationException loginFailed = new("Could not login user.");
+    private static readonly AuthenticationException accountLocked = new("Account locked.");
 
     private static readonly Action<ILogger, string, Exception> LoginAttempt = LoggerMessage.Define<string>(
             LogLevel.Warning,

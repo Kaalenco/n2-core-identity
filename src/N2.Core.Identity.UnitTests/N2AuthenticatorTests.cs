@@ -7,19 +7,80 @@ using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
 
-[TestClass]
-public class N2AuthenticatorTests {
-    private readonly ServiceProvider serviceProvider;
+public abstract class N2AuthenticatorUnitTestsBase {
+    private readonly ServiceProvider _serviceProvider;
+    protected ServiceProvider ServiceProvider => _serviceProvider;
 
-    public N2AuthenticatorTests() {
+    protected N2AuthenticatorUnitTestsBase() {
         ServiceCollection serviceCollection = new();
         TestContext.ConfigureServices(serviceCollection);
-        serviceProvider = serviceCollection.BuildServiceProvider();
+        _serviceProvider = serviceCollection.BuildServiceProvider();
     }
+
+    protected IAuthenticator GetAuthenticator() => ServiceProvider.GetRequiredService<IAuthenticator>();
+    protected IUserManager<ApplicationUser> GetUserManager() => ServiceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
+    protected Task<IIdentityContext> GetIdentityContext() {
+        var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
+        return factory.CreateAsync();
+    }
+
+    protected async Task<ApplicationUser> CreateTestUser(string userName, string password, MultiFactorType mfaType) {
+        CancellationToken token = new();
+
+        var userManager = GetUserManager();
+
+        // Create user
+        ApplicationUser user = new() {
+            UserName = userName,
+            Email = $"{userName}@test.com",
+            MfaType = mfaType
+        };
+
+        var createResult = await userManager.CreateAsync(user, password, token);
+        if (!createResult.Status.IsSuccess()) {
+            throw new InvalidOperationException($"Failed to create user: {createResult.Message}");
+        }
+
+        // Retrieve the created user
+        var userResponse = await userManager.FindByNameAsync(userName, token);
+        if (userResponse.Value == null) {
+            throw new InvalidOperationException("Failed to retrieve created user.");
+        }
+
+        var createdUser = userResponse.Value;
+
+        if (mfaType != MultiFactorType.None) {
+            // Generate and confirm email to allow sign-in
+            await userManager.SetMultifactorAsync(createdUser, mfaType, "token", CancellationToken.None);
+
+            var tokenResponse = await userManager.GenerateConfirmationTokenAsync(createdUser, token);
+            if (!tokenResponse.Status.IsSuccess() || string.IsNullOrEmpty(tokenResponse.Value)) {
+                throw new InvalidOperationException("Failed to generate confirmation token.");
+            }
+
+            var confirmResult = await userManager.ConfirmEmailAsync(createdUser, tokenResponse.Value, token);
+            if (!confirmResult.Status.IsSuccess()) {
+                throw new InvalidOperationException($"Failed to confirm email: {confirmResult.Message}");
+            }
+
+            // Retrieve user again to get updated EmailConfirmed status
+            userResponse = await userManager.FindByNameAsync(userName, token);
+            if (userResponse.Value == null) {
+                throw new InvalidOperationException("Failed to retrieve user after email confirmation.");
+            }
+        }
+
+        return userResponse.Value;
+    }
+}
+
+[TestClass]
+public class N2AuthenticatorTests : N2AuthenticatorUnitTestsBase {
+
 
     [TestMethod]
     public void TestGetAuthenticator() {
-        var authenticator = serviceProvider.GetRequiredService<IAuthenticator>();
+        var authenticator = GetAuthenticator();
         Assert.IsNotNull(authenticator);
     }
 
@@ -27,7 +88,7 @@ public class N2AuthenticatorTests {
     public async Task TestUserLoginFailureAsync() {
         var userName = $"testuser_{Guid.NewGuid():N}";
         await CreateTestUser(userName, "secret", MultiFactorType.None);
-        var authenticator = serviceProvider.GetRequiredService<IAuthenticator>();
+        var authenticator = GetAuthenticator();
         var user = await authenticator.AuthenticateAsync(new UserLogin { Password = "admin", Username = userName });
         Assert.IsNull(user);
     }
@@ -38,7 +99,7 @@ public class N2AuthenticatorTests {
         await CreateTestUser(username, "secret", MultiFactorType.None);
         UserLogin userInfo = new() { Password = "secret", Username = username };
 
-        var authenticator = serviceProvider.GetRequiredService<IAuthenticator>();
+        var authenticator = GetAuthenticator();
         var user = await authenticator.AuthenticateAsync(userInfo);
 
         Assert.IsNotNull(user, "User should be authenticated");
@@ -53,7 +114,7 @@ public class N2AuthenticatorTests {
         var iterations = 100;
         var validUserTimes = new List<long>();
         var invalidUserTimes = new List<long>();
-        var authService = serviceProvider.GetRequiredService<IAuthenticator>();
+        var authService = GetAuthenticator();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         // Act
         for (var i = 0; i < iterations; i++) {
@@ -122,7 +183,7 @@ percentDiff, $"Timing difference should be < 20% to prevent user enumeration, wa
         var username = $"testuser_{Guid.NewGuid():N}"; // Unique username
         await CreateTestUser(username, "P@ssword123", MultiFactorType.Email);
 
-        var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
+        var userManager = GetUserManager();
         var userResponse = await userManager.FindByNameAsync(username, CancellationToken.None);
         var user = userResponse.Value!;
 
@@ -159,7 +220,7 @@ percentDiff, $"Timing difference should be < 20% to prevent user enumeration, wa
     public async Task ErrorMessages_ShouldNotRevealUserExistence() {
         // Arrange
         await CreateTestUser("existinguser", "P@ssword123", MultiFactorType.None);
-        var authService = serviceProvider.GetRequiredService<IAuthenticator>();
+        var authService = GetAuthenticator();
 
         // Act
         var invalidUserResult = await authService.AuthenticateAsync(new UserLogin {
@@ -179,52 +240,5 @@ percentDiff, $"Timing difference should be < 20% to prevent user enumeration, wa
         // Verify logs don't distinguish between scenarios in external messages
     }
 
-    private async Task<ApplicationUser> CreateTestUser(string userName, string password, MultiFactorType mfaType) {
-        CancellationToken token = new();
 
-        var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-
-        // Create user
-        ApplicationUser user = new() {
-            UserName = userName,
-            Email = $"{userName}@test.com",
-            MfaType = mfaType
-        };
-
-        var createResult = await userManager.CreateAsync(user, password, token);
-        if (!createResult.Status.IsSuccess()) {
-            throw new InvalidOperationException($"Failed to create user: {createResult.Message}");
-        }
-
-        // Retrieve the created user
-        var userResponse = await userManager.FindByNameAsync(userName, token);
-        if (userResponse.Value == null) {
-            throw new InvalidOperationException("Failed to retrieve created user.");
-        }
-
-        var createdUser = userResponse.Value;
-
-        if (mfaType != MultiFactorType.None) {
-            // Generate and confirm email to allow sign-in
-            await userManager.SetMultifactorAsync(createdUser, mfaType, "token", CancellationToken.None);
-
-            var tokenResponse = await userManager.GenerateConfirmationTokenAsync(createdUser, token);
-            if (!tokenResponse.Status.IsSuccess() || string.IsNullOrEmpty(tokenResponse.Value)) {
-                throw new InvalidOperationException("Failed to generate confirmation token.");
-            }
-
-            var confirmResult = await userManager.ConfirmEmailAsync(createdUser, tokenResponse.Value, token);
-            if (!confirmResult.Status.IsSuccess()) {
-                throw new InvalidOperationException($"Failed to confirm email: {confirmResult.Message}");
-            }
-
-            // Retrieve user again to get updated EmailConfirmed status
-            userResponse = await userManager.FindByNameAsync(userName, token);
-            if (userResponse.Value == null) {
-                throw new InvalidOperationException("Failed to retrieve user after email confirmation.");
-            }
-        }
-
-        return userResponse.Value;
-    }
 }

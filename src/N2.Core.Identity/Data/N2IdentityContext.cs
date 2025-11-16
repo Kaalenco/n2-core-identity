@@ -44,13 +44,13 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
         => Users.Where(u => u.NormalizedUserName == normalizedName).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token)
-    => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
+        => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> ApplicationUserAsync(Guid userId, CancellationToken token)
         => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> FindByEmailAsync(string normalizedEmail, CancellationToken token)
-    => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
+        => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> ApplicationUserByEmailAsync(string normalizedEmail, CancellationToken token)
         => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
@@ -163,6 +163,7 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
         SelectItemList<UserSelectItem> result = new();
         var users = await
             base.Users
+            .AsNoTracking()
             .Where(r => r.EmailConfirmed)
             .Select(m => new {
                 Key = m.Id,
@@ -189,6 +190,7 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
 
     public Task<bool> CanSignInAsync(Guid userId) {
         return base.Users
+            .AsNoTracking()
             .Where(u => u.Id == userId &&
                 (
                     !u.LockoutEnabled ||
@@ -203,6 +205,7 @@ public class N2IdentityContext(DbContextOptions<N2IdentityContext> options, ILog
 
     public async Task<IEnumerable<string>> UserRolesAsync(Guid userId) {
         var user = await base.Users
+            .AsNoTracking()
             .Where(m => m.EmailConfirmed && m.UserName != null && m.Id == userId)
             .FirstOrDefaultAsync();
         if (user == null) {

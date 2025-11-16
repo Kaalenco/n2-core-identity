@@ -19,8 +19,84 @@ using System.Security.Cryptography;
 namespace N2.Core.Identity.Services;
 
 public class N2UserManager : IUserManager<ApplicationUser> {
+    private const int TimeForAuthenticationMs = 50;
+
+    private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
+
+    private static class LoggerService {
+
+        public static readonly Action<ILogger, string, Exception?> LogMfaSecretNotSet =
+            LoggerMessage.Define<string>(
+                LogLevel.Critical,
+                new EventId(1, nameof(LogMfaSecretNotSet)),
+                "MfaSecret is not set for user {UserName}.");
+
+        // Add this field to the N2UserManager class (preferably near other LoggerMessage delegates)
+        public static readonly Action<ILogger, string, string, string, Exception?> logMfaVerificationWarning =
+            LoggerMessage.Define<string, string, string>(
+                LogLevel.Warning,
+                new EventId(2, nameof(logMfaVerificationWarning)),
+                "Error {Message} while verifying MFA token [{MultifactorCode}] for user [{UserName}].");
+
+        // Add this LoggerMessage delegate near other LoggerMessage delegates
+        public static readonly Action<ILogger, string, int, Exception?> LogResetAccessFailedCount =
+            LoggerMessage.Define<string, int>(
+                LogLevel.Warning,
+                new EventId(3, nameof(LogResetAccessFailedCount)),
+                "Resetting access failed count for user {UserName} (was {FailedCount})."
+            );
+
+        public static readonly Action<ILogger, string, int, DateTimeOffset?, Exception?> LogIncrementAccessFailedCount =
+        LoggerMessage.Define<string, int, DateTimeOffset?>(
+            LogLevel.Warning,
+            new EventId(4, nameof(LogIncrementAccessFailedCount)),
+            "Account locked for user {UserName} after {FailedAttempts} failed attempts. Lockout until {LockoutEnd}"
+        );
+
+        public static readonly Action<ILogger, string, Exception?> LogResetAccessCountFailure =
+            LoggerMessage.Define<string>(
+                LogLevel.Critical,
+                new EventId(5, nameof(LogResetAccessCountFailure)),
+                "Resetting access failed count for user {UserName}."
+        );
+
+        public static readonly Action<ILogger, string, Exception?> LogIncrementAccessFailedException =
+        LoggerMessage.Define<string>(
+            LogLevel.Critical,
+            new EventId(6, nameof(LogIncrementAccessFailedException)),
+            "Error incrementing access failed count for user {UserName}."
+        );
+
+        public static readonly Action<ILogger, string, DateTimeOffset?, double, Exception?> LogUserLockedOut =
+         LoggerMessage.Define<string, DateTimeOffset?, double>(
+                LogLevel.Warning,
+                new EventId(7, nameof(LogUserLockedOut)),
+                "Authentication attempt blocked - user {UserName} is locked out until {LockoutEnd} ({RemainingMinutes} minutes remaining)."
+            );
+    }
+
+    private readonly string catalog;
+
+    private readonly AuthenticationConfig configuration = new();
+
+    private readonly IIdentityContextFactory factory;
+
+    private readonly Semaphore lockObject = new(1, 1);
+
+    private readonly ILogger<N2UserManager> logger;
+
+    private readonly IPasswordHasher<ApplicationUser> passwordHasher;
+
+    private readonly RandomNumberGenerator rng = RandomNumberGenerator.Create();
+
+    private IIdentityContext? context;
+
+    private bool disposedValue;
+
+    public bool SupportsUserEmail { get; }
+
     public N2UserManager(
-        IIdentityContextFactory identityContextFactory,
+                                                                IIdentityContextFactory identityContextFactory,
         IConfiguration configuration,
         IPasswordHasher<ApplicationUser> passwordHasher,
         string catalog,
@@ -35,8 +111,6 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             appConfigSection.Bind(this.configuration);
         }
     }
-
-    public bool SupportsUserEmail { get; }
     public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
@@ -340,6 +414,19 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse> ValidateAsync(ApplicationUser user, string password, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(password);
+        var timer = new TimeoutTimer(TimeForAuthenticationMs);
+
+        // Check lockout status FIRST
+        if (IsLockedOut(user)) {
+            var lockoutEnd = user.LockoutEnd!.Value;
+            var remainingTime = lockoutEnd - DateTimeOffset.UtcNow;
+
+            LoggerService.LogUserLockedOut(logger, user.UserName ?? user.Id.ToString(), lockoutEnd, Math.Ceiling(remainingTime.TotalMinutes), null);
+
+            await timer.Wait();
+            return new RequestResult(423, $"Account is locked. Try again after {lockoutEnd:u}");
+        }
+
         var ctx = await InitializeContextAsync();
         var normalizedUserName = user.UserName?.ToUpperInvariant() ?? string.Empty;
         var appUser = await ctx.ApplicationUser
@@ -349,6 +436,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (appUser == null) {
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
         }
+
         var verificationResult = passwordHasher.VerifyHashedPassword(
             appUser,
             appUser.PasswordHash ?? "",
@@ -356,8 +444,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         );
 
         if (verificationResult == PasswordVerificationResult.Failed) {
+            await IncrementAccessFailedCountAsync(ctx, appUser, token);
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
         }
+
+        // Password verified successfully - reset failed count
+        await ResetAccessFailedCountAsync(ctx, appUser, token);
 
         // Optional: Rehash if using outdated format
         if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded) {
@@ -366,8 +458,6 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
         return new RequestResult(ResponseStatus.Success, user.UserName ?? string.Empty);
     }
-
-    private const int TimeForAuthenticationMs = 50;
 
     public async Task<ICommandResponse> ValidateMultifactorAsync(ApplicationUser user, string multifactorCode, CancellationToken token) {
 
@@ -392,7 +482,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             return new MultifactorResponse(ResponseStatus.Unauthorized, "No multifactor code provided.");
         }
         if (string.IsNullOrEmpty(user.MfaSecret)) {
-            LogMfaSecretNotSet(logger, user.UserName, null);
+            LoggerService.LogMfaSecretNotSet(logger, user.UserName, null);
             await timer.Wait();
             return new MultifactorResponse(ResponseStatus.Conflict, "Multifactor is not configured.");
         }
@@ -435,7 +525,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                     ? MultifactorResponse.Ok()
                     : new MultifactorResponse(ResponseStatus.Unauthorized, "Validation failed");
             } catch (Exception ex) {
-                logMfaVerificationWarning(logger, ex.Message, multifactorCode, user.UserName, ex);
+                LoggerService.logMfaVerificationWarning(logger, ex.Message, multifactorCode, user.UserName, ex);
                 await timer.Wait();
                 return new MultifactorResponse(ResponseStatus.Unauthorized, "Validation error");
             }
@@ -458,30 +548,77 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             disposedValue = true;
         }
     }
+    /// <summary>
+    /// Increments the failed access count for a user and locks account if threshold exceeded.
+    /// </summary>
+    private async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken token = default) {
+#pragma warning disable CA1031 // Do not catch general exception types
+        try {
+            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
+            if (dbUser == null) {
+                return;
+            }
 
-    private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
-    private static readonly Action<ILogger, string, Exception?> LogMfaSecretNotSet =
-        LoggerMessage.Define<string>(
-            LogLevel.Critical,
-            new EventId(1, nameof(LogMfaSecretNotSet)),
-            "MfaSecret is not set for user {UserName}");
+            dbUser.AccessFailedCount++;
 
-    // Add this field to the N2UserManager class (preferably near other LoggerMessage delegates)
-    private static readonly Action<ILogger, string, string, string, Exception?> logMfaVerificationWarning =
-        LoggerMessage.Define<string, string, string>(
-            LogLevel.Warning,
-            new EventId(2, nameof(logMfaVerificationWarning)),
-            "Error {Message} while verifying MFA token [{MultifactorCode}] for user [{UserName}].");
+            // Lock account after 5 failed attempts (PCI-DSS allows up to 6)
+            if (dbUser.AccessFailedCount >= 5) {
+                dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15);
+                dbUser.LockoutEnabled = true;
 
-    private readonly string catalog;
-    private readonly AuthenticationConfig configuration = new();
-    private readonly IIdentityContextFactory factory;
-    private readonly Semaphore lockObject = new(1, 1);
-    private readonly ILogger<N2UserManager> logger;
-    private readonly IPasswordHasher<ApplicationUser> passwordHasher;
-    private readonly RandomNumberGenerator rng = RandomNumberGenerator.Create();
-    private IIdentityContext? context;
-    private bool disposedValue;
+                LoggerService.LogIncrementAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd, null);
+            }
+
+            await ctx.Complete();
+        } catch (Exception ex) {
+            LoggerService.LogIncrementAccessFailedException(logger, user.UserName ?? user.Id.ToString(), ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    /// <summary>
+    /// Resets the failed access count for a user after successful authentication.
+    /// </summary>
+    private async Task ResetAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken token = default) {
+        if (user.AccessFailedCount == 0) {
+            return;
+        }
+
+#pragma warning disable CA1031 // Do not catch general exception types
+        try {
+            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
+            if (dbUser == null) {
+                return;
+            }
+
+            if (dbUser.AccessFailedCount > 0) {
+                LoggerService.LogResetAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, null);
+
+                dbUser.AccessFailedCount = 0;
+                dbUser.LockoutEnd = null;
+
+                await ctx.Complete();
+            }
+        } catch (Exception ex) {
+            LoggerService.LogResetAccessCountFailure(logger, user.UserName ?? user.Id.ToString(), ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    /// <summary>
+    /// Checks if a user account is currently locked out.
+    /// </summary>
+    private static bool IsLockedOut(ApplicationUser user) {
+        if (!user.LockoutEnabled) {
+            return false;
+        }
+
+        if (!user.LockoutEnd.HasValue) {
+            return false;
+        }
+
+        return user.LockoutEnd.Value > DateTimeOffset.UtcNow;
+    }
 
 
     private static byte[] GenerateQrCode(string uri) {
