@@ -23,58 +23,6 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
     private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
 
-    private static class LoggerService {
-
-        public static readonly Action<ILogger, string, Exception?> LogMfaSecretNotSet =
-            LoggerMessage.Define<string>(
-                LogLevel.Critical,
-                new EventId(1, nameof(LogMfaSecretNotSet)),
-                "MfaSecret is not set for user {UserName}.");
-
-        // Add this field to the N2UserManager class (preferably near other LoggerMessage delegates)
-        public static readonly Action<ILogger, string, string, string, Exception?> logMfaVerificationWarning =
-            LoggerMessage.Define<string, string, string>(
-                LogLevel.Warning,
-                new EventId(2, nameof(logMfaVerificationWarning)),
-                "Error {Message} while verifying MFA token [{MultifactorCode}] for user [{UserName}].");
-
-        // Add this LoggerMessage delegate near other LoggerMessage delegates
-        public static readonly Action<ILogger, string, int, Exception?> LogResetAccessFailedCount =
-            LoggerMessage.Define<string, int>(
-                LogLevel.Warning,
-                new EventId(3, nameof(LogResetAccessFailedCount)),
-                "Resetting access failed count for user {UserName} (was {FailedCount})."
-            );
-
-        public static readonly Action<ILogger, string, int, DateTimeOffset?, Exception?> LogIncrementAccessFailedCount =
-        LoggerMessage.Define<string, int, DateTimeOffset?>(
-            LogLevel.Warning,
-            new EventId(4, nameof(LogIncrementAccessFailedCount)),
-            "Account locked for user {UserName} after {FailedAttempts} failed attempts. Lockout until {LockoutEnd}"
-        );
-
-        public static readonly Action<ILogger, string, Exception?> LogResetAccessCountFailure =
-            LoggerMessage.Define<string>(
-                LogLevel.Critical,
-                new EventId(5, nameof(LogResetAccessCountFailure)),
-                "Resetting access failed count for user {UserName}."
-        );
-
-        public static readonly Action<ILogger, string, Exception?> LogIncrementAccessFailedException =
-        LoggerMessage.Define<string>(
-            LogLevel.Critical,
-            new EventId(6, nameof(LogIncrementAccessFailedException)),
-            "Error incrementing access failed count for user {UserName}."
-        );
-
-        public static readonly Action<ILogger, string, DateTimeOffset?, double, Exception?> LogUserLockedOut =
-         LoggerMessage.Define<string, DateTimeOffset?, double>(
-                LogLevel.Warning,
-                new EventId(7, nameof(LogUserLockedOut)),
-                "Authentication attempt blocked - user {UserName} is locked out until {LockoutEnd} ({RemainingMinutes} minutes remaining)."
-            );
-    }
-
     private readonly string catalog;
 
     private readonly AuthenticationConfig configuration = new();
@@ -96,7 +44,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public bool SupportsUserEmail { get; }
 
     public N2UserManager(
-                                                                IIdentityContextFactory identityContextFactory,
+        IIdentityContextFactory identityContextFactory,
         IConfiguration configuration,
         IPasswordHasher<ApplicationUser> passwordHasher,
         string catalog,
@@ -110,7 +58,23 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (appConfigSection != null) {
             appConfigSection.Bind(this.configuration);
         }
+
+        // Validate token signing secret
+        if (string.IsNullOrEmpty(this.configuration.TokenSigningSecret)) {
+            throw new InvalidOperationException(
+                "TokenSigningSecret is required in Authentication configuration. " +
+                "Generate a secure key using: Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))"
+            );
+        }
+
+        var secretBytes = Convert.FromBase64String(this.configuration.TokenSigningSecret);
+        if (secretBytes.Length < 32) {
+            throw new InvalidOperationException(
+                $"TokenSigningSecret must be at least 32 bytes (256 bits). Current length: {secretBytes.Length} bytes"
+            );
+        }
     }
+
     public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
@@ -221,6 +185,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     }
 
     public async Task<ICommandResponse<string>> GenerateConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token) {
+
         if (user.Id == Guid.Empty) {
             var dbUser = await ApplicationUserByNameAsync(user.UserName, token);
             if (dbUser == null) {
@@ -231,12 +196,14 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         var nonce = RandomNumberGenerator.GetItems("ABCDEFGHIJKLMNOP1234567890".AsSpan(), 30).ToString();
         var timeOut = DateTime.UtcNow.AddDays(5).Ticks;
 
-        var secret = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{user.SecurityStamp}");
-        var key = System.Text.Encoding.UTF8.GetBytes(user.MfaSecret ?? "");
-        var crypted = HMACSHA256.HashData(key, secret);
+        var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{user.SecurityStamp}");
+        var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
+
+        using var hmac = new HMACSHA256(keyBytes);
+        var signature = hmac.ComputeHash(message);
 
         var data = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}");
-        var result = string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(crypted));
+        var result = string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(signature));
         return StringResponse.Accept(result);
     }
 
@@ -512,13 +479,14 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                     return new MultifactorResponse(ResponseStatus.Unauthorized, "Timeout.");
                 }
 
-                var secret = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{user.SecurityStamp}");
-                var key = System.Text.Encoding.UTF8.GetBytes(user.MfaSecret);
-                var crypted = HMACSHA256.HashData(key, secret);
+                var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{user.SecurityStamp}");
+                var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
 
+                using var hmac = new HMACSHA256(keyBytes);
+                var expectedSignature = hmac.ComputeHash(message);
 
                 var verify = Convert.FromBase64String(splitCode[1]);
-                var arraysEqual = await crypted.ArraysAreEqual(verify);
+                var arraysEqual = await expectedSignature.ArraysAreEqual(verify);
                 await timer.Wait();
 
                 return arraysEqual
@@ -548,61 +516,17 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             disposedValue = true;
         }
     }
-    /// <summary>
-    /// Increments the failed access count for a user and locks account if threshold exceeded.
-    /// </summary>
-    private async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken token = default) {
-#pragma warning disable CA1031 // Do not catch general exception types
-        try {
-            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
-            if (dbUser == null) {
-                return;
-            }
 
-            dbUser.AccessFailedCount++;
+    private static byte[] GenerateQrCode(string uri) {
+        using QRCodeGenerator qrGenerator = new();
+        var qrCodeData = qrGenerator.CreateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
 
-            // Lock account after 5 failed attempts (PCI-DSS allows up to 6)
-            if (dbUser.AccessFailedCount >= 5) {
-                dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15);
-                dbUser.LockoutEnabled = true;
-
-                LoggerService.LogIncrementAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd, null);
-            }
-
-            await ctx.Complete();
-        } catch (Exception ex) {
-            LoggerService.LogIncrementAccessFailedException(logger, user.UserName ?? user.Id.ToString(), ex);
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
+        using BitmapByteQRCode qrCode = new(qrCodeData);
+        return qrCode.GetGraphic(20);
     }
 
-    /// <summary>
-    /// Resets the failed access count for a user after successful authentication.
-    /// </summary>
-    private async Task ResetAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken token = default) {
-        if (user.AccessFailedCount == 0) {
-            return;
-        }
-
-#pragma warning disable CA1031 // Do not catch general exception types
-        try {
-            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
-            if (dbUser == null) {
-                return;
-            }
-
-            if (dbUser.AccessFailedCount > 0) {
-                LoggerService.LogResetAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, null);
-
-                dbUser.AccessFailedCount = 0;
-                dbUser.LockoutEnd = null;
-
-                await ctx.Complete();
-            }
-        } catch (Exception ex) {
-            LoggerService.LogResetAccessCountFailure(logger, user.UserName ?? user.Id.ToString(), ex);
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
+    private static string GenerateQrCodeUri(string username, string secret, string appName) {
+        return $"otpauth://totp/{appName}:{username}?secret={secret}&issuer={appName}&digits=6";
     }
 
     /// <summary>
@@ -618,19 +542,6 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
 
         return user.LockoutEnd.Value > DateTimeOffset.UtcNow;
-    }
-
-
-    private static byte[] GenerateQrCode(string uri) {
-        using QRCodeGenerator qrGenerator = new();
-        var qrCodeData = qrGenerator.CreateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
-
-        using BitmapByteQRCode qrCode = new(qrCodeData);
-        return qrCode.GetGraphic(20);
-    }
-
-    private static string GenerateQrCodeUri(string username, string secret, string appName) {
-        return $"otpauth://totp/{appName}:{username}?secret={secret}&issuer={appName}&digits=6";
     }
 
     private static (bool valid, string message) ValidateEmail(string email) {
@@ -674,6 +585,34 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         return await ctx.ApplicationUserAsync(normalizedName, token);
     }
 
+    /// <summary>
+    /// Increments the failed access count for a user and locks account if threshold exceeded.
+    /// </summary>
+    private async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken token = default) {
+#pragma warning disable CA1031 // Do not catch general exception types
+        try {
+            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
+            if (dbUser == null) {
+                return;
+            }
+
+            dbUser.AccessFailedCount++;
+
+            // Lock account after 5 failed attempts (PCI-DSS allows up to 6)
+            if (dbUser.AccessFailedCount >= 5) {
+                dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15);
+                dbUser.LockoutEnabled = true;
+
+                LoggerService.LogIncrementAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd, null);
+            }
+
+            await ctx.Complete();
+        } catch (Exception ex) {
+            LoggerService.LogIncrementAccessFailedException(logger, user.UserName ?? user.Id.ToString(), ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
     private async Task<IIdentityContext> InitializeContextAsync() {
         if (context != null) {
             return context;
@@ -687,6 +626,36 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
         return context;
     }
+
+    /// <summary>
+    /// Resets the failed access count for a user after successful authentication.
+    /// </summary>
+    private async Task ResetAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken token = default) {
+        if (user.AccessFailedCount == 0) {
+            return;
+        }
+
+#pragma warning disable CA1031 // Do not catch general exception types
+        try {
+            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
+            if (dbUser == null) {
+                return;
+            }
+
+            if (dbUser.AccessFailedCount > 0) {
+                LoggerService.LogResetAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, null);
+
+                dbUser.AccessFailedCount = 0;
+                dbUser.LockoutEnd = null;
+
+                await ctx.Complete();
+            }
+        } catch (Exception ex) {
+            LoggerService.LogResetAccessCountFailure(logger, user.UserName ?? user.Id.ToString(), ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
     private async Task<(ResponseStatus, string?)> SaveChangesAsync() {
         var ctx = await InitializeContextAsync();
         var result = await ctx.Complete();
@@ -724,5 +693,56 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
 
         return (flowControl: verified.Status.IsSuccess(), value: verified, dbUser);
+    }
+
+    private static class LoggerService {
+
+        public static readonly Action<ILogger, string, int, DateTimeOffset?, Exception?> LogIncrementAccessFailedCount =
+        LoggerMessage.Define<string, int, DateTimeOffset?>(
+            LogLevel.Warning,
+            new EventId(4, nameof(LogIncrementAccessFailedCount)),
+            "Account locked for user {UserName} after {FailedAttempts} failed attempts. Lockout until {LockoutEnd}"
+        );
+
+        public static readonly Action<ILogger, string, Exception?> LogIncrementAccessFailedException =
+        LoggerMessage.Define<string>(
+            LogLevel.Critical,
+            new EventId(6, nameof(LogIncrementAccessFailedException)),
+            "Error incrementing access failed count for user {UserName}."
+        );
+
+        public static readonly Action<ILogger, string, Exception?> LogMfaSecretNotSet =
+                            LoggerMessage.Define<string>(
+                LogLevel.Critical,
+                new EventId(1, nameof(LogMfaSecretNotSet)),
+                "MfaSecret is not set for user {UserName}.");
+
+        // Add this field to the N2UserManager class (preferably near other LoggerMessage delegates)
+        public static readonly Action<ILogger, string, string, string, Exception?> logMfaVerificationWarning =
+            LoggerMessage.Define<string, string, string>(
+                LogLevel.Warning,
+                new EventId(2, nameof(logMfaVerificationWarning)),
+                "Error {Message} while verifying MFA token [{MultifactorCode}] for user [{UserName}].");
+
+        public static readonly Action<ILogger, string, Exception?> LogResetAccessCountFailure =
+                    LoggerMessage.Define<string>(
+                        LogLevel.Critical,
+                        new EventId(5, nameof(LogResetAccessCountFailure)),
+                        "Resetting access failed count for user {UserName}."
+                );
+
+        // Add this LoggerMessage delegate near other LoggerMessage delegates
+        public static readonly Action<ILogger, string, int, Exception?> LogResetAccessFailedCount =
+            LoggerMessage.Define<string, int>(
+                LogLevel.Warning,
+                new EventId(3, nameof(LogResetAccessFailedCount)),
+                "Resetting access failed count for user {UserName} (was {FailedCount})."
+            );
+        public static readonly Action<ILogger, string, DateTimeOffset?, double, Exception?> LogUserLockedOut =
+         LoggerMessage.Define<string, DateTimeOffset?, double>(
+                LogLevel.Warning,
+                new EventId(7, nameof(LogUserLockedOut)),
+                "Authentication attempt blocked - user {UserName} is locked out until {LockoutEnd} ({RemainingMinutes} minutes remaining)."
+            );
     }
 }
