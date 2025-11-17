@@ -1,5 +1,3 @@
-
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 using N2.Core.Commands;
@@ -17,18 +15,9 @@ public abstract class N2AuthenticatorUnitTestsBase {
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
-    protected AuthenticationConfig GetAuthenticationConfig() {
-        var configuration = ServiceProvider.GetRequiredService<IConfiguration>();
-        var authConfig = new AuthenticationConfig();
-        var appConfigSection = configuration?.GetSection(AuthenticationConfig.SectionName);
-        if (appConfigSection != null) {
-            appConfigSection.Bind(authConfig);
-        }
-        return authConfig;
-    }
-
     protected IAuthenticator GetAuthenticator() => ServiceProvider.GetRequiredService<IAuthenticator>();
     protected IUserManager<ApplicationUser> GetUserManager() => ServiceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
+    protected AuthenticationConfig GetAuthenticationConfig() => ServiceProvider.GetAuthenticationConfig();
     protected Task<IIdentityContext> GetIdentityContext() {
         var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
         return factory.CreateAsync();

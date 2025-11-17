@@ -9,8 +9,7 @@ namespace N2.Core.Identity.Data;
 /// The system context design time factory provides the ef code migration
 /// service with a SystemContext connected to a local database.
 /// </summary>
-internal sealed class DesignTimeFactory : IDesignTimeDbContextFactory<N2IdentityContext>
-{
+internal sealed class DesignTimeFactory : IDesignTimeDbContextFactory<N2IdentityContext> {
     private const string ConnectionString = "Data Source=tp-i9;Initial Catalog=asp-users;Persist Security Info=True;Integrated Security=true;TrustServerCertificate=True;";
 
     /// <summary>
@@ -18,12 +17,11 @@ internal sealed class DesignTimeFactory : IDesignTimeDbContextFactory<N2Identity
     /// </summary>
     /// <param name="args">Arguments provided by the design-time service.</param>
     /// <returns>An instance of SystemContext</returns>
-    public N2IdentityContext CreateDbContext(string[] args)
-    {
+    public N2IdentityContext CreateDbContext(string[] args) {
         DbContextOptionsBuilder<N2IdentityContext> optionsBuilder = new();
-        NullLogger<N2IdentityContext> logger = NullLogger<N2IdentityContext>.Instance;
+        var logger = NullLogger<N2IdentityContext>.Instance;
         optionsBuilder.UseSqlServer(ConnectionString);
 
-        return new N2IdentityContext(optionsBuilder.Options, logger);
+        return new N2IdentityContext(optionsBuilder.Options, new AuthenticationConfig(), logger);
     }
 }

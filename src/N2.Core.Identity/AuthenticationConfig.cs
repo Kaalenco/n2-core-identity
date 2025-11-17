@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace N2.Core.Identity;
 
 public sealed class AuthenticationConfig {
@@ -12,6 +15,9 @@ public sealed class AuthenticationConfig {
     public int LockoutDurationMinutes { get; set; } = 15;
     public bool EnableAccountLockout { get; set; } = true;
 
+    public int MfaMaxAttempts { get; set; } = 5;
+    public int MfaLockoutMinutes { get; set; } = 15;
+
     /// <summary>
     /// Secret key for HMAC-based token signing. MUST be at least 32 bytes (256 bits).
     /// Generate using: Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
@@ -23,4 +29,20 @@ public sealed class AuthenticationConfig {
     /// The settings for the JWT token.
     /// </summary>
     public JwtSettings JwtSettings { get; set; } = new();
+}
+
+public static class AuthenticationExtensions {
+    public static AuthenticationConfig GetAuthenticationConfig(this IServiceProvider serviceProvider) {
+        var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+        return configuration.GetAuthenticationConfig();
+    }
+
+    public static AuthenticationConfig GetAuthenticationConfig(this IConfiguration configuration) {
+        var authConfig = new AuthenticationConfig();
+        var appConfigSection = configuration?.GetSection(AuthenticationConfig.SectionName);
+        if (appConfigSection != null) {
+            appConfigSection.Bind(authConfig);
+        }
+        return authConfig;
+    }
 }

@@ -32,8 +32,8 @@ internal static class TestContext {
             return new PasswordHasher<ApplicationUser>(Microsoft.Extensions.Options.Options.Create(options));
         });
 
-
-        serviceCollection.AddSingleton<IConfiguration>(config.Build());
+        var configuration = config.Build();
+        serviceCollection.AddSingleton<IConfiguration>(configuration);
 
         serviceCollection.AddLogging(configure => {
             configure.SetMinimumLevel(LogLevel.Debug);
@@ -57,7 +57,8 @@ internal static class TestContext {
             });
 
             var logger = loggerFactory.CreateLogger<N2IdentityContext>();
-            N2IdentityContext context = new(optionsBuilder.Options, logger);
+            var authenticationConfig = sp.GetRequiredService<AuthenticationConfig>();
+            N2IdentityContext context = new(optionsBuilder.Options, authenticationConfig, logger);
 
             // Configure unique indexes manually since InMemory doesn't enforce them automatically
             var indexVerify = context.Model.GetEntityTypes()

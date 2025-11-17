@@ -7,40 +7,45 @@ using System.Text;
 namespace N2.Core.Identity;
 
 public class WebTokenGenerator : IWebTokenGenerator {
-    private const int minimumKeyBytes = 32;
     private readonly string audience;
     private readonly string issuer;
-    private readonly SymmetricSecurityKey securityKey;
+    private readonly byte[] secret;
+
     public WebTokenGenerator(JwtSettings jwtSettings) {
         ArgumentNullException.ThrowIfNull(jwtSettings);
-        var byteData = Encoding.UTF8.GetBytes(jwtSettings.Secret);
-        ValidateKeySize(byteData);
+        this.secret = Encoding.UTF8.GetBytes(jwtSettings.Secret);
         this.issuer = jwtSettings.Issuer;
         this.audience = jwtSettings.Audience;
-
-        this.securityKey = new SymmetricSecurityKey(byteData);
     }
 
     public WebTokenGenerator(string issuer, string audience, string securityKey) {
-        var byteData = Encoding.UTF8.GetBytes(securityKey);
-        ValidateKeySize(byteData);
+        this.secret = Encoding.UTF8.GetBytes(securityKey);
         this.issuer = issuer;
         this.audience = audience;
-        this.securityKey = new SymmetricSecurityKey(byteData);
     }
 
     public string GenerateWebToken(IUserContext userContext, int timeoutInMinutes) {
         ArgumentNullException.ThrowIfNull(userContext);
-        SigningCredentials credentials = new(securityKey, SecurityAlgorithms.HmacSha256);
+
+        secret.ValidateKeySecurity();
+        SigningCredentials credentials = new(new SymmetricSecurityKey(secret), SecurityAlgorithms.HmacSha256);
 
         ArgumentException.ThrowIfNullOrEmpty(issuer);
         ArgumentException.ThrowIfNullOrEmpty(audience);
 
-        List<Claim> claims = new()
-        {
-            new(ClaimTypes.GivenName, userContext.Name),
+        List<Claim> claims =
+        [
             new(ClaimTypes.NameIdentifier, userContext.PublicId.ToString())
-        };
+        ];
+        if (!string.IsNullOrEmpty(userContext.Name)) {
+            claims.Add(new(ClaimTypes.GivenName, userContext.Name));
+        }
+        if (!string.IsNullOrEmpty(userContext.Email)) {
+            claims.Add(new(ClaimTypes.Email, userContext.Email));
+        }
+        if (!string.IsNullOrEmpty(userContext.PhoneNumber)) {
+            claims.Add(new(ClaimTypes.MobilePhone, userContext.Email));
+        }
         foreach (var role in userContext.CurrentRoles()) {
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
@@ -74,13 +79,5 @@ public class WebTokenGenerator : IWebTokenGenerator {
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static void ValidateKeySize(byte[] byteData) {
-        // Validate key length for HMAC-SHA256 (256 bits minimum)
-        if (byteData.Length < minimumKeyBytes) {
-            throw new ArgumentException(
-                $"JWT key is too short ({byteData.Length} bytes). HMAC-SHA256 requires at least {minimumKeyBytes} bytes (256 bits). " +
-                $"This validation prevents cryptographically weak JWT tokens."
-            );
-        }
-    }
+
 }

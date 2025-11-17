@@ -25,7 +25,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
     private readonly string catalog;
 
-    private readonly AuthenticationConfig configuration = new();
+    private readonly AuthenticationConfig configuration;
 
     private readonly IIdentityContextFactory factory;
 
@@ -54,10 +54,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         this.logger = logger;
         this.passwordHasher = passwordHasher;
 
-        var appConfigSection = configuration?.GetSection(AuthenticationConfig.SectionName);
-        if (appConfigSection != null) {
-            appConfigSection.Bind(this.configuration);
-        }
+        this.configuration = configuration.GetAuthenticationConfig();
 
         // Validate token signing secret
         if (string.IsNullOrEmpty(this.configuration.TokenSigningSecret)) {

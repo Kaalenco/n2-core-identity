@@ -1,15 +1,11 @@
-/*
+
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Claims;
+using Moq;
+
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace N2.Core.Identity.UnitTests;
 [TestClass]
@@ -21,17 +17,18 @@ public class JwtKeySecurityTests {
         var shortKey = new string('A', 20);
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> {
-                ["Jwt:Issuer"] = "test-issuer",
-                ["Jwt:Audience"] = "test-audience",
-                ["Jwt:Secret"] = shortKey
+                ["AuthenticationConfig:JwtSettings:Issuer"] = "test-issuer",
+                ["AuthenticationConfig:JwtSettings:Audience"] = "test-audience",
+                ["AuthenticationConfig:JwtSettings:Secret"] = shortKey
             })
             .Build();
 
-        var services = new ServiceCollection();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
 
         // Act - Should throw
         Assert.Throws<ArgumentException>(() => {
-            services.AddJwtConfigurationFromFile(config);
+            services.AddJwtBearerAuthentication(config);
         });
     }
 
@@ -41,26 +38,25 @@ public class JwtKeySecurityTests {
         var validKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> {
-                ["Jwt:Issuer"] = "test-issuer",
-                ["Jwt:Audience"] = "test-audience",
-                ["Jwt:Secret"] = validKey
+                ["AuthenticationConfig:JwtSettings:Issuer"] = "test-issuer",
+                ["AuthenticationConfig:JwtSettings:Audience"] = "test-audience",
+                ["AuthenticationConfig:JwtSettings:Secret"] = validKey
             })
             .Build();
 
         var services = new ServiceCollection();
 
         // Act
-        services.AddJwtConfigurationFromFile(config);
+        services.AddJwtBearerAuthentication(config);
 
         // Assert
         var provider = services.BuildServiceProvider();
-        var jwtSettings = provider.GetRequiredService<JwtSettings>();
+        var jwtSettings = provider.GetRequiredService<AuthenticationConfig>();
         Assert.IsNotNull(jwtSettings);
-        Assert.AreEqual(validKey, jwtSettings.Secret);
+        Assert.AreEqual(validKey, jwtSettings.JwtSettings.Secret);
     }
 
     [TestMethod]
-    [ExpectedException(typeof(ArgumentException))]
     public void GenerateToken_WeakKey_ShouldThrowException() {
         // Arrange - Weak key with low entropy
         var weakKey = "password123456781234567812345678"; // 32 chars but low entropy
@@ -70,26 +66,30 @@ public class JwtKeySecurityTests {
             Secret = weakKey
         };
 
-        var generator = new WebTokenGenerator();
-        var claims = new List<Claim> { new Claim(ClaimTypes.Name, "test") };
+        var generator = new WebTokenGenerator(jwtSettings);
+        var userMock = new Mock<IUserContext>();
+        userMock.SetupGet(m => m.Name).Returns("test");
 
         // Act - Should throw due to low entropy
-        generator.Generate(claims, 60, jwtSettings);
+        Assert.Throws<ArgumentException>(() => {
+            generator.GenerateWebToken(userMock.Object, 60);
+        });
     }
 
     [TestMethod]
     public void GenerateSecureKey_ShouldMeetRequirements() {
         // Act
-        var key = JwtExtensions.GenerateSecureJwtKey();
+        var auth = new AuthenticationConfig();
+        var key = auth.GenerateSecureKey();
 
         // Assert
         var keyBytes = Convert.FromBase64String(key);
-        Assert.IsTrue(keyBytes.Length >= 32, "Generated key should be at least 32 bytes");
+        Assert.IsGreaterThanOrEqualTo(32, keyBytes.Length, "Generated key should be at least 32 bytes");
 
         // Check entropy - should have good distribution
         var uniqueBytes = keyBytes.Distinct().Count();
         var entropyRatio = (double)uniqueBytes / keyBytes.Length;
-        Assert.IsTrue(entropyRatio > 0.8, "Generated key should have high entropy");
+        Assert.IsGreaterThan(0.8, entropyRatio, "Generated key should have high entropy");
     }
 
     [TestMethod]
@@ -100,21 +100,20 @@ public class JwtKeySecurityTests {
 
         // Act
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string> {
-                ["Jwt:Issuer"] = "test",
-                ["Jwt:Audience"] = "test",
-                ["Jwt:Secret"] = base64Key
+            .AddInMemoryCollection(new Dictionary<string, string?> {
+                ["AuthenticationConfig:JwtSettings:Issuer"] = "test",
+                ["AuthenticationConfig:JwtSettings:Audience"] = "test",
+                ["AuthenticationConfig:JwtSettings:Secret"] = base64Key
             })
             .Build();
 
         var services = new ServiceCollection();
-        services.AddJwtConfigurationFromFile(config);
+        services.AddJwtBearerAuthentication(config);
 
         // Assert - Should not throw
         var provider = services.BuildServiceProvider();
-        var jwtSettings = provider.GetRequiredService<JwtSettings>();
-        Assert.IsNotNull(jwtSettings);
+        var authSettings = provider.GetRequiredService<AuthenticationConfig>();
+        Assert.IsNotNull(authSettings.JwtSettings);
     }
 }
 
-*/
