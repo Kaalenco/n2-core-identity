@@ -23,6 +23,11 @@ internal static class TestContext {
             .AddEnvironmentVariables()
             .AddUserSecrets(typeof(TestContext).Assembly);
 
+        var configuration = config.Build();
+        serviceCollection.AddSingleton<IConfiguration>(configuration);
+        var auth = configuration.GetAuthenticationConfig();
+        serviceCollection.AddSingleton(auth);
+
         serviceCollection.AddScoped<IPasswordHasher<ApplicationUser>>(s => {
             // Configure PasswordHasherOptions using IOptions<PasswordHasherOptions>
             var options = new PasswordHasherOptions {
@@ -31,9 +36,6 @@ internal static class TestContext {
             };
             return new PasswordHasher<ApplicationUser>(Microsoft.Extensions.Options.Options.Create(options));
         });
-
-        var configuration = config.Build();
-        serviceCollection.AddSingleton<IConfiguration>(configuration);
 
         serviceCollection.AddLogging(configure => {
             configure.SetMinimumLevel(LogLevel.Debug);
@@ -44,7 +46,7 @@ internal static class TestContext {
         var databaseName = $"TestIdentityDb_{Guid.NewGuid()}";
 
         // Register as Singleton to prevent premature disposal in concurrent tests
-        serviceCollection.AddSingleton<N2IdentityContext>(sp => {
+        serviceCollection.AddSingleton(sp => {
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
             DbContextOptionsBuilder<N2IdentityContext> optionsBuilder = new();
             optionsBuilder.UseInMemoryDatabase(databaseName);
