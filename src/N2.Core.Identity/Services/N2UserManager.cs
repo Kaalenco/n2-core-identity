@@ -30,7 +30,9 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
     private readonly IIdentityContextFactory factory;
 
+#pragma warning disable CA2213 // Disposable fields should be disposed
     private readonly Semaphore lockObject = new(1, 1);
+#pragma warning restore CA2213 // Disposable fields should be disposed
 
     private readonly ILogger<N2UserManager> logger;
 
@@ -188,30 +190,46 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse<string>> GenerateConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token) {
 
         using var ctx = await InitializeContextAsync();
+        var mfaType = user.MfaType;
+        ApplicationUser? dbUser;
         if (user.Id == Guid.Empty) {
-            var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, token);
-            if (dbUser == null) {
-                throw new InvalidOperationException("Invalid user");
-            }
+            dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, token);
+
+        } else {
+            dbUser = await ApplicationUserByIdAsync(ctx, user.Id, token);
+        }
+        if (dbUser == null) {
+            throw new InvalidOperationException("Invalid user");
         }
 
-        if (user.MfaType == MultiFactorType.None) {
+        if (mfaType == MultiFactorType.None) {
+            dbUser.MfaSecret = string.Empty;
+            dbUser.MfaType = mfaType;
+            await ctx.Complete();
             return StringResponse.Accept(string.Empty);
         }
 
-        if (user.MfaType == MultiFactorType.Totp) {
-            Totp otp = new(Convert.FromBase64String(user.MfaSecret ?? string.Empty));
+        var randomBytes = RandomNumberGenerator.GetBytes(32);
+        var secret = Convert.ToBase64String(randomBytes);
+
+        dbUser.MfaSecret = secret;
+        dbUser.MfaType = mfaType;
+        await ctx.Complete();
+
+        if (mfaType == MultiFactorType.Totp) {
+
+            Totp otp = new(Convert.FromBase64String(dbUser.MfaSecret ?? string.Empty));
             var validCode = otp.ComputeTotp(DateTime.UtcNow);
             return string.IsNullOrEmpty(validCode)
                 ? StringResponse.Fail(string.Empty, "Could not generate a valid OTP code.")
                 : StringResponse.Accept(validCode);
         }
-
-        if (user.MfaType == MultiFactorType.Email || user.MfaType == MultiFactorType.Sms) {
-            var nonce = RandomNumberGenerator.GetItems("ABCDEFGHIJKLMNOP1234567890".AsSpan(), 30).ToString();
+        if (mfaType == MultiFactorType.Email || mfaType == MultiFactorType.Sms) {
+            var nonceBytes = RandomNumberGenerator.GetBytes(32); // 256 bits
+            var nonce = Convert.ToBase64String(nonceBytes);
             var timeOut = DateTime.UtcNow.AddDays(5).Ticks;
 
-            var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{user.SecurityStamp}");
+            var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{dbUser.SecurityStamp}");
             var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
 
             using var hmac = new HMACSHA256(keyBytes);
@@ -420,6 +438,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                 (m.LockoutEnd == null || m.LockoutEnd < DateTime.UtcNow)
             ).FirstOrDefaultAsync(token);
         if (appUser == null) {
+            await timer.Wait();
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
         }
 
@@ -576,7 +595,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (!disposedValue) {
             if (disposing) {
                 context?.Dispose();
-                lockObject?.Dispose();
+                //lockObject?.Dispose();
                 rng?.Dispose();
             }
             disposedValue = true;

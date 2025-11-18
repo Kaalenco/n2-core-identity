@@ -22,16 +22,14 @@ public class JwtTimingTests : N2IdentityTestsBase {
         var generator = new WebTokenGenerator(authConfig.JwtSettings);
 
         // Act
-        var beforeUtc = DateTime.UtcNow;
-        var tokenString = generator.GenerateWebToken(userContext.Object, 60);
-        var afterUtc = DateTime.UtcNow;
+        var tokenString = generator.GenerateWebToken(userContext.Object, 10);
 
         // Assert
         var handler = new JwtSecurityTokenHandler();
         var token = handler.ReadJwtToken(tokenString);
 
         // Token expiration should be based on UTC, not local time
-        var expectedExpiration = DateTime.UtcNow.AddMinutes(60);
+        var expectedExpiration = DateTime.UtcNow.AddMinutes(10);
         var actualExpiration = token.ValidTo;
 
         // Allow 2 second tolerance for test execution time

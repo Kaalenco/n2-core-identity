@@ -54,8 +54,8 @@ public class WebTokenGenerator : IWebTokenGenerator {
             timeoutInMinutes = -1;
         }
 
-        if (timeoutInMinutes > 1440) {
-            timeoutInMinutes = 1440;
+        if (timeoutInMinutes > 15) {
+            timeoutInMinutes = 15;
         }
 
         // Use UTC time for all JWT timestamps
@@ -73,7 +73,7 @@ public class WebTokenGenerator : IWebTokenGenerator {
             issuer,
             audience,
             claims,
-            expires: DateTime.UtcNow.AddMinutes(timeoutInMinutes),
+            expires: expiration,
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

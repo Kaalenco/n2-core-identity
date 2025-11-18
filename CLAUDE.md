@@ -68,7 +68,7 @@ dotnet build src --configuration Release
 **N2UserManager** (`Services/N2UserManager.cs`)
 - Custom user manager implementing `IUserManager<ApplicationUser>`
 - Handles user CRUD operations, email confirmation, role management
-- Custom password hashing using SHA384 with username and security stamp
+- Password hashing using ASP.NET Core Identity's `PasswordHasher<ApplicationUser>` (PBKDF2-HMAC-SHA256 with 310,000 iterations per OWASP 2023 recommendations)
 - Email confirmation tokens with 5-day expiration
 - Multi-factor authentication support (SMS, Email, TOTP with QR code generation)
 - Factory-based context initialization with thread-safe lazy loading
@@ -104,10 +104,12 @@ The library uses a factory pattern (`IIdentityContextFactory`) to create databas
 ### Email Confirmation
 
 Custom token generation using:
-- Base64-encoded data: `{normalizedEmail}:{expirationTicks}`
-- SHA384 hash: `{normalizedEmail}:{expirationTicks}:{securityStamp}`
-- Token format: `{base64Data}.{base64Hash}`
+- Base64-encoded data: `{nonce}:{expirationTicks}`
+- HMAC-SHA256 signature: `{nonce}:{expirationTicks}:{securityStamp}` signed with secret key
+- Token format: `{base64Data}.{base64Signature}`
 - 5-day expiration from generation time
+
+**Security Note**: Email/SMS confirmation tokens use HMAC-SHA256 for cryptographic signing with a secret key from configuration (`TokenSigningSecret`). The nonce should be generated using cryptographically secure random bytes (minimum 256 bits of entropy).
 
 ## Coding Standards (from .github/copilot-instructions.md)
 
@@ -179,6 +181,19 @@ Tests use MSTest framework with dependency injection setup in `TestContext.cs`. 
 - Multi-factor authentication setup
 
 Test users and data are configured via the `TestContext` service collection configuration.
+
+### Security-Focused Tests
+
+**Timing Attack Protection** (`N2AuthenticatorTests.cs`):
+- `Authentication_ValidVsInvalidUser_ShouldHaveConstantTiming` - Validates that authentication timing for valid users (wrong password) vs. invalid users differs by less than 20% to prevent user enumeration
+- `ArraysAreEqual_DifferentPositions_ShouldHaveConstantTiming` - Ensures constant-time byte array comparison for token validation
+- `MFAValidation_ConstantTimingForInvalidTokens` - Verifies MFA validation has consistent timing regardless of token validity
+
+**Password Hashing Configuration** (`TestContext.cs`):
+- `PasswordHasher<ApplicationUser>` configured with 310,000 iterations (OWASP 2023 recommendation)
+- Uses `PasswordHasherCompatibilityMode.IdentityV3` for PBKDF2-HMAC-SHA256
+
+**Note**: Production configuration should mirror the test configuration for password hashing to ensure OWASP compliance.
 
 ## Dependencies
 

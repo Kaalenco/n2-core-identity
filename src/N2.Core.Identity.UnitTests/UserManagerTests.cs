@@ -509,10 +509,13 @@ public class N2UserManagerTests {
     public async Task TestValidateEmailConfirmationAsync() {
         ICommandResponse? result = null;
         CancellationToken token = new();
-        UserLogin userInfo = new() { Password = "secret", Username = "admin" };
+        UserLogin userInfo = new() { Password = "secret", Username = "admin", };
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         var userResponse = await userManager.FindByNameAsync(userInfo.Username, token);
         var user = userResponse.Value;
+
+        Assert.IsNotNull(user);
+        user.MfaType = MultiFactorType.Email;
 
         if (user != null) {
             var tokenResponse = await userManager.GenerateConfirmationTokenAsync(user, token);
@@ -632,7 +635,8 @@ public class N2UserManagerTests {
 
     private readonly ServiceProvider serviceProvider;
     private static string GenerateExpiredToken(string? email, string? securityStamp, int daysOld) {
-        var nonce = RandomNumberGenerator.GetItems("ABCDEFGHIJKLMNOP1234567890".AsSpan(), 30).ToString();
+        var nonceBytes = RandomNumberGenerator.GetBytes(32); // 256 bits
+        var nonce = Convert.ToBase64String(nonceBytes);
         var timeOut = DateTime.UtcNow.AddDays(-daysOld).Ticks;
 
         var secret = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{securityStamp}");
