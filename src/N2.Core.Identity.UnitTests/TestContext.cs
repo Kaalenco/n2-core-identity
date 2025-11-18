@@ -10,6 +10,8 @@ using N2.Core.Entity;
 using N2.Core.Identity.Data;
 using N2.Core.Identity.Services;
 
+using System.Security.Cryptography;
+
 namespace N2.Core.Identity.UnitTests;
 
 internal static class TestContext {
@@ -19,10 +21,18 @@ internal static class TestContext {
 
     public static void ConfigureServices(ServiceCollection serviceCollection) {
         ConfigurationBuilder config = new();
+
         config
-            .AddJsonFile("appsettings.json", true)
-            .AddEnvironmentVariables()
-            .AddUserSecrets(typeof(TestContext).Assembly);
+            .AddInMemoryCollection(new Dictionary<string, string?> {
+                ["AuthenticationConfig:TokenSigningSecret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                ["AuthenticationConfig:JwtSettings:Secret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                ["AuthenticationConfig:JwtSettings:Issuer"] = "http://localhost:8080",
+                ["AuthenticationConfig:JwtSettings:Audience"] = "http://localhost:8081",
+            })
+            //.AddEnvironmentVariables()
+            //.AddJsonFile("appsettings.json", true)
+            //.AddUserSecrets(typeof(TestContext).Assembly)
+            ;
 
         var configuration = config.Build();
         serviceCollection.AddSingleton<IConfiguration>(configuration);
