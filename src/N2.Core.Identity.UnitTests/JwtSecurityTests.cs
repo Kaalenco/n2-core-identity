@@ -72,7 +72,7 @@ public class JwtKeySecurityTests {
 
         // Act - Should throw due to low entropy
         Assert.Throws<ArgumentException>(() => {
-            generator.GenerateWebToken(userMock.Object, 60);
+            generator.GenerateWebToken(userMock.Object, 10);
         });
     }
 
