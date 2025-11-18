@@ -104,6 +104,40 @@ public static class JwtExtensions {
     }
 
     /// <summary>
+    /// Verifies if a string is a valid Base64 encoded string.
+    /// </summary>
+    /// <param name="value">The string to validate.</param>
+    /// <param name="data">The data if the convertion succeeds</param>
+    /// <returns>True if the string is valid Base64; otherwise, false.</returns>
+    public static bool TryConvertBase64String(this string value, out byte[] data) {
+        data = [];
+        if (string.IsNullOrWhiteSpace(value)) {
+            return false;
+        }
+
+        // Base64 strings should have length divisible by 4
+        if (value.Length % 4 != 0) {
+            return false;
+        }
+
+        // Check for valid Base64 characters (A-Z, a-z, 0-9, +, /, =)
+        foreach (var c in value) {
+            if (!char.IsLetterOrDigit(c) && c != '+' && c != '/' && c != '=') {
+                return false;
+                ;
+            }
+        }
+
+        // Try to decode to verify it's valid Base64
+        try {
+            data = Convert.FromBase64String(value);
+            return true;
+        } catch (FormatException) {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Performs basic entropy check on the key to detect weak patterns.
     /// </summary>
     public static bool HasLowEntropy(this byte[] key) {

@@ -1,6 +1,6 @@
 namespace N2.Core.Identity.UnitTests;
 [TestClass]
-public class AccountLockoutTests : N2AuthenticatorUnitTestsBase {
+public class AccountLockoutTests : N2IdentityTestsBase {
 
     [TestMethod]
     public async Task Authentication_FiveFailedAttempts_ShouldLockAccount() {

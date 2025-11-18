@@ -10,7 +10,7 @@ using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
 [TestClass]
-public class TokenCryptographyTests : N2AuthenticatorUnitTestsBase {
+public class TokenCryptographyTests : N2IdentityTestsBase {
 
     [TestMethod]
     public async Task GenerateToken_ShouldUseHMAC_NotSHA384() {
@@ -80,10 +80,11 @@ public class TokenCryptographyTests : N2AuthenticatorUnitTestsBase {
 
         // Act & Assert
         var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
+        var rateLimiter = ServiceProvider.GetRequiredService<IRateLimiter>();
         var pwdHash = ServiceProvider.GetRequiredService<IPasswordHasher<Data.ApplicationUser>>();
         var logger = ServiceProvider.GetRequiredService<ILogger<N2UserManager>>();
         Assert.Throws<InvalidOperationException>(() => {
-            using var mgr = new N2UserManager(factory, config, pwdHash, "testdb", logger);
+            using var mgr = new N2UserManager(factory, config, rateLimiter, pwdHash, "testdb", logger);
         });
 
     }
@@ -101,10 +102,11 @@ public class TokenCryptographyTests : N2AuthenticatorUnitTestsBase {
 
         // Act & Assert
         var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
+        var rateLimiter = ServiceProvider.GetRequiredService<IRateLimiter>();
         var pwdHash = ServiceProvider.GetRequiredService<IPasswordHasher<Data.ApplicationUser>>();
         var logger = ServiceProvider.GetRequiredService<ILogger<N2UserManager>>();
         Assert.Throws<InvalidOperationException>(() => {
-            using var mgr = new N2UserManager(factory, config, pwdHash, "testdb", logger);
+            using var mgr = new N2UserManager(factory, config, rateLimiter, pwdHash, "testdb", logger);
         });
     }
 }

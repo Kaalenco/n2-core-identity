@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace N2.Core.Identity.UnitTests;
 
 [TestClass]
-public class N2AuthenticatorTests : N2AuthenticatorUnitTestsBase {
+public class N2AuthenticatorTests : N2IdentityTestsBase {
 
 
     [TestMethod]

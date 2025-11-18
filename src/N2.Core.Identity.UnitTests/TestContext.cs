@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,13 @@ internal static class TestContext {
         serviceCollection.AddSingleton<IConfiguration>(configuration);
         var auth = configuration.GetAuthenticationConfig();
         serviceCollection.AddSingleton(auth);
+        serviceCollection.AddMemoryCache();
+        serviceCollection.AddSingleton<IRateLimiter>(s => {
+            var config = s.GetAuthenticationConfig();
+            var mcache = s.GetRequiredService<IMemoryCache>();
+            var logger = s.GetRequiredService<ILogger<RateLimiter>>();
+            return new RateLimiter(mcache, logger, config.MfaMaxAttempts, config.MfaLockoutMinutes);
+        });
 
         serviceCollection.AddScoped<IPasswordHasher<ApplicationUser>>(s => {
             // Configure PasswordHasherOptions using IOptions<PasswordHasherOptions>
@@ -59,8 +67,7 @@ internal static class TestContext {
             });
 
             var logger = loggerFactory.CreateLogger<N2IdentityContext>();
-            var authenticationConfig = sp.GetRequiredService<AuthenticationConfig>();
-            N2IdentityContext context = new(optionsBuilder.Options, authenticationConfig, logger);
+            N2IdentityContext context = new(optionsBuilder.Options, logger);
 
             // Configure unique indexes manually since InMemory doesn't enforce them automatically
             var indexVerify = context.Model.GetEntityTypes()
@@ -78,9 +85,10 @@ internal static class TestContext {
         serviceCollection.AddScoped<IUserManager<ApplicationUser>>((s) => {
             var logger = s.GetRequiredService<ILogger<N2UserManager>>();
             var config = s.GetRequiredService<IConfiguration>();
+            var rateLimiter = s.GetRequiredService<IRateLimiter>();
             var hasher = s.GetRequiredService<IPasswordHasher<ApplicationUser>>();
             var factory = s.GetRequiredService<IIdentityContextFactory>();
-            return new N2UserManager(factory, config, hasher, "IdentityDb", logger);
+            return new N2UserManager(factory, config, rateLimiter, hasher, "IdentityDb", logger);
         });
 
         serviceCollection.AddScoped<IAuthenticator, N2AuthenticationService>();

@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 using N2.Core.Commands;
@@ -11,13 +10,11 @@ using N2.Core.Identity.Commands;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
-using System.IO;
 
 namespace N2.Core.Identity.Data;
 
 public class N2IdentityContext(
     DbContextOptions<N2IdentityContext> options,
-    AuthenticationConfig config,
     ILogger<N2IdentityContext> logger) :
     IdentityDbContext<ApplicationUser, ApplicationRole, Guid>(options), IIdentityContext {
     public const int DefaultMaxLogSize = 1000;
@@ -291,131 +288,7 @@ public class N2IdentityContext(
 #pragma warning restore CA1031 // Do not catch general exception types
     }
 
-    private readonly ConcurrentDictionary<Guid, MfaAttemptTracker> mfaAttemptTrackers = new();
-    private readonly SemaphoreSlim mfaLockoutLock = new(1, 1);
-
-    // Configuration from AuthenticationConfig
-    private int MfaMaxAttempts => config.MfaMaxAttempts > 0 ? config.MfaMaxAttempts : 5;
-    private int MfaLockoutMinutes => config.MfaLockoutMinutes > 0 ? config.MfaLockoutMinutes : 15;
-    private bool disposed;
-
-    protected virtual void Dispose(bool disposing) {
-        if (disposed) {
-            return;
-        }
-
-        if (disposing) {
-            // Dispose managed resources in derived class
-            mfaLockoutLock?.Dispose();
-        }
-
-        // No unmanaged resources in derived class, but if there were, release them here
-        disposed = true;
-
-        // Call base class Dispose to clean up base resources
-        base.Dispose();
-    }
-
-    public new void Dispose() {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
 
-    /// <summary>
-    /// Gets or creates an MFA attempt tracker for a user.
-    /// </summary>
-    private MfaAttemptTracker GetOrCreateMfaTracker(Guid userId) {
-        return mfaAttemptTrackers.GetOrAdd(userId, _ => new MfaAttemptTracker {
-            UserId = userId,
-            WindowStart = DateTime.UtcNow,
-            LastAttempt = DateTime.UtcNow
-        });
-    }
-
-    /// <summary>
-    /// Checks if user is locked out from MFA attempts and updates tracking.
-    /// Returns null if allowed to proceed, or error response if locked out.
-    /// </summary>
-    public async Task<ICommandResponse?> CheckMfaRateLimitAsync(ApplicationUser user, CancellationToken token) {
-        await mfaLockoutLock.WaitAsync(token);
-        try {
-            ArgumentNullException.ThrowIfNull(user);
-            var tracker = GetOrCreateMfaTracker(user.Id);
-
-            // Reset if window expired
-            if (tracker.IsWindowExpired) {
-                tracker.Reset();
-            }
-
-            // Check lockout status
-            if (tracker.IsLockedOut) {
-                var remainingTime = tracker.LockoutUntil!.Value - DateTime.UtcNow;
-
-                logger.LogMfaValidationBlockedWarning(
-                    user.UserName,
-                    tracker.LockoutUntil.Value,
-                    Math.Ceiling(remainingTime.TotalSeconds),
-                    tracker.FailedAttempts
-                );
-
-                return new MultifactorResponse(
-                    ResponseStatus.Unauthorized,
-                    $"Too many failed MFA attempts. Account locked for {Math.Ceiling(remainingTime.TotalMinutes)} more minutes."
-                );
-            }
-
-            // Check if approaching limit (warn after 3 attempts)
-            if (tracker.FailedAttempts >= 3 && tracker.FailedAttempts < MfaMaxAttempts) {
-                logger.LogMfaFailedAttemptsWarning(
-                    user.UserName,
-                    tracker.FailedAttempts,
-                    MfaMaxAttempts - tracker.FailedAttempts
-                );
-            }
-
-            return null; // Allowed to proceed
-        } finally {
-            mfaLockoutLock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Records the result of an MFA validation attempt.
-    /// </summary>
-    private async Task RecordMfaAttemptAsync(ApplicationUser user, bool success, CancellationToken token) {
-        await mfaLockoutLock.WaitAsync(token);
-        try {
-            var tracker = GetOrCreateMfaTracker(user.Id);
-
-            if (success) {
-                if (tracker.FailedAttempts > 0) {
-                    logger.LogResetMfaWarning(
-                        user.UserName,
-                        tracker.FailedAttempts
-                    );
-                }
-                tracker.Reset();
-            } else {
-                tracker.RecordFailure(MfaMaxAttempts, MfaLockoutMinutes);
-
-                if (tracker.IsLockedOut) {
-                    logger.LogMfaLockoutWarning(
-                        user.UserName,
-                        tracker.FailedAttempts,
-                        tracker.LockoutUntil
-                    );
-                } else {
-                    logger.LogMfaAttemptsWarning(
-                        user.UserName,
-                        tracker.FailedAttempts,
-                        MfaMaxAttempts
-                    );
-                }
-            }
-        } finally {
-            mfaLockoutLock.Release();
-        }
-    }
 
 }

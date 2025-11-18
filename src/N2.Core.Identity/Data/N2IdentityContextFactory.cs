@@ -7,11 +7,9 @@ namespace N2.Core.Identity.Data;
 
 public class N2IdentityContextFactory : IIdentityContextFactory {
     private readonly IConnectionStringService settingService;
-    private readonly AuthenticationConfig authentication;
 
-    public N2IdentityContextFactory(IConnectionStringService settingService, AuthenticationConfig authentication) {
+    public N2IdentityContextFactory(IConnectionStringService settingService) {
         this.settingService = settingService;
-        this.authentication = authentication;
     }
 
     public Task<IIdentityContext> CreateAsync() => CreateAsync("UserDbConnection");
@@ -24,7 +22,7 @@ public class N2IdentityContextFactory : IIdentityContextFactory {
         DbContextOptionsBuilder<N2IdentityContext> optionsBuilder = new();
         var logger = NullLogger<N2IdentityContext>.Instance;
         optionsBuilder.UseSqlServer(connectionString);
-        N2IdentityContext result = new(optionsBuilder.Options, authentication, logger);
+        N2IdentityContext result = new(optionsBuilder.Options, logger);
         return Task.FromResult<IIdentityContext>(result);
     }
 }

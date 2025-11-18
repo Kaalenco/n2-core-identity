@@ -5,11 +5,11 @@ using N2.Core.Identity.Data;
 
 namespace N2.Core.Identity.UnitTests;
 
-public abstract class N2AuthenticatorUnitTestsBase {
+public abstract class N2IdentityTestsBase {
     private readonly ServiceProvider _serviceProvider;
     protected ServiceProvider ServiceProvider => _serviceProvider;
 
-    protected N2AuthenticatorUnitTestsBase() {
+    protected N2IdentityTestsBase() {
         ServiceCollection serviceCollection = new();
         TestContext.ConfigureServices(serviceCollection);
         _serviceProvider = serviceCollection.BuildServiceProvider();

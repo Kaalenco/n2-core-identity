@@ -22,6 +22,6 @@ internal sealed class DesignTimeFactory : IDesignTimeDbContextFactory<N2Identity
         var logger = NullLogger<N2IdentityContext>.Instance;
         optionsBuilder.UseSqlServer(ConnectionString);
 
-        return new N2IdentityContext(optionsBuilder.Options, new AuthenticationConfig(), logger);
+        return new N2IdentityContext(optionsBuilder.Options, logger);
     }
 }

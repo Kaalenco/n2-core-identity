@@ -665,11 +665,13 @@ public class N2UserManagerTests {
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
 
         // Create user
+        var randomBytes = RandomNumberGenerator.GetBytes(32);
+        var secret = Convert.ToBase64String(randomBytes);
         ApplicationUser user = new() {
             UserName = username,
             Email = username,
             MfaType = MultiFactorType.Email,
-            MfaSecret = RandomNumberGenerator.GetHexString(20),
+            MfaSecret = secret,
             MfaConfirmed = true
         };
 
@@ -694,11 +696,13 @@ public class N2UserManagerTests {
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
 
         // Create user
+        var randomBytes = RandomNumberGenerator.GetBytes(32);
+        var secret = Convert.ToBase64String(randomBytes);
         ApplicationUser user = new() {
             UserName = username,
             Email = username,
             MfaType = MultiFactorType.None,
-            MfaSecret = RandomNumberGenerator.GetHexString(20),
+            MfaSecret = secret,
             MfaConfirmed = true
         };
 

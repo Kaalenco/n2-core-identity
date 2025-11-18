@@ -7,7 +7,7 @@ using System.Text;
 
 namespace N2.Core.Identity.UnitTests;
 [TestClass]
-public class JwtTimingTests : N2AuthenticatorUnitTestsBase {
+public class JwtTimingTests : N2IdentityTestsBase {
 
 
     [TestMethod]

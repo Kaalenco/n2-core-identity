@@ -11,6 +11,7 @@ using OtpNet;
 
 using QRCoder;
 
+using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net.Mail;
@@ -34,6 +35,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     private readonly ILogger<N2UserManager> logger;
 
     private readonly IPasswordHasher<ApplicationUser> passwordHasher;
+    private readonly IRateLimiter rateLimiter;
 
     private readonly RandomNumberGenerator rng = RandomNumberGenerator.Create();
 
@@ -46,12 +48,14 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public N2UserManager(
         IIdentityContextFactory identityContextFactory,
         IConfiguration configuration,
+        IRateLimiter rateLimiter,
         IPasswordHasher<ApplicationUser> passwordHasher,
         string catalog,
         ILogger<N2UserManager> logger) {
         this.factory = identityContextFactory;
         this.catalog = catalog;
         this.logger = logger;
+        this.rateLimiter = rateLimiter;
         this.passwordHasher = passwordHasher;
 
         this.configuration = configuration.GetAuthenticationConfig();
@@ -75,7 +79,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem == null) {
@@ -95,12 +99,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     }
 
     public async Task<bool> CanSignInAsync([NotNull] ApplicationUser user, CancellationToken token) {
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         return await ctx.CanSignInAsync(user.Id);
     }
 
     public async Task<ICommandResponse> ConfirmEmailAsync([NotNull] ApplicationUser user, string confirmationToken, CancellationToken token) {
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         var (flowControl, value, dbUser) = await ValidateConfirmationToken(ctx, user.Id, user.UserName, MultiFactorType.Email, user.Email, confirmationToken, token);
         if (!flowControl) {
             return value;
@@ -116,8 +120,8 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse> CreateAsync([NotNull] ApplicationUser user, string password, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(password);
 
-        var ctx = await InitializeContextAsync();
-        var dbUser = await ApplicationUserByNameAsync(user.UserName ?? string.Empty, token);
+        using var ctx = await InitializeContextAsync();
+        var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName ?? string.Empty, token);
         if (dbUser != null) {
             return new RequestResult(406, "Already exists");
         }
@@ -125,9 +129,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         ArgumentException.ThrowIfNullOrEmpty(user.UserName);
         ArgumentException.ThrowIfNullOrEmpty(user.Email);
 
+        var randomBytes = RandomNumberGenerator.GetBytes(32);
+        var secret = Convert.ToBase64String(randomBytes);
         user.NormalizedUserName = user.UserName.ToUpperInvariant();
         user.NormalizedEmail = user.Email.ToUpperInvariant();
         user.EmailConfirmed = false;
+        user.MfaSecret = secret;
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(50));
         user.PasswordHash = passwordHasher.HashPassword(user, password);
         await ctx.AddApplicationUserAsync(user, token);
@@ -137,7 +144,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
     public async Task<ICommandResponse> CreateRoleAsync(string role, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(role);
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem != null) {
@@ -154,58 +161,71 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     }
 
     public async Task<ICommandResponse> DeleteAsync([NotNull] ApplicationUser user, CancellationToken token) {
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         ctx.RemoveApplicationUser(user);
         (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public void Dispose() {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-
     public async Task<ICommandResponse<ApplicationUser>> FindByEmailAsync(string emailAddress, CancellationToken token) {
-        var result = await ApplicationUserByEmailAsync(emailAddress, token);
+        using var ctx = await InitializeContextAsync();
+        var result = await ApplicationUserByEmailAsync(ctx, emailAddress, token);
         return new ApplicationUserResponse(result);
     }
 
     public async Task<ICommandResponse<ApplicationUser>> FindByIdAsync(Guid userId, CancellationToken token) {
-        var user = await ApplicationUserByIdAsync(userId, token);
+        using var ctx = await InitializeContextAsync();
+        var user = await ApplicationUserByIdAsync(ctx, userId, token);
         return new ApplicationUserResponse(user);
     }
 
     public async Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string? userName, CancellationToken token) {
-        var user = await ApplicationUserByNameAsync(userName, token);
+        using var ctx = await InitializeContextAsync();
+        var user = await ApplicationUserByNameAsync(ctx, userName, token);
         return new ApplicationUserResponse(user);
     }
 
     public async Task<ICommandResponse<string>> GenerateConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken token) {
 
+        using var ctx = await InitializeContextAsync();
         if (user.Id == Guid.Empty) {
-            var dbUser = await ApplicationUserByNameAsync(user.UserName, token);
+            var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, token);
             if (dbUser == null) {
                 throw new InvalidOperationException("Invalid user");
             }
         }
 
-        var nonce = RandomNumberGenerator.GetItems("ABCDEFGHIJKLMNOP1234567890".AsSpan(), 30).ToString();
-        var timeOut = DateTime.UtcNow.AddDays(5).Ticks;
+        if (user.MfaType == MultiFactorType.None) {
+            return StringResponse.Accept(string.Empty);
+        }
 
-        var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{user.SecurityStamp}");
-        var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
+        if (user.MfaType == MultiFactorType.Totp) {
+            Totp otp = new(Convert.FromBase64String(user.MfaSecret ?? string.Empty));
+            var validCode = otp.ComputeTotp(DateTime.UtcNow);
+            return string.IsNullOrEmpty(validCode)
+                ? StringResponse.Fail(string.Empty, "Could not generate a valid OTP code.")
+                : StringResponse.Accept(validCode);
+        }
 
-        using var hmac = new HMACSHA256(keyBytes);
-        var signature = hmac.ComputeHash(message);
+        if (user.MfaType == MultiFactorType.Email || user.MfaType == MultiFactorType.Sms) {
+            var nonce = RandomNumberGenerator.GetItems("ABCDEFGHIJKLMNOP1234567890".AsSpan(), 30).ToString();
+            var timeOut = DateTime.UtcNow.AddDays(5).Ticks;
 
-        var data = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}");
-        var result = string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(signature));
-        return StringResponse.Accept(result);
+            var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}:{user.SecurityStamp}");
+            var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
+
+            using var hmac = new HMACSHA256(keyBytes);
+            var signature = hmac.ComputeHash(message);
+
+            var data = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeOut}");
+            var result = string.Concat(Convert.ToBase64String(data), '.', Convert.ToBase64String(signature));
+            return StringResponse.Accept(result);
+        }
+        return StringResponse.Fail(string.Empty, $"Not supported: {user.MfaType}");
     }
 
     public async Task<IListResponse<string>> GetRolesAsync([NotNull] ApplicationUser user, CancellationToken token) {
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         var roles = await ctx.UserRolesAsync(user.Id);
         ListResponse<string> response = new(roles);
         return response;
@@ -213,7 +233,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
     public async Task<ICommandResponse<Guid>> GetUserIdAsync(ApplicationUser user, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         var normalizedName = user.UserName ?? "".ToUpperInvariant();
         var userRecord = await ctx.ApplicationUser.FirstOrDefaultAsync(u => u.NormalizedUserName == normalizedName, token);
         var result = userRecord?.Id ?? Guid.Empty;
@@ -240,7 +260,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse> RemoveFromRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         var normalizedName = role.ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem == null) {
@@ -282,7 +302,8 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (!emailValid) {
             return new RequestResult(406, message);
         }
-        var dbUser = await ApplicationUserByNameAsync(user.UserName ?? string.Empty, token);
+        using var ctx = await InitializeContextAsync();
+        var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName ?? string.Empty, token);
         if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
@@ -291,7 +312,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         user.EmailConfirmed = false;
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
-        (var status, var commitMessage) = await SaveChangesAsync();
+        (var status, var commitMessage) = await ctx.Complete();
         return status.IsSuccess()
             ? RequestResult.Ok()
             : new RequestResult(status, $"Email not set for {user.Id}, {commitMessage}");
@@ -338,8 +359,8 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                 return MultifactorResponse.Failed($"Not supported : {mfaType}.");
         }
 
-        var ctx = await InitializeContextAsync();
-        var dbUser = await ApplicationUserByNameAsync(user.UserName, token);
+        using var ctx = await InitializeContextAsync();
+        var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, token);
         if (dbUser is null) {
             return new MultifactorResponse(ResponseStatus.NotFound, $"Could not find user {user.UserName}");
         }
@@ -361,7 +382,8 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
     public async Task<ICommandResponse> SetUserNameAsync([NotNull] ApplicationUser user, string userName, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(userName);
-        var dbUser = await ApplicationUserByNameAsync(userName, token);
+        using var ctx = await InitializeContextAsync();
+        var dbUser = await ApplicationUserByNameAsync(ctx, userName, token);
         if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
@@ -369,7 +391,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         user.NormalizedUserName = userName.ToUpperInvariant();
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
 
-        (var status, var commitMessage) = await SaveChangesAsync();
+        (var status, var commitMessage) = await ctx.Complete();
         return status.IsSuccess()
             ? RequestResult.Ok()
             : new RequestResult(status, $"Username not set for {user.Id}, {commitMessage}");
@@ -385,13 +407,13 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             var lockoutEnd = user.LockoutEnd!.Value;
             var remainingTime = lockoutEnd - DateTimeOffset.UtcNow;
 
-            LoggerService.LogUserLockedOut(logger, user.UserName ?? user.Id.ToString(), lockoutEnd, Math.Ceiling(remainingTime.TotalMinutes), null);
+            logger.LogUserLockedOut(user.UserName ?? user.Id.ToString(), lockoutEnd, Math.Ceiling(remainingTime.TotalMinutes));
 
             await timer.Wait();
             return new RequestResult(423, $"Account is locked. Try again after {lockoutEnd:u}");
         }
 
-        var ctx = await InitializeContextAsync();
+        using var ctx = await InitializeContextAsync();
         var normalizedUserName = user.UserName?.ToUpperInvariant() ?? string.Empty;
         var appUser = await ctx.ApplicationUser
             .Where(m => m.NormalizedUserName == normalizedUserName &&
@@ -408,7 +430,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         );
 
         if (verificationResult == PasswordVerificationResult.Failed) {
-            await IncrementAccessFailedCountAsync(ctx, appUser, token);
+            await IncrementAccessFailedCountAsync(ctx, appUser, logger, token);
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
         }
 
@@ -423,83 +445,130 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         return new RequestResult(ResponseStatus.Success, user.UserName ?? string.Empty);
     }
 
+    public void UpdateRateLimiter(Guid userId, string? userName, DateTime newEndDate) {
+        rateLimiter.UpdateRateLimit(userId, userName, newEndDate);
+    }
+
     public async Task<ICommandResponse> ValidateMultifactorAsync(ApplicationUser user, string multifactorCode, CancellationToken token) {
 
+        ArgumentNullException.ThrowIfNull(user);
         var timer = new TimeoutTimer(TimeForAuthenticationMs);
+        lockObject.WaitOne();
+        try {
+            // Check rate limiting FIRST (before any validation)
+            var (rateLimitCheck, remainingTime) = rateLimiter.CheckRateLimit(user.Id, user.NormalizedUserName);
+            if (!rateLimitCheck) {
+                await timer.Wait();
+                return new MultifactorResponse(
+                    ResponseStatus.Unauthorized,
+                    $"Too many failed MFA attempts. Account locked for {remainingTime} more minutes."
+                );
+            }
 
-        if (user == null || string.IsNullOrEmpty(user.UserName)) {
-            await timer.Wait();
-            return MultifactorResponse.Failed("User name is not valid.");
-        }
+            using var ctx = await InitializeContextAsync();
 
-        var dbUser = await ApplicationUserByNameAsync(user.UserName, token);
-        if (dbUser is null) {
-            await timer.Wait();
-            return new MultifactorResponse(ResponseStatus.Unauthorized, $"Could not find user {user.UserName}");
-        }
-        if (dbUser.MfaType == MultiFactorType.None) {
-            await timer.Wait();
-            return new MultifactorResponse(ResponseStatus.Accepted, "No multifactor required.");
-        }
-        if (string.IsNullOrEmpty(multifactorCode)) {
-            await timer.Wait();
-            return new MultifactorResponse(ResponseStatus.Unauthorized, "No multifactor code provided.");
-        }
-        if (string.IsNullOrEmpty(user.MfaSecret)) {
-            LoggerService.LogMfaSecretNotSet(logger, user.UserName, null);
-            await timer.Wait();
-            return new MultifactorResponse(ResponseStatus.Conflict, "Multifactor is not configured.");
-        }
-        if (user.MfaType == MultiFactorType.Totp) {
-            var verified = VerifyTwoFactorAuthentication(multifactorCode, user.MfaSecret);
-            await timer.Wait();
+            if (user == null || string.IsNullOrEmpty(user.UserName)) {
+                await timer.Wait();
+                return MultifactorResponse.Failed("User name is not valid.");
+            }
 
-            return !verified
-                ? new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid Totp code.")
-                : MultifactorResponse.Ok();
-        } else if (user.MfaType is MultiFactorType.Sms or MultiFactorType.Email) {
+            var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, token);
+            if (dbUser is null) {
+                await timer.Wait();
+                rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                return new MultifactorResponse(ResponseStatus.Unauthorized, $"Could not find user {user.UserName}");
+            }
+            if (dbUser.MfaType == MultiFactorType.None) {
+                await timer.Wait();
+                return new MultifactorResponse(ResponseStatus.Accepted, "No multifactor required.");
+            }
 
-#pragma warning disable CA1031 // Do not catch general exception types
-            try {
-                var splitCode = multifactorCode.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            string[] splitCode = [];
+            if (dbUser.MfaType == MultiFactorType.Email) {
+                if (string.IsNullOrEmpty(multifactorCode) || !multifactorCode.Contains('.', StringComparison.Ordinal)) {
+                    await timer.Wait();
+                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                    return new MultifactorResponse(ResponseStatus.Unauthorized, "No multifactor code provided.");
+                }
+
+                splitCode = multifactorCode.Split('.');
                 if (splitCode.Length != 2) {
                     await timer.Wait();
-                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid Mfa code parts.");
+                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid token format");
                 }
-                var publicPart = Convert.FromBase64String(splitCode[0]);
-                var publicTestPart = System.Text.Encoding.UTF8.GetString(publicPart);
-                var nonce = publicTestPart.Split(':')[0];
-                var timeout = long.Parse(publicTestPart.Split(':')[1], CultureInfo.InvariantCulture);
-                var timeOutDate = new DateTime(timeout);
-                if (timeOutDate < DateTime.UtcNow) {
-                    await timer.Wait();
-                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Timeout.");
-                }
-
-                var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{user.SecurityStamp}");
-                var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
-
-                using var hmac = new HMACSHA256(keyBytes);
-                var expectedSignature = hmac.ComputeHash(message);
-
-                var verify = Convert.FromBase64String(splitCode[1]);
-                var arraysEqual = await expectedSignature.ArraysAreEqual(verify);
-                await timer.Wait();
-
-                return arraysEqual
-                    ? MultifactorResponse.Ok()
-                    : new MultifactorResponse(ResponseStatus.Unauthorized, "Validation failed");
-            } catch (Exception ex) {
-                LoggerService.logMfaVerificationWarning(logger, ex.Message, multifactorCode, user.UserName, ex);
-                await timer.Wait();
-                return new MultifactorResponse(ResponseStatus.Unauthorized, "Validation error");
             }
+
+            if (string.IsNullOrEmpty(user.MfaSecret)) {
+                logger.LogMfaSecretNotSet(user.UserName);
+                await timer.Wait();
+                return new MultifactorResponse(ResponseStatus.Conflict, "Multifactor is not configured.");
+            }
+
+            if (dbUser.MfaType == MultiFactorType.Totp) {
+                var (verified, message) = VerifyTwoFactorAuthentication(multifactorCode, dbUser.MfaSecret ?? "");
+                await timer.Wait();
+
+                if (verified) {
+                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, true);
+                    return MultifactorResponse.Ok();
+                } else {
+                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                    return new MultifactorResponse(ResponseStatus.Unauthorized, message);
+                }
+            } else if (dbUser.MfaType is MultiFactorType.Sms or MultiFactorType.Email) {
+
+#pragma warning disable CA1031 // Do not catch general exception types
+                try {
+                    var publicPart = Convert.FromBase64String(splitCode[0]);
+                    var publicTestPart = System.Text.Encoding.UTF8.GetString(publicPart).Split(':', StringSplitOptions.RemoveEmptyEntries);
+
+                    if (publicTestPart.Length != 2) {
+                        await timer.Wait();
+                        rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                        return new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid token structure");
+                    }
+
+                    var nonce = publicTestPart[0];
+                    var timeout = long.Parse(publicTestPart[1], CultureInfo.InvariantCulture);
+                    var timeOutDate = new DateTime(timeout);
+                    if (timeOutDate < DateTime.UtcNow) {
+                        await timer.Wait();
+                        rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                        return new MultifactorResponse(ResponseStatus.Unauthorized, "Timeout.");
+                    }
+
+                    var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{user.SecurityStamp}");
+                    var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
+
+                    using var hmac = new HMACSHA256(keyBytes);
+                    var expectedSignature = hmac.ComputeHash(message);
+
+                    var verify = Convert.FromBase64String(splitCode[1]);
+                    var arraysEqual = await expectedSignature.ArraysAreEqual(verify);
+                    await timer.Wait();
+
+                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, arraysEqual);
+
+                    return arraysEqual
+                        ? MultifactorResponse.Ok()
+                        : new MultifactorResponse(ResponseStatus.Unauthorized, "Validation failed");
+                } catch (Exception ex) {
+                    logger.LogMfaVerificationWarning(ex.Message, multifactorCode, user.UserName, ex);
+                    await timer.Wait();
+                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Validation error");
+                }
 #pragma warning restore CA1031 // Do not catch general exception types
 
-        } else {
-            return new MultifactorResponse(
-                ResponseStatus.NotImplemented,
-                $"Mutifactor {user.MfaType} is not available for {user.UserName}");
+            } else {
+                rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+                return new MultifactorResponse(
+                    ResponseStatus.NotImplemented,
+                    $"Multifactor {user.MfaType} is not available for {user.UserName}");
+            }
+        } finally {
+            lockObject.Release();
         }
     }
 
@@ -557,27 +626,68 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         return (valid.Length == 0, valid);
     }
 
-    private static bool VerifyTwoFactorAuthentication(string code, string userTwoFactorSecret) {
-        Totp otp = new(Base32Encoding.ToBytes(userTwoFactorSecret));
-        return otp.VerifyTotp(code, out var _, new VerificationWindow(1, 1));
+    private static (bool success, string message) VerifyTwoFactorAuthentication(string code, string userTwoFactorSecret) {
+        var otp = userTwoFactorSecret.TryConvertBase64String(out var data)
+            ? new Totp(data)
+            : new Totp(Base32Encoding.ToBytes(userTwoFactorSecret));
+
+        var verified = otp.VerifyTotp(code, out var _, new VerificationWindow(1, 1));
+        var remainingSeconds = otp.RemainingSeconds();
+        if (verified) {
+            return (true, $"{remainingSeconds} seconds remaining");
+        }
+        // Find problem
+        var checkTime = otp.VerifyTotp(code, out var timeStepMatched, new VerificationWindow(100, 100));
+
+        if (checkTime) {
+            var time = TimeStepToTime(timeStepMatched, otp.Step);
+            // still within bounds
+            if (time < DateTime.UtcNow) {
+                return (false, $"Otp code expired.");
+            } else {
+                return (false, $"Otp time skew error.");
+
+            }
+        } else {
+            return (false, $"invalid OTP code.");
+        }
     }
 
-    private async Task<ApplicationUser?> ApplicationUserByEmailAsync(string emailAddress, CancellationToken token) {
+    /// <summary>
+    /// The number of ticks as Measured at Midnight Jan 1st 1970;
+    /// </summary>
+    private const long UnicEpocTicks = 621355968000000000L;
+
+    /// <summary>
+    /// A divisor for converting ticks to seconds
+    /// </summary>
+    private const long TicksToSeconds = 10000000L;
+
+    private static long CalculateTimeStepFromTimestamp(DateTime timestamp, long stepSize) {
+        var unixTimestamp = (timestamp.Ticks - UnicEpocTicks) / TicksToSeconds;
+        var window = unixTimestamp / stepSize;
+        return window;
+    }
+
+    private static DateTime TimeStepToTime(long timeStepMatched, int stepSize) {
+        var window = timeStepMatched * (long)stepSize;
+        var ticks = (window * TicksToSeconds) + UnicEpocTicks;
+        return new DateTime(ticks);
+    }
+
+    private static async Task<ApplicationUser?> ApplicationUserByEmailAsync(IIdentityContext ctx, string emailAddress, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(emailAddress);
-        using var ctx = await InitializeContextAsync();
         var normalizedName = emailAddress.ToUpperInvariant();
         return await ctx.ApplicationUserByEmailAsync(normalizedName, token);
     }
 
-    private async Task<ApplicationUser?> ApplicationUserByIdAsync(Guid userId, CancellationToken token) {
+    private static async Task<ApplicationUser?> ApplicationUserByIdAsync(IIdentityContext ctx, Guid userId, CancellationToken token) {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
-        var ctx = await InitializeContextAsync();
         return await ctx.ApplicationUserAsync(userId, token);
     }
 
-    private async Task<ApplicationUser?> ApplicationUserByNameAsync(string? userName, CancellationToken token) {
+    private static async Task<ApplicationUser?> ApplicationUserByNameAsync(IIdentityContext ctx, string? userName, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(userName);
-        var ctx = await InitializeContextAsync();
         var normalizedName = userName.ToUpperInvariant();
         return await ctx.ApplicationUserAsync(normalizedName, token);
     }
@@ -585,7 +695,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     /// <summary>
     /// Increments the failed access count for a user and locks account if threshold exceeded.
     /// </summary>
-    private async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken token = default) {
+    private static async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, ILogger logger, CancellationToken token = default) {
 #pragma warning disable CA1031 // Do not catch general exception types
         try {
             var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
@@ -600,12 +710,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                 dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15);
                 dbUser.LockoutEnabled = true;
 
-                LoggerService.LogIncrementAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd, null);
+                logger.LogIncrementAccessFailedCount(dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd);
             }
 
             await ctx.Complete();
         } catch (Exception ex) {
-            LoggerService.LogIncrementAccessFailedException(logger, user.UserName ?? user.Id.ToString(), ex);
+            logger.LogIncrementAccessFailedException(user.UserName ?? user.Id.ToString(), ex);
         }
 #pragma warning restore CA1031 // Do not catch general exception types
     }
@@ -640,7 +750,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             }
 
             if (dbUser.AccessFailedCount > 0) {
-                LoggerService.LogResetAccessFailedCount(logger, dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, null);
+                logger.LogResetAccessFailedCount(dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount);
 
                 dbUser.AccessFailedCount = 0;
                 dbUser.LockoutEnd = null;
@@ -648,19 +758,13 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                 await ctx.Complete();
             }
         } catch (Exception ex) {
-            LoggerService.LogResetAccessCountFailure(logger, user.UserName ?? user.Id.ToString(), ex);
+            logger.LogResetAccessCountFailure(user.UserName ?? user.Id.ToString(), ex);
         }
 #pragma warning restore CA1031 // Do not catch general exception types
     }
 
-    private async Task<(ResponseStatus, string?)> SaveChangesAsync() {
-        var ctx = await InitializeContextAsync();
-        var result = await ctx.Complete();
-        return result;
-    }
-
     private async Task<(bool flowControl, ICommandResponse value, ApplicationUser? dbUser)> ValidateConfirmationToken(
-            IIdentityContext ctx,
+        IIdentityContext ctx,
         Guid userId,
         string? userName,
         MultiFactorType multiFactorType,
@@ -692,54 +796,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         return (flowControl: verified.Status.IsSuccess(), value: verified, dbUser);
     }
 
-    private static class LoggerService {
 
-        public static readonly Action<ILogger, string, int, DateTimeOffset?, Exception?> LogIncrementAccessFailedCount =
-        LoggerMessage.Define<string, int, DateTimeOffset?>(
-            LogLevel.Warning,
-            new EventId(4, nameof(LogIncrementAccessFailedCount)),
-            "Account locked for user {UserName} after {FailedAttempts} failed attempts. Lockout until {LockoutEnd}"
-        );
 
-        public static readonly Action<ILogger, string, Exception?> LogIncrementAccessFailedException =
-        LoggerMessage.Define<string>(
-            LogLevel.Critical,
-            new EventId(6, nameof(LogIncrementAccessFailedException)),
-            "Error incrementing access failed count for user {UserName}."
-        );
-
-        public static readonly Action<ILogger, string, Exception?> LogMfaSecretNotSet =
-                            LoggerMessage.Define<string>(
-                LogLevel.Critical,
-                new EventId(1, nameof(LogMfaSecretNotSet)),
-                "MfaSecret is not set for user {UserName}.");
-
-        // Add this field to the N2UserManager class (preferably near other LoggerMessage delegates)
-        public static readonly Action<ILogger, string, string, string, Exception?> logMfaVerificationWarning =
-            LoggerMessage.Define<string, string, string>(
-                LogLevel.Warning,
-                new EventId(2, nameof(logMfaVerificationWarning)),
-                "Error {Message} while verifying MFA token [{MultifactorCode}] for user [{UserName}].");
-
-        public static readonly Action<ILogger, string, Exception?> LogResetAccessCountFailure =
-                    LoggerMessage.Define<string>(
-                        LogLevel.Critical,
-                        new EventId(5, nameof(LogResetAccessCountFailure)),
-                        "Resetting access failed count for user {UserName}."
-                );
-
-        // Add this LoggerMessage delegate near other LoggerMessage delegates
-        public static readonly Action<ILogger, string, int, Exception?> LogResetAccessFailedCount =
-            LoggerMessage.Define<string, int>(
-                LogLevel.Warning,
-                new EventId(3, nameof(LogResetAccessFailedCount)),
-                "Resetting access failed count for user {UserName} (was {FailedCount})."
-            );
-        public static readonly Action<ILogger, string, DateTimeOffset?, double, Exception?> LogUserLockedOut =
-         LoggerMessage.Define<string, DateTimeOffset?, double>(
-                LogLevel.Warning,
-                new EventId(7, nameof(LogUserLockedOut)),
-                "Authentication attempt blocked - user {UserName} is locked out until {LockoutEnd} ({RemainingMinutes} minutes remaining)."
-            );
+    public void Dispose() {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }
+

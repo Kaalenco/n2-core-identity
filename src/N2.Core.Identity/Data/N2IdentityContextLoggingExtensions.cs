@@ -28,35 +28,6 @@ public static class N2IdentityContextLoggingExtensions {
         new EventId(1, nameof(LogHealthStatusFailed)),
         "Health Status failed with exception: {Message}");
 
-    private static readonly Action<ILogger, string, int, int, Exception?> logMfaAttemptsWarn =
-        LoggerMessage.Define<string, int, int>(
-        LogLevel.Warning,
-        new EventId(8, nameof(LogMfaFailedAttemptsWarning)),
-        "Failed MFA attempt for user {UserName}. Total failed attempts: {FailedAttempts}/{MaxAttempts}");
-
-    private static readonly Action<ILogger, string, int, int, Exception?> logMfaFailedAttemptsWarn =
-        LoggerMessage.Define<string, int, int>(
-        LogLevel.Warning,
-        new EventId(7, nameof(LogMfaFailedAttemptsWarning)),
-        "User {UserName} has {FailedAttempts} failed MFA attempts ({RemainingAttempts} remaining before lockout)");
-
-    private static readonly Action<ILogger, string, int, DateTime?, Exception?> logMfaLockoutWarn =
-        LoggerMessage.Define<string, int, DateTime?>(
-        LogLevel.Warning,
-        new EventId(9, nameof(LogMfaLockoutWarning)),
-        "User {UserName} locked out from MFA validation after {FailedAttempts} failed attempts. Lockout until {LockoutEnd}");
-
-    private static readonly Action<ILogger, string, int, Exception?> logMfaResetWarn =
-        LoggerMessage.Define<string, int>(
-        LogLevel.Warning,
-        new EventId(10, nameof(LogResetMfaWarning)),
-        "MFA validation succeeded for user {UserName}. Resetting {FailedAttempts} previous failed attempts.");
-
-    private static readonly Action<ILogger, string, DateTime, double, int, Exception?> logMfaValidationBlockedWarn =
-        LoggerMessage.Define<string, DateTime, double, int>(
-        LogLevel.Warning,
-        new EventId(6, nameof(LogMfaValidationBlockedWarning)),
-        "MFA validation blocked for user {UserName} - locked out until {LockoutEnd} ({RemainingSeconds} seconds remaining). Failed attempts: {FailedAttempts}");
 
     public static void LogAddApplicationRoleFailed(this ILogger logger, string message, Exception? exception) {
         logAddApplicationRoleFail(logger, message, exception);
@@ -74,23 +45,4 @@ public static class N2IdentityContextLoggingExtensions {
         logHealthStatusFail(logger, message, exception);
     }
 
-    public static void LogMfaAttemptsWarning(this ILogger logger, string? userName, int failedAttempts, int maxAttempts) {
-        logMfaAttemptsWarn(logger, userName ?? "", failedAttempts, maxAttempts, null);
-    }
-
-    public static void LogMfaFailedAttemptsWarning(this ILogger logger, string? userName, int failedAttempts, int remainingAttempts) {
-        logMfaFailedAttemptsWarn(logger, userName ?? "", failedAttempts, remainingAttempts, null);
-    }
-
-    public static void LogMfaLockoutWarning(this ILogger logger, string? userName, int failedAttempts, DateTime? lockoutUntil) {
-        logMfaLockoutWarn(logger, userName ?? "", failedAttempts, lockoutUntil, null);
-    }
-
-    public static void LogMfaValidationBlockedWarning(this ILogger logger, string? userName, DateTime lockoutUntil, double totalSeconds, int failedAttempts) {
-        logMfaValidationBlockedWarn(logger, userName ?? "", lockoutUntil, totalSeconds, failedAttempts, null);
-    }
-
-    public static void LogResetMfaWarning(this ILogger logger, string? userName, int failedAttempts) {
-        logMfaResetWarn(logger, userName ?? "", failedAttempts, null);
-    }
 }
