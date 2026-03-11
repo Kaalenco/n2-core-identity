@@ -20,7 +20,7 @@ COPY N2.Core.Identity.sln .
 COPY N2.Core.Identity/N2.Core.Identity.csproj                   N2.Core.Identity/
 COPY N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj  N2.Core.Identity.UnitTests/
 RUN dotnet restore N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj \
-      --framework net8.0
+      -p:TargetFramework=net8.0
 
 # Copy source (invalidates cache when code changes)
 COPY . .
