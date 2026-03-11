@@ -1,0 +1,36 @@
+# Integration Test Dockerfile
+#
+# Restores at image-build time (layer-cached), then builds + runs the MySQL
+# integration tests at container-start time so the MySQL service is already
+# available via the Docker Compose network.
+#
+# Used by docker-compose.integration.yml — do not run directly.
+#
+# Required environment variable (set by docker-compose.integration.yml):
+#   ConnectionStrings__UserDbMySqlTest   MySQL connection string
+#
+# To mark a test as a MySQL integration test it must have:
+#   [TestCategory("Integration.MySql")]
+
+FROM mcr.microsoft.com/dotnet/sdk:9.0
+WORKDIR /src
+
+# Restore (layer-cached until .csproj files change)
+COPY N2.Core.Identity.sln .
+COPY N2.Core.Identity/N2.Core.Identity.csproj                   N2.Core.Identity/
+COPY N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj  N2.Core.Identity.UnitTests/
+RUN dotnet restore N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj \
+      --framework net8.0
+
+# Copy source (invalidates cache when code changes)
+COPY . .
+
+# Build + run MySQL integration tests when the container starts.
+# --framework net8.0   avoids building the net10.0 TFM (not supported by SDK 9).
+CMD ["dotnet", "test", "N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj", \
+     "--no-restore", \
+     "--framework", "net8.0", \
+     "--filter", "TestCategory=Integration.MySql", \
+     "--logger", "console;verbosity=normal", \
+     "--logger", "trx;LogFileName=integration-results.trx", \
+     "--results-directory", "/TestResults"]

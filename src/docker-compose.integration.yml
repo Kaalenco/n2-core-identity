@@ -1,0 +1,44 @@
+# Integration Test Compose File
+#
+# Spins up a temporary MySQL 8.0 instance, runs the MySQL integration tests
+# against it, then removes everything (--volumes removes the DB data).
+#
+# Usage:
+#   docker compose -f src/docker-compose.integration.yml up \
+#     --build --exit-code-from integration-tests --abort-on-container-exit
+#   docker compose -f src/docker-compose.integration.yml down --volumes
+#
+# The exit code mirrors the test result: 0 = all pass, non-zero = failure.
+#
+# Only tests marked [TestCategory("Integration")] whose name contains "MySql"
+# are executed (see Dockerfile.integration CMD).
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: testroot
+      MYSQL_DATABASE: identitytest
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-ptestroot"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  integration-tests:
+    build:
+      context: .                                                    # ./src relative to this file
+      dockerfile: N2.Core.Identity.UnitTests/Dockerfile.integration
+    environment:
+      # Double-underscore maps to ':' in .NET configuration, so this populates
+      # ConnectionStrings:UserDbMySqlTest which the integration tests read.
+      ConnectionStrings__UserDbMySqlTest: "Server=mysql;Port=3306;Database=identitytest;User=testuser;Password=testpass;Version=8.0.0;"
+    volumes:
+      - ./test-results:/TestResults
+    depends_on:
+      mysql:
+        condition: service_healthy

@@ -15,6 +15,7 @@ public class N2IdentityContextFactoryTests {
     private static IConfiguration BuildConfiguration() =>
         new ConfigurationBuilder()
             .AddUserSecrets<N2IdentityContextFactoryTests>()
+            .AddEnvironmentVariables()   // CI injects ConnectionStrings__UserDbMySqlTest etc.
             .Build();
 
     private static Mock<IConnectionStringService> BuildMock(IConfiguration configuration) {
