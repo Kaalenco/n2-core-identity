@@ -185,6 +185,10 @@ internal sealed class InMemoryIdentityContextFactory : IIdentityContextFactory {
         // Return a non-disposing wrapper to prevent premature disposal
         return Task.FromResult<IIdentityContext>(new NonDisposingIdentityContextWrapper(context));
     }
+
+    public Task<IIdentityContext> CreateAsync(DatabaseProvider provider) => CreateAsync();
+
+    public Task<IIdentityContext> CreateAsync(DatabaseProvider provider, string connectionName) => CreateAsync(connectionName);
 }
 
 /// <summary>

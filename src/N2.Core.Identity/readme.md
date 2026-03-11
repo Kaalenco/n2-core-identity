@@ -1,4 +1,4 @@
-﻿# N2.Core.Identity
+# N2.Core.Identity
 
 ## Description
 
@@ -15,6 +15,94 @@
 ## License
 
 AFL-3.0
+
+## Database Migrations
+
+### How migrations work
+
+The library ships a single set of EF Core migrations (in `Migrations/`) that run
+unchanged against **SQL Server** and **MySQL / Pomelo**. This is achieved through
+two design-time components in `Data/`:
+
+| File | Purpose |
+|---|---|
+| `DesignTimeFactory.cs` | Gives `dotnet ef` a SQL Server context to scaffold against (the canonical provider for migration generation). |
+| `ProviderAgnosticDesignTimeServices.cs` | Replaces EF Core's default `ICSharpMigrationOperationGenerator` with `AgnosticMigrationOperationGenerator`, and replaces `IAnnotationCodeGenerator` with `AgnosticAnnotationCodeGenerator`. |
+
+`AgnosticMigrationOperationGenerator` intercepts every migration operation **before**
+the C# code is written and:
+
+1. **Nullifies `ColumnType`** on every column — `type: "nvarchar(256)"` etc. are
+   omitted from the generated code. At runtime, `MigrateAsync` resolves the
+   correct DDL type through the active provider's type mapper (e.g.
+   `uniqueidentifier` on SQL Server, `char(36)` on MySQL).
+2. **Adds `MySql:ValueGenerationStrategy = IdentityColumn`** alongside every
+   `SqlServer:Identity` annotation, so auto-increment columns work on both engines.
+3. **Removes `filter:` from unique indexes** — the SQL Server partial-index syntax
+   (`WHERE [NormalizedName] IS NOT NULL`) is not supported by MySQL. Both providers
+   allow multiple NULLs in a UNIQUE index by default, so the filter is unnecessary.
+
+`AgnosticAnnotationCodeGenerator` intercepts snapshot and Designer-file generation
+and omits `HasColumnType()` from every property. Each provider then resolves the
+correct DDL type through its own type mapper at migration-execution time, and the
+model differ re-derives provider-specific types via conventions when comparing
+snapshots — so no spurious `AlterColumn` operations are generated.
+
+### Why the model snapshot keeps SQL Server types (existing migrations only)
+
+The snapshot (`N2IdentityContextModelSnapshot.cs`) retains full SQL Server type
+annotations **for migrations that were generated before `AgnosticAnnotationCodeGenerator`
+was in place**. The snapshot is **only used by `dotnet ef migrations add`** to diff
+the previous model state against the current one.
+
+If the snapshot were type-agnostic but the live SQL Server model has resolved types,
+the migration differ would detect a mismatch and generate spurious `AlterColumn`
+operations for every column. Keeping the snapshot in SQL Server form prevents this
+**for legacy snapshots**. Migrations generated with the current tooling produce
+type-agnostic snapshots automatically.
+
+> **Warning — MySQL `PendingModelChangesWarning`**
+>
+> When migrations were generated before `AgnosticAnnotationCodeGenerator` was
+> active, their Designer snapshots contain SQL Server column-type annotations
+> (e.g. `HasColumnType("uniqueidentifier")`). EF Core 8+ compares this snapshot
+> against the live MySQL model and finds a mismatch (SQL Server types vs. Pomelo
+> types), which would normally throw a `PendingModelChangesWarning` exception and
+> abort `MigrateAsync`.
+>
+> `N2IdentityContextFactory` downgrades this to a **logged warning** for MySQL
+> contexts so that migrations can still run. The schema produced by the migration
+> `Up()` method is always correct because `AgnosticMigrationOperationGenerator`
+> strips provider-specific types from the migration code itself.
+>
+> **To eliminate the warning entirely**, regenerate the migration after the
+> `AgnosticAnnotationCodeGenerator` is in place:
+> ```powershell
+> dotnet ef migrations remove --force --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext
+> dotnet ef migrations add <MigrationName> --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext
+> ```
+> The new Designer file and snapshot will have no `HasColumnType()` calls, and
+> the warning will no longer appear.
+
+### Adding a new migration
+
+Connection string resolution order (SQL Server):
+
+1. `SQLSERVER_IDENTITY_CONNECTION` environment variable
+2. `ConnectionStrings:UserDbSqlServerTest` in user secrets
+   (ID: `N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09`)
+
+Run from the repository root (change the name for the migration):
+
+```powershell
+dotnet ef migrations add InitialMigration --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext --framework net8.0
+```
+
+The generated migration file will contain **no `type:` parameters** and will carry
+both `SqlServer:Identity` and `MySql:ValueGenerationStrategy` annotations on
+auto-increment columns. The Designer file and snapshot will also contain no
+`HasColumnType()` calls. Commit the migration file, the Designer file, and the
+updated snapshot.
 
 ## Basic Setup
 

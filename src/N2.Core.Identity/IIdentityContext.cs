@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 
+using N2.Core.Commands;
 using N2.Core.Entity;
 using N2.Core.Identity.Data;
 
@@ -7,9 +8,15 @@ namespace N2.Core.Identity;
 
 public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 {
+    int MaxLogSize { get; set; }
+
     Task<SelectItemList<HtmlString>> RolesAsync();
 
     Task<SelectItemList<UserSelectItem>> UsersAsync();
+
+    Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string normalizedName, CancellationToken token);
+    Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token);
+    Task<ApplicationUser?> FindByEmailAsync(string normalizedEmail, CancellationToken token);
 
     Task<string> GetNameForUserAsync(Guid userId);
 
@@ -46,4 +53,14 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
 }
 
-public interface IIdentityContextFactory : ICoreDataContextFactory<IIdentityContext>;
+public interface IIdentityContextFactory : ICoreDataContextFactory<IIdentityContext> {
+    /// <summary>
+    /// Creates an identity context using the default connection name and the specified database provider.
+    /// </summary>
+    Task<IIdentityContext> CreateAsync(DatabaseProvider provider);
+
+    /// <summary>
+    /// Creates an identity context using the specified database provider and named connection string.
+    /// </summary>
+    Task<IIdentityContext> CreateAsync(DatabaseProvider provider, string connectionName);
+}

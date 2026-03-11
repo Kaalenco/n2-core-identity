@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "n2adr": {
+      "type": "stdio",
+      "command": "C:\\Program Files (x86)\\Nauplius\\AdrCli\\n2adr.exe",
+      "args": ["--mcp"],
+      "description": "Architecture Decision Records management tool for creating, managing, and maintaining ADRs and project planning tasks."
+    },
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "c://git//serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant"
+      ],
+      "env": {}
+    }
+  }
+}
