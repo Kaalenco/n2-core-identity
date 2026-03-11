@@ -24,6 +24,18 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
     private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
 
+    private static readonly Action<ILogger, Guid, Exception?> _logRotateMfaSecretDecryptionFailed =
+        LoggerMessage.Define<Guid>(
+            LogLevel.Warning,
+            new EventId(1001, nameof(RotateMfaSecretsAsync)),
+            "RotateMfaSecretsAsync: could not decrypt MfaSecret for user {UserId} — skipping.");
+
+    private static readonly Action<ILogger, int, Exception?> _logRotateMfaSecretRotated =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(1002, nameof(RotateMfaSecretsAsync)),
+            "\"RotateMfaSecretsAsync: re-encrypted {Count} MfaSecret(s).\"");
+
     private readonly string catalog;
 
     private readonly AuthenticationConfig configuration;
@@ -137,7 +149,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         user.NormalizedUserName = user.UserName.ToUpperInvariant();
         user.NormalizedEmail = user.Email.ToUpperInvariant();
         user.EmailConfirmed = false;
-        user.MfaSecret = secret;
+        user.MfaSecret = MfaSecretEncryption.Encrypt(secret, configuration.MfaTokenSecret);
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         user.PasswordHash = passwordHasher.HashPassword(user, password);
         await ctx.AddApplicationUserAsync(user, token);
@@ -213,13 +225,13 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         var randomBytes = RandomNumberGenerator.GetBytes(32);
         var secret = Convert.ToBase64String(randomBytes);
 
-        dbUser.MfaSecret = secret;
+        dbUser.MfaSecret = MfaSecretEncryption.Encrypt(secret, configuration.MfaTokenSecret);
         dbUser.MfaType = mfaType;
         await ctx.Complete();
 
         if (mfaType == MultiFactorType.Totp) {
 
-            Totp otp = new(Convert.FromBase64String(dbUser.MfaSecret ?? string.Empty));
+            Totp otp = new(Convert.FromBase64String(secret)); // use plaintext — already in scope
             var validCode = otp.ComputeTotp(DateTime.UtcNow);
             return string.IsNullOrEmpty(validCode)
                 ? StringResponse.Fail(string.Empty, "Could not generate a valid OTP code.")
@@ -383,7 +395,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (dbUser is null) {
             return new MultifactorResponse(ResponseStatus.NotFound, $"Could not find user {user.UserName}");
         }
-        dbUser.MfaSecret = rngCode;
+        dbUser.MfaSecret = MfaSecretEncryption.Encrypt(rngCode, configuration.MfaTokenSecret);
         dbUser.MfaType = mfaType;
         (var responseCode, var message) = await ctx.Complete();
 
@@ -469,6 +481,65 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         rateLimiter.UpdateRateLimit(userId, userName, newEndDate);
     }
 
+    /// <summary>
+    /// Re-encrypts all <c>MfaSecret</c> values from <c>MfaTokenSecret2</c> (the retiring key)
+    /// to <c>MfaTokenSecret</c> (the new primary key).
+    /// </summary>
+    /// <remarks>
+    /// Key rotation workflow:
+    /// <list type="number">
+    ///   <item>Set <c>MfaTokenSecret2</c> to the current value of <c>MfaTokenSecret</c>.</item>
+    ///   <item>Set <c>MfaTokenSecret</c> to the new key.</item>
+    ///   <item>Deploy the updated configuration.</item>
+    ///   <item>Call this method once to re-encrypt all rows.</item>
+    ///   <item>Clear <c>MfaTokenSecret2</c> after the method completes successfully.</item>
+    /// </list>
+    /// </remarks>
+    /// <returns>The number of rows re-encrypted.</returns>
+    public async Task<int> RotateMfaSecretsAsync(CancellationToken cancellationToken = default) {
+        if (string.IsNullOrEmpty(configuration.MfaTokenSecret2)) {
+            throw new InvalidOperationException(
+                "MfaTokenSecret2 must contain the retiring key before rotation can proceed.");
+        }
+
+        using var ctx = await InitializeContextAsync();
+        var users = await ctx.ApplicationUser
+            .Where(u => u.MfaSecret != null && u.MfaSecret != string.Empty)
+            .ToListAsync(cancellationToken);
+
+        var rotated = 0;
+
+        foreach (var user in users) {
+            var plaintext = MfaSecretEncryption.TryDecrypt(
+                user.MfaSecret,
+                configuration.MfaTokenSecret,
+                configuration.MfaTokenSecret2);
+
+            if (plaintext == null) {
+                _logRotateMfaSecretDecryptionFailed(logger, user.Id, null);
+                continue;
+            }
+
+            // Already encrypted with the primary key — check by re-encrypting only if plaintext
+            // was decrypted via the secondary key (i.e. the stored value used the old key).
+            var reEncrypted = MfaSecretEncryption.Encrypt(plaintext, configuration.MfaTokenSecret);
+            if (reEncrypted == user.MfaSecret) {
+                // Already encrypted with primary key — no change needed
+                continue;
+            }
+
+            user.MfaSecret = reEncrypted;
+            rotated++;
+        }
+
+        if (rotated > 0) {
+            await ctx.Complete();
+            _logRotateMfaSecretRotated(logger, rotated, null);
+        }
+
+        return rotated;
+    }
+
     public async Task<ICommandResponse> ValidateMultifactorAsync(ApplicationUser user, string multifactorCode, CancellationToken token) {
 
         ArgumentNullException.ThrowIfNull(user);
@@ -526,7 +597,8 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             }
 
             if (dbUser.MfaType == MultiFactorType.Totp) {
-                var (verified, message) = VerifyTwoFactorAuthentication(multifactorCode, dbUser.MfaSecret ?? "");
+                var decryptedSecret = MfaSecretEncryption.TryDecrypt(dbUser.MfaSecret, configuration.MfaTokenSecret, configuration.MfaTokenSecret2);
+                var (verified, message) = VerifyTwoFactorAuthentication(multifactorCode, decryptedSecret ?? "");
                 await timer.Wait();
 
                 if (verified) {
@@ -747,8 +819,10 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
         contextLock.WaitOne();
         try {
+#pragma warning disable CA1508 // Avoid deadlocks caused by async waits in locks
             // Double-check after acquiring the lock in case another thread initialized it
             context ??= await factory.CreateAsync(catalog);
+#pragma warning restore CA1508 // Avoid deadlocks caused by async waits in locks
         } finally {
             contextLock.Release();
         }

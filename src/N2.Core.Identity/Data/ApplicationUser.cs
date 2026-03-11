@@ -27,7 +27,7 @@ public class ApplicationUser : IdentityUser<Guid>, IIdentityUser
 
     public bool MfaConfirmed { get; set; }
 
-    [MaxLength(80)]
+    [MaxLength(128)]
     public string? MfaSecret { get; set; }
 }
 
