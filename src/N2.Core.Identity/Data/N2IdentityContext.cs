@@ -73,7 +73,7 @@ public class N2IdentityContext(
                 .Where(m => m.Name != null)
                 .Select(x => new KeyValuePair<string, string>(x.Id.ToString(), x.Name ?? string.Empty))
                 .ToListAsync(),
-        _ => throw new ArgumentOutOfRangeException(tableName, tableName, null)
+        _ => throw new ArgumentOutOfRangeException(nameof(tableName), "Unknown table name.")
     };
 
     public async Task<string> GetNameForUserAsync(Guid userId) {

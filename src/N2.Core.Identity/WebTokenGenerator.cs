@@ -44,14 +44,14 @@ public class WebTokenGenerator : IWebTokenGenerator {
             claims.Add(new(ClaimTypes.Email, userContext.Email));
         }
         if (!string.IsNullOrEmpty(userContext.PhoneNumber)) {
-            claims.Add(new(ClaimTypes.MobilePhone, userContext.Email));
+            claims.Add(new(ClaimTypes.MobilePhone, userContext.PhoneNumber));
         }
         foreach (var role in userContext.CurrentRoles()) {
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
 
-        if (timeoutInMinutes < 0) {
-            timeoutInMinutes = -1;
+        if (timeoutInMinutes < 1) {
+            timeoutInMinutes = 1;
         }
 
         if (timeoutInMinutes > 15) {

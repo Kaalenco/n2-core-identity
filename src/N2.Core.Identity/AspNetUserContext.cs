@@ -3,12 +3,14 @@ namespace N2.Core.Identity;
 public class AspNetUserContext : IUserContext
 {
     private readonly string[] roles;
+    private readonly bool isAuthenticated;
 
     public AspNetUserContext(IIdentityUser user, IList<string> roles)
     {
         this.roles = [.. roles];
         if (user != null)
         {
+            isAuthenticated = true;
             PublicId = user.Id;
             UserName = user.UserName ?? string.Empty;
             Description = user.DisplayName ?? user.Email ?? string.Empty;
@@ -30,7 +32,7 @@ public class AspNetUserContext : IUserContext
     public Guid PublicId { get; private set; }
     public string UserName { get; private set; }
 
-    public bool IsAuthenticated => roles.Length > 0;
+    public bool IsAuthenticated => isAuthenticated;
 
     public string Description { get; private set; }
     public string PhoneNumber { get; private set; }

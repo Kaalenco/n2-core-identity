@@ -18,16 +18,19 @@ public sealed class N2AuthenticationService : IAuthenticator {
         this.logger = logger;
     }
 
-    public async Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin) {
+    // IAuthenticator does not expose a CancellationToken parameter; use the overload below
+    // when calling the concrete type directly so the HTTP request token is honoured.
+    public Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin) =>
+        AuthenticateAsync(userLogin, CancellationToken.None);
+
+    public async Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(userLogin);
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Username);
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Password);
 
-        CancellationToken token = new();
-
         var timer = new TimeoutTimer(TimeForAuthenticationMs);
 
-        var userResponse = await userManager.FindByNameAsync(userLogin.Username, token);
+        var userResponse = await userManager.FindByNameAsync(userLogin.Username, cancellationToken);
         var user = userResponse.Value;
         ICommandResponse? result = null;
         if (user == null) {
@@ -36,7 +39,7 @@ public sealed class N2AuthenticationService : IAuthenticator {
             return null;
         }
 
-        result = await userManager.ValidateAsync(user, userLogin.Password, token);
+        result = await userManager.ValidateAsync(user, userLogin.Password, cancellationToken);
         if (result == null) {
             LoginAttempt(logger, userLogin.Username, unexpectedResult);
             await timer.Wait();
@@ -54,13 +57,13 @@ public sealed class N2AuthenticationService : IAuthenticator {
             return null;
         }
 
-        if (!await userManager.CanSignInAsync(user, token)) {
+        if (!await userManager.CanSignInAsync(user, cancellationToken)) {
             LoginAttempt(logger, userLogin.Username, userLockedOutException);
             await timer.Wait();
             return null;
         }
 
-        var roles = await userManager.GetRolesAsync(user, token);
+        var roles = await userManager.GetRolesAsync(user, cancellationToken);
         await timer.Wait();
 
         if (roles == null || roles.Value == null || roles.Value.Count == 0) {

@@ -47,7 +47,7 @@ public static class JwtExtensions {
                     ValidIssuer = issuer,
                     ValidAudience = audience,
                     IssuerSigningKey = symKey,
-                    ClockSkew = TimeSpan.FromMinutes(5) // Allow 5 minutes clock skew
+                    ClockSkew = TimeSpan.FromSeconds(30) // Allow 30 seconds clock skew
                 };
             });
         services.AddSingleton(authConfig);

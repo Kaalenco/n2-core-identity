@@ -32,6 +32,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
 #pragma warning disable CA2213 // Disposable fields should be disposed
     private readonly Semaphore lockObject = new(1, 1);
+    private readonly Semaphore contextLock = new(1, 1);
 #pragma warning restore CA2213 // Disposable fields should be disposed
 
     private readonly ILogger<N2UserManager> logger;
@@ -137,7 +138,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         user.NormalizedEmail = user.Email.ToUpperInvariant();
         user.EmailConfirmed = false;
         user.MfaSecret = secret;
-        user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(50));
+        user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         user.PasswordHash = passwordHasher.HashPassword(user, password);
         await ctx.AddApplicationUserAsync(user, token);
         (var code, var message) = await ctx.Complete();
@@ -328,7 +329,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         user.Email = email;
         user.NormalizedEmail = email.ToUpperInvariant();
         user.EmailConfirmed = false;
-        user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
+        user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
         (var status, var commitMessage) = await ctx.Complete();
         return status.IsSuccess()
@@ -351,7 +352,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         byte[]? qrCode = null;
         var userUri = string.Empty;
 
-        var code = new byte[10];
+        var code = new byte[20]; // 160 bits — meets NIST SP 800-63B Section 5.1.5 minimum
         rng.GetBytes(code);
         var rngCode = Convert.ToBase64String(code);
 
@@ -407,7 +408,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
         user.UserName = userName;
         user.NormalizedUserName = userName.ToUpperInvariant();
-        user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
+        user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
         (var status, var commitMessage) = await ctx.Complete();
         return status.IsSuccess()
@@ -557,7 +558,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
                         return new MultifactorResponse(ResponseStatus.Unauthorized, "Timeout.");
                     }
 
-                    var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{user.SecurityStamp}");
+                    var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{dbUser.SecurityStamp}");
                     var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
 
                     using var hmac = new HMACSHA256(keyBytes);
@@ -744,11 +745,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             return context;
         }
 
-        lockObject.WaitOne();
+        contextLock.WaitOne();
         try {
-            context = await factory.CreateAsync(catalog);
+            // Double-check after acquiring the lock in case another thread initialized it
+            context ??= await factory.CreateAsync(catalog);
         } finally {
-            lockObject.Release();
+            contextLock.Release();
         }
         return context;
     }

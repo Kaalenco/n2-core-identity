@@ -26,6 +26,16 @@ public sealed class AuthenticationConfig {
     public string TokenSigningSecret { get; set; } = string.Empty;
 
     /// <summary>
+    /// Secret key for MFA tokens in the user scope. MUST be at least 32 bytes (256 bits).
+    /// Generate using: Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+    /// Store in secure configuration (Azure Key Vault, AWS Secrets Manager, etc.)
+    /// </summary>
+    public string MfaTokenSecret { get; set; } = string.Empty;
+
+    // for key rotation, this is the "old" MFA token secret that can still validate tokens for a short grace period after rotation
+    public string MfaTokenSecret2 { get; set; } = string.Empty;
+
+    /// <summary>
     /// The settings for the JWT token.
     /// </summary>
     public JwtSettings JwtSettings { get; set; } = new();
