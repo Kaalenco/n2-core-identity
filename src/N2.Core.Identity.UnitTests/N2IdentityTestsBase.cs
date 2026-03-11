@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Services;
 
 namespace N2.Core.Identity.UnitTests;
 
@@ -18,6 +19,15 @@ public abstract class N2IdentityTestsBase {
     protected IAuthenticator GetAuthenticator() => ServiceProvider.GetRequiredService<IAuthenticator>();
     protected IUserManager<ApplicationUser> GetUserManager() => ServiceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
     protected AuthenticationConfig GetAuthenticationConfig() => ServiceProvider.GetAuthenticationConfig();
+
+    /// <summary>
+    /// Decrypts an <see cref="ApplicationUser.MfaSecret"/> value using the configured
+    /// <c>MfaTokenSecret</c> (with <c>MfaTokenSecret2</c> as fallback for key rollover).
+    /// </summary>
+    protected string? DecryptMfaSecret(string? encryptedSecret) {
+        var config = GetAuthenticationConfig();
+        return MfaSecretEncryption.TryDecrypt(encryptedSecret, config.MfaTokenSecret, config.MfaTokenSecret2);
+    }
     protected Task<IIdentityContext> GetIdentityContext() {
         var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
         return factory.CreateAsync();

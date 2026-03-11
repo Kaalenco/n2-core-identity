@@ -416,13 +416,15 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, role) = await SeedUserAndRoleAsync(context, userId, roleId);
         var userRole = new IdentityUserRole<Guid> { UserId = userId, RoleId = roleId };
         await context.AddIdentityUserRoleAsync(userRole, CancellationToken.None);
+        await context.Complete();
 
         try {
             var roles = await context.UserRolesAsync(userId);
-            Assert.IsTrue(roles.Any(r => r == role.Name));
+            Assert.Contains(r => r == role.Name, roles);
         } finally {
             await CleanupUserRoleAsync(context, user, role, userRole);
         }
+        await context.Complete();
     }
 
     [TestMethod]
@@ -555,7 +557,8 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             NormalizedUserName = uName.ToUpperInvariant(),
             Email = $"{uName}@test.com",
             NormalizedEmail = $"{uName}@test.com".ToUpperInvariant(),
-            SecurityStamp = Guid.NewGuid().ToString()
+            SecurityStamp = Guid.NewGuid().ToString(),
+            EmailConfirmed = true
         };
         var role = new ApplicationRole { Id = roleId, Name = rName, NormalizedName = rName.ToUpperInvariant() };
         await context.AddApplicationUserAsync(user, CancellationToken.None);

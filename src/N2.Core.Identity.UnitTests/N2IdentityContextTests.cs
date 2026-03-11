@@ -250,7 +250,7 @@ public class N2IdentityContextTests : N2IdentityTestsBase {
 
         var result = await context.FindByNameAsync("ADMIN", CancellationToken.None);
 
-        Assert.AreEqual(ResponseStatus.Accepted, result.Status);
+        Assert.AreEqual(ResponseStatus.Success, result.Status);
         Assert.IsNotNull(result.Value);
         Assert.AreEqual(AdminGuid, result.Value.Id);
     }

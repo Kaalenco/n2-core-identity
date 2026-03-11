@@ -15,7 +15,7 @@ public class ApplicationUserResponse : CommandResponse<ApplicationUser>
     {
         Value = value;
         Status = value != null
-            ? ResponseStatus.Accepted
+            ? ResponseStatus.Success
             : ResponseStatus.NotFound;
 
     }

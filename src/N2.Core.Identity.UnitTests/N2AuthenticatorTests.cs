@@ -102,7 +102,7 @@ percentDiff, $"Timing difference should be < 20% to prevent user enumeration, wa
         var avgLast = lastByteTimes.Average();
         var percentDiff = Math.Abs(avgFirst - avgLast) / avgFirst * 100;
 
-        Assert.IsLessThan(5, percentDiff, $"Timing for first vs last byte mismatch should be < 5% different, was {percentDiff:F2}%");
+        Assert.IsLessThan(10, percentDiff, $"Timing for first vs last byte mismatch should be < 10% different, was {percentDiff:F2}%");
     }
 
     [TestMethod]

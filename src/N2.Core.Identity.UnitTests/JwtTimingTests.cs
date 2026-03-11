@@ -91,31 +91,32 @@ public class JwtTimingTests : N2IdentityTestsBase {
     }
 
     [TestMethod]
-    public async Task ValidateToken_AfterExpiration_ShouldFail() {
-        // Arrange
-        var userContext = new Mock<IUserContext>();
-        userContext.SetupGet(m => m.Name).Returns("testuser");
-        userContext.SetupGet(m => m.PublicId).Returns(Guid.NewGuid());
+    public void ValidateToken_AfterExpiration_ShouldFail() {
+        // Arrange — build an already-expired token directly so the test is instant
+        // and independent of GenerateWebToken's minimum-timeout enforcement (1 minute).
         var authConfig = GetAuthenticationConfig();
-        var generator = new WebTokenGenerator(authConfig.JwtSettings);
+        var jwtSettings = authConfig.JwtSettings;
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        // Generate token with 1-second expiration
-        var tokenString = generator.GenerateWebToken(userContext.Object, -1); // -1 minutes = immediate expiration
+        var expiredToken = new JwtSecurityToken(
+            issuer: jwtSettings.Issuer,
+            audience: jwtSettings.Audience,
+            expires: DateTime.UtcNow.AddMinutes(-2), // expired 2 minutes ago
+            signingCredentials: credentials);
 
-        // Wait for token to expire
-        await Task.Delay(2000);
+        var tokenString = new JwtSecurityTokenHandler().WriteToken(expiredToken);
 
         // Act & Assert
-        var jwtSettings = authConfig.JwtSettings;
         var validationParameters = new TokenValidationParameters {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret)),
+            IssuerSigningKey = key,
             ValidateIssuer = true,
             ValidIssuer = jwtSettings.Issuer,
             ValidateAudience = true,
             ValidAudience = jwtSettings.Audience,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero // No clock skew tolerance
+            ClockSkew = TimeSpan.Zero
         };
 
         var handler = new JwtSecurityTokenHandler();

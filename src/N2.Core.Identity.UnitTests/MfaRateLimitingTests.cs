@@ -38,7 +38,7 @@ public class MfaRateLimitingTests : N2IdentityTestsBase {
         // Arrange
         var user = await CreateTestUser($"TestUser-{Guid.NewGuid}", "somePassword", MultiFactorType.Totp);
 
-        Totp otp = new(Convert.FromBase64String(user.MfaSecret ?? string.Empty));
+        Totp otp = new(Convert.FromBase64String(DecryptMfaSecret(user.MfaSecret) ?? string.Empty));
         var validCode = otp.ComputeTotp(DateTime.UtcNow);
         var userManager = GetUserManager();
 
@@ -122,7 +122,7 @@ public class MfaRateLimitingTests : N2IdentityTestsBase {
         userMgr.UpdateRateLimiter(user.Id, user.NormalizedUserName, DateTime.UtcNow.AddMinutes(-1));
 
         // Act - Should be able to attempt again
-        Totp otp = new(Convert.FromBase64String(user.MfaSecret ?? string.Empty));
+        Totp otp = new(Convert.FromBase64String(DecryptMfaSecret(user.MfaSecret) ?? string.Empty));
         var validCode = otp.ComputeTotp(DateTime.UtcNow);
         var result = await userManager.ValidateMultifactorAsync(user, validCode, CancellationToken.None);
 
@@ -137,7 +137,7 @@ public class MfaRateLimitingTests : N2IdentityTestsBase {
         var userManager = GetUserManager();
 
         // Generate token with short expiration
-        Totp otp = new(Convert.FromBase64String(user.MfaSecret ?? string.Empty));
+        Totp otp = new(Convert.FromBase64String(DecryptMfaSecret(user.MfaSecret) ?? string.Empty));
         var expiredToken = otp.ComputeTotp(DateTime.UtcNow.AddMinutes(-20));
         // Act
         var result = await userManager.ValidateMultifactorAsync(user, expiredToken, CancellationToken.None);
@@ -155,7 +155,7 @@ public class MfaRateLimitingTests : N2IdentityTestsBase {
         var userManager = GetUserManager();
 
         // Generate token with short expiration
-        Totp otp = new(Convert.FromBase64String(user.MfaSecret ?? string.Empty));
+        Totp otp = new(Convert.FromBase64String(DecryptMfaSecret(user.MfaSecret) ?? string.Empty));
         var expiredToken = otp.ComputeTotp(DateTime.UtcNow.AddMinutes(20));
         // Act
         var result = await userManager.ValidateMultifactorAsync(user, expiredToken, CancellationToken.None);
