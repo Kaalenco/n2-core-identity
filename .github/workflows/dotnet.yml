@@ -10,8 +10,9 @@ on:
     branches: [ "trunk" ]
 
 jobs:
+  # ── Build and Unit Tests ───────────────────────────────────────────────────────
   build:
-
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:

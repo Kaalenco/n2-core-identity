@@ -16,6 +16,20 @@
 
 AFL-3.0
 
+## Version History
+
+| Version | Changes |
+|---|---|
+| **1.5.1** | MySQL integration test CI pipeline: Docker Compose environment, `Dockerfile.integration`, and `TestCategory`-based filtering (`Integration.MySql` / `Integration.SqlServer`). `PendingModelChangesWarning` downgraded to a logged warning for MySQL contexts. |
+| **1.5.0** | Unit test infrastructure fixes. |
+| **1.4.6** | Security hardening: constant-time comparisons to prevent timing/user-enumeration attacks, account lockout, MFA rate limiting, TOTP support, PBKDF2 iterations raised to 310,000 (OWASP 2023). Multi-targeted net8.0 + net9.0. Provider-agnostic EF Core migrations with MySQL / Pomelo support. |
+| **1.4.5** | Authentication rework using a real database for integration testing. GitHub Actions CI workflow added. |
+| **1.1.0** | Package updates, code refactoring, removed stale code. |
+| **1.0.9** | Package version alignment. |
+| **1.0.6** | Minor fixes and package updates. |
+| **1.0.5** | Shortened API method names; test improvements. |
+| **1.0.3** | Initial release: `N2IdentityContext`, `N2UserManager`, `ApplicationUser`/`ApplicationRole`, SQL Server support, JWT authentication, email confirmation tokens. |
+
 ## Database Migrations
 
 ### How migrations work
