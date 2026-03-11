@@ -215,6 +215,7 @@ public class N2IdentityContext(
         }
 
         var roles = await base.UserRoles
+            .AsNoTracking()
             .Where(m => m.UserId == userId)
             .Join(base.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
             .ToArrayAsync();

@@ -352,7 +352,7 @@ public class N2IdentityContextIntegrationTests {
 
         try {
             var result = await context.FindByNameAsync(user.NormalizedUserName!, CancellationToken.None);
-            Assert.AreEqual(ResponseStatus.Success, result.Status);
+            Assert.AreEqual(ResponseStatus.Accepted, result.Status);
             Assert.IsNotNull(result.Value);
             Assert.AreEqual(user.Id, result.Value.Id);
         } finally {
@@ -499,10 +499,11 @@ public class N2IdentityContextIntegrationTests {
         var (user, role) = await SeedUserAndRoleAsync(context, userId, roleId);
         var userRole = new IdentityUserRole<Guid> { UserId = userId, RoleId = roleId };
         await context.AddIdentityUserRoleAsync(userRole, CancellationToken.None);
+        await context.Complete();
 
         try {
             var roles = await context.UserRolesAsync(userId);
-            Assert.IsTrue(roles.Any(r => r == role.Name));
+            Assert.Contains(r => r == role.Name, roles);
         } finally {
             await CleanupUserRoleAsync(context, user, role, userRole);
         }
@@ -657,6 +658,7 @@ public class N2IdentityContextIntegrationTests {
         var user = new ApplicationUser {
             Id = userId,
             UserName = uName,
+            EmailConfirmed = true,
             NormalizedUserName = uName.ToUpperInvariant(),
             Email = $"{uName}@test.com",
             NormalizedEmail = $"{uName}@test.com".ToUpperInvariant(),
