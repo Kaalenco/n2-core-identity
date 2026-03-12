@@ -18,6 +18,8 @@ internal static class TestContext {
     private static readonly Guid AdminGuid = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid SysAdminRoleGuid = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid PublisherRoleGuid = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    public static readonly Guid TenantGuid = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    public static readonly Guid LockedTenantGuid = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     public static void ConfigureServices(ServiceCollection serviceCollection) {
         ConfigurationBuilder config = new();
@@ -162,6 +164,31 @@ internal static class TestContext {
             RoleId = SysAdminRoleGuid
         });
 
+        // Add tenants for CanSignInTenantAsync tests
+        context.Tenants.Add(new ApplicationTenant {
+            Id = TenantGuid,
+            Name = "Test Tenant",
+            IsLocked = false
+        });
+        context.Tenants.Add(new ApplicationTenant {
+            Id = LockedTenantGuid,
+            Name = "Locked Tenant",
+            IsLocked = true
+        });
+
+        // Link admin user to the active tenant
+        context.UserTenants.Add(new ApplicationUserTenant {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = AdminGuid,
+            ApplicationTenantId = TenantGuid
+        });
+        // Link admin user to the locked tenant
+        context.UserTenants.Add(new ApplicationUserTenant {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = AdminGuid,
+            ApplicationTenantId = LockedTenantGuid
+        });
+
         context.SaveChanges();
     }
 }
@@ -290,6 +317,15 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         await semaphore.WaitAsync();
         try {
             return await innerContext.CanSignInAsync(userId);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<bool> CanSignInTenantAsync(Guid userId, Guid tenantId) {
+        await semaphore.WaitAsync();
+        try {
+            return await innerContext.CanSignInTenantAsync(userId, tenantId);
         } finally {
             semaphore.Release();
         }

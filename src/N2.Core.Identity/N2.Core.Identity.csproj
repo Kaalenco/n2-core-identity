@@ -33,6 +33,8 @@
       CA1819;
       CS1591;
       CA1812;
+      IDE0011;
+      IDE0022;
     </NoWarn>
   </PropertyGroup>
 

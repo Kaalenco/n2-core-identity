@@ -1,7 +1,9 @@
-﻿namespace N2.Core.Identity.Data;
+namespace N2.Core.Identity.Data;
 
 public enum TableNames
 {
-    AspNetUsers,
-    AspNetRoles,
+    None = 0,
+    AspNetUsers=1,
+    AspNetRoles=2,
+    Tenants=3,
 }

@@ -26,3 +26,22 @@ public class ApplicationUserResponse : CommandResponse<ApplicationUser>
         Value = value;
     }
 }
+
+public class ApplicationTenantResponse : CommandResponse<ApplicationTenant> {
+    public ApplicationTenantResponse() {
+        Status = ResponseStatus.Forbidden;
+    }
+
+    public ApplicationTenantResponse(ApplicationTenant? value) {
+        Value = value;
+        Status = value != null
+            ? ResponseStatus.Success
+            : ResponseStatus.NotFound;
+
+    }
+
+    public ApplicationTenantResponse(ApplicationTenant value, ResponseStatus responseStatus) {
+        Status = responseStatus;
+        Value = value;
+    }
+}

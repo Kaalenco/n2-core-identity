@@ -317,6 +317,53 @@ public class N2IdentityContextTests : N2IdentityTestsBase {
         Assert.IsFalse(canSignIn);
     }
 
+    [TestMethod]
+    public async Task CanSignInTenantAsync_ActiveUserInActiveTenant_ShouldReturnTrue() {
+        using var context = await GetIdentityContext();
+
+        var canSignIn = await context.CanSignInTenantAsync(AdminGuid, TestContext.TenantGuid);
+
+        Assert.IsTrue(canSignIn);
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_ActiveUserInLockedTenant_ShouldReturnFalse() {
+        using var context = await GetIdentityContext();
+
+        var canSignIn = await context.CanSignInTenantAsync(AdminGuid, TestContext.LockedTenantGuid);
+
+        Assert.IsFalse(canSignIn);
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_ActiveUserNotLinkedToTenant_ShouldReturnFalse() {
+        using var context = await GetIdentityContext();
+
+        var canSignIn = await context.CanSignInTenantAsync(AdminGuid, Guid.NewGuid());
+
+        Assert.IsFalse(canSignIn);
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_LockedOutUser_ShouldReturnFalse() {
+        using var context = await GetIdentityContext();
+        var lockedOutUser = await context.ApplicationUserAsync("LOCKEDOUT", CancellationToken.None);
+        Assert.IsNotNull(lockedOutUser, "Seeded locked-out user must exist.");
+
+        var canSignIn = await context.CanSignInTenantAsync(lockedOutUser.Id, TestContext.TenantGuid);
+
+        Assert.IsFalse(canSignIn);
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_UnknownUser_ShouldReturnFalse() {
+        using var context = await GetIdentityContext();
+
+        var canSignIn = await context.CanSignInTenantAsync(Guid.NewGuid(), TestContext.TenantGuid);
+
+        Assert.IsFalse(canSignIn);
+    }
+
     // -------------------------------------------------------------------------
     // Role membership queries
     // -------------------------------------------------------------------------

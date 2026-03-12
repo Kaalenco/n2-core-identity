@@ -406,6 +406,88 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         Assert.IsFalse(canSignIn);
     }
 
+    [TestMethod]
+    public async Task CanSignInTenantAsync_ActiveUserInActiveTenant_ShouldReturnTrue() {
+        using var context = await CreateAndPrepareAsync();
+        var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: false);
+
+        try {
+            var canSignIn = await context.CanSignInTenantAsync(user.Id, tenant.Id);
+            Assert.IsTrue(canSignIn);
+        } finally {
+            await CleanupUserTenantAsync(context, user, tenant, userTenant);
+        }
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_ActiveUserInLockedTenant_ShouldReturnFalse() {
+        using var context = await CreateAndPrepareAsync();
+        var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: true);
+
+        try {
+            var canSignIn = await context.CanSignInTenantAsync(user.Id, tenant.Id);
+            Assert.IsFalse(canSignIn);
+        } finally {
+            await CleanupUserTenantAsync(context, user, tenant, userTenant);
+        }
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_ActiveUserNotLinkedToTenant_ShouldReturnFalse() {
+        using var context = await CreateAndPrepareAsync();
+        var (user, _) = await SeedSingleUserAsync(context);
+
+        try {
+            var canSignIn = await context.CanSignInTenantAsync(user.Id, Guid.NewGuid());
+            Assert.IsFalse(canSignIn);
+        } finally {
+            context.RemoveApplicationUser(user);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_LockedOutUser_ShouldReturnFalse() {
+        using var context = await CreateAndPrepareAsync();
+        var userId = Guid.NewGuid();
+        var uniqueName = $"locked_{userId:N}";
+        var lockedUser = new ApplicationUser {
+            Id = userId,
+            UserName = uniqueName,
+            NormalizedUserName = uniqueName.ToUpperInvariant(),
+            Email = $"{uniqueName}@test.com",
+            NormalizedEmail = $"{uniqueName}@test.com".ToUpperInvariant(),
+            SecurityStamp = Guid.NewGuid().ToString(),
+            LockoutEnabled = true,
+            LockoutEnd = DateTimeOffset.UtcNow.AddDays(1)
+        };
+        await context.AddApplicationUserAsync(lockedUser, CancellationToken.None);
+        var tenant = new ApplicationTenant { Id = Guid.NewGuid(), Name = "T", IsLocked = false };
+        context.Tenants.Add(tenant);
+        var userTenant = new ApplicationUserTenant { Id = Guid.NewGuid(), ApplicationUserId = userId, ApplicationTenantId = tenant.Id };
+        context.UserTenants.Add(userTenant);
+        await context.Complete();
+
+        try {
+            var canSignIn = await context.CanSignInTenantAsync(userId, tenant.Id);
+            Assert.IsFalse(canSignIn);
+        } finally {
+            context.UserTenants.Remove(userTenant);
+            context.Tenants.Remove(tenant);
+            context.RemoveApplicationUser(lockedUser);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task CanSignInTenantAsync_UnknownUser_ShouldReturnFalse() {
+        using var context = await CreateAndPrepareAsync();
+
+        var canSignIn = await context.CanSignInTenantAsync(Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.IsFalse(canSignIn);
+    }
+
     // ── Role membership queries ───────────────────────────────────────────────
 
     [TestMethod]
@@ -564,6 +646,28 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.AddApplicationUserAsync(user, CancellationToken.None);
         await context.AddApplicationRoleAsync(role, CancellationToken.None);
         return (user, role);
+    }
+
+    private static async Task<(ApplicationUser user, ApplicationTenant tenant, ApplicationUserTenant userTenant)> SeedUserAndTenantAsync(
+        N2IdentityContext context, bool isLocked) {
+        var (user, _) = await SeedSingleUserAsync(context);
+        var tenant = new ApplicationTenant { Id = Guid.NewGuid(), Name = $"Tenant_{Guid.NewGuid():N}", IsLocked = isLocked };
+        context.Tenants.Add(tenant);
+        var userTenant = new ApplicationUserTenant { Id = Guid.NewGuid(), ApplicationUserId = user.Id, ApplicationTenantId = tenant.Id };
+        context.UserTenants.Add(userTenant);
+        await context.Complete();
+        return (user, tenant, userTenant);
+    }
+
+    private static async Task CleanupUserTenantAsync(
+        N2IdentityContext context,
+        ApplicationUser user,
+        ApplicationTenant tenant,
+        ApplicationUserTenant userTenant) {
+        context.UserTenants.Remove(userTenant);
+        context.Tenants.Remove(tenant);
+        context.RemoveApplicationUser(user);
+        await context.Complete();
     }
 
     private static async Task CleanupUserRoleAsync(

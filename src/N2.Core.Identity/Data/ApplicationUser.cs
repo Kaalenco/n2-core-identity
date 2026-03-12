@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace N2.Core.Identity.Data;
 
@@ -41,6 +42,40 @@ public class ApplicationRole : IdentityRole<Guid>, IIdentityRole
     public ApplicationRole(string roleName) : base(roleName)
     {
     }
+}
+
+public class  ApplicationTenant 
+{
+    [Key()]
+    public Guid Id { get; set; }
+    [MaxLength(100)]
+    public string? Name { get; set; }
+    [MaxLength(100)]
+    public string? NormalizedName { get; set; }
+    
+    [MaxLength(1000)]
+    public string? Address { get; set; }
+    [MaxLength(100)]
+    public string? AdminEmail { get; set; }
+    [MaxLength(100)]
+    public string? NormalizedEmail { get; set; }
+    [MaxLength(1000)]
+    public string? ContactInfo { get; set; }
+    [MaxLength(100)]
+    public string? ImagePath { get; set; }
+    public bool IsLocked { get; set; }
+    public bool IsRemoved { get; set; }
+    public bool IsHidden { get; set; }
+    public int UserLimit { get; set; }
+}
+
+public class ApplicationUserTenant {
+    [Key()]
+    public Guid Id { get; set; }
+    public virtual Guid ApplicationUserId { get; set; }
+    public virtual Guid ApplicationTenantId { get; set; }
+    public virtual ApplicationUser ApplicationUser { get; set; } = null!;
+    public virtual ApplicationTenant ApplicationTenant { get; set; } = null!;
 }
 
 public class ApplicationUserRole : IdentityUserRole<Guid>;

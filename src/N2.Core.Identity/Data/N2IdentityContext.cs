@@ -29,9 +29,16 @@ public class N2IdentityContext(
         }
     }
 
+    public DbSet<ApplicationTenant> Tenants { get; set; } = null!;
+    public DbSet<ApplicationUserTenant> UserTenants { get; set; } = null!;
+
+
+    public IQueryable<ApplicationTenant> ApplicationTenant => Tenants;
     public IQueryable<ApplicationUser> ApplicationUser => Users;
     public IQueryable<ApplicationRole> ApplicationRole => Roles;
     public IQueryable<IdentityUserRole<Guid>> IdentityUserRole => UserRoles;
+    public IQueryable<ApplicationUserTenant> ApplicationUserTenant => UserTenants;  
+
 
 #pragma warning disable CA1862
 
@@ -48,11 +55,20 @@ public class N2IdentityContext(
     public Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token)
         => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
 
+    public Task<ApplicationTenant?> FindTenantByIdAsync(Guid tenantId, CancellationToken token)
+        => Tenants.Where(t => t.Id == tenantId).FirstOrDefaultAsync(token);
+
     public Task<ApplicationUser?> ApplicationUserAsync(Guid userId, CancellationToken token)
         => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
 
+    public Task<ApplicationTenant?> ApplicationTenantAsync(string normalizedName, CancellationToken token)
+        => Tenants.Where(t => t.NormalizedName == normalizedName).FirstOrDefaultAsync(token);
+
     public Task<ApplicationUser?> FindByEmailAsync(string normalizedEmail, CancellationToken token)
         => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
+
+    public Task<ApplicationTenant?> FindTenantByEmailAsync(string normalizedEmail, CancellationToken token)
+        => Tenants.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> ApplicationUserByEmailAsync(string normalizedEmail, CancellationToken token)
         => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
@@ -73,6 +89,10 @@ public class N2IdentityContext(
                 .Where(m => m.Name != null)
                 .Select(x => new KeyValuePair<string, string>(x.Id.ToString(), x.Name ?? string.Empty))
                 .ToListAsync(),
+        nameof(TableNames.Tenants) => Tenants
+                .Where(m => m.Name != null)
+                .Select(x => new KeyValuePair<string, string>(x.Id.ToString(), x.Name ?? string.Empty))
+                .ToListAsync(),
         _ => throw new ArgumentOutOfRangeException(nameof(tableName), "Unknown table name.")
     };
 
@@ -82,6 +102,14 @@ public class N2IdentityContext(
             .Select(u => u.DisplayName ?? u.UserName ?? "???")
             .FirstOrDefaultAsync();
         return user ?? "Unknown";
+    }
+
+    public async Task<string> GetNameForTenantAsync(Guid tenantId) {
+        var tenant = await Tenants
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.Name ?? "???")
+            .FirstOrDefaultAsync();
+        return tenant ?? "Unknown";
     }
 
     public IQueryable<IChangeLog> ChangeLogs => logQueue.AsQueryable();
@@ -163,7 +191,7 @@ public class N2IdentityContext(
 
     public async Task<SelectItemList<UserSelectItem>> UsersAsync() {
         SelectItemList<UserSelectItem> result = new();
-        var users = await
+        var items = await
             base.Users
             .AsNoTracking()
             .Where(r => r.EmailConfirmed)
@@ -177,21 +205,50 @@ public class N2IdentityContext(
                 }
             })
             .ToArrayAsync();
-        if (users == null) {
+        if (items == null) {
             return result;
         }
 
-        foreach (var user in users) {
-            if (user == null) {
+        foreach (var item in items) {
+            if (item == null) {
                 continue;
             }
-            result.Add(new SelectItem<UserSelectItem> { Key = user.Key, Value = user.Value });
+            result.Add(new SelectItem<UserSelectItem> { Key = item.Key, Value = item.Value });
+        }
+        return result;
+    }
+
+    public async Task<SelectItemList<UserSelectItem>> TenantsAsync() {
+        SelectItemList<UserSelectItem> result = new();
+        var items = await
+            Tenants
+            .AsNoTracking()
+            .Where(r => !(r.IsRemoved || r.IsHidden))
+            .Select(m => new {
+                Key = m.Id,
+                Value = new UserSelectItem {
+                    Key = m.Id,
+                    ImagePath = m.ImagePath,
+                    DisplayName = m.Name + (m.IsLocked ? " (Locked)" : ""),
+                    Email = m.AdminEmail
+                }
+            })
+            .ToArrayAsync();
+        if (items == null) {
+            return result;
+        }
+
+        foreach (var item in items) {
+            if (item == null) {
+                continue;
+            }
+            result.Add(new SelectItem<UserSelectItem> { Key = item.Key, Value = item.Value });
         }
         return result;
     }
 
     public Task<bool> CanSignInAsync(Guid userId) {
-        return base.Users
+        return  base.Users
             .AsNoTracking()
             .Where(u => u.Id == userId &&
                 (
@@ -203,6 +260,66 @@ public class N2IdentityContext(
             )
             .Select(u => u.EmailConfirmed || u.PhoneNumberConfirmed || u.MfaType == MultiFactorType.None)
             .FirstOrDefaultAsync();
+    }
+
+    public async Task<bool> CanSignInTenantAsync(Guid userId, Guid tenantId) {
+        var userAllowed = await base.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId &&
+                (
+                    !u.LockoutEnabled ||
+                    (
+                        u.LockoutEnabled && (u.LockoutEnd == null || u.LockoutEnd < DateTime.UtcNow)
+                    )
+                )
+            )
+            .Select(u => u.EmailConfirmed || u.PhoneNumberConfirmed || u.MfaType == MultiFactorType.None)
+            .FirstOrDefaultAsync();
+        if (!userAllowed)
+            return false;
+
+        // check tenant lockout
+        var tenantAllowed = await UserTenants
+            .AsNoTracking()
+            .Where(ut => ut.ApplicationUserId == userId && ut.ApplicationTenantId == tenantId)
+            .Join(Tenants, ut => ut.ApplicationTenantId, t => t.Id, (ut, t) => t)
+            .Select(t => new { t.Id, t.IsLocked })
+            .FirstOrDefaultAsync();
+        if (tenantAllowed == null) {
+            return false;
+        }
+        if (tenantAllowed.IsLocked) {
+            return false;
+        }
+        return true;
+    }
+
+    public async Task<IEnumerable<string>> TenantUsersAsync(Guid tenantId) {
+        var tenant = await Tenants
+            .AsNoTracking()
+            .Where(m => !(m.IsLocked || m.IsRemoved) && m.Id == tenantId)
+            .FirstOrDefaultAsync();
+        if (tenant == null) {
+            return Enumerable.Empty<string>();
+        }
+
+        var users = await UserTenants
+            .AsNoTracking()
+            .Where(m => m.ApplicationTenantId == tenantId)
+            .Join(base.Users, ut => ut.ApplicationUserId, r => r.Id, (ut, r) => r.UserName)
+            .ToArrayAsync();
+        if (users == null) {
+            return Enumerable.Empty<string>();
+        }
+
+        List<string> result = new();
+        foreach (var user in users) {
+            if (user == null) {
+                continue;
+            }
+            result.Add(user);
+        }
+        return result;
     }
 
     public async Task<IEnumerable<string>> UserRolesAsync(Guid userId) {
@@ -233,11 +350,27 @@ public class N2IdentityContext(
         return result;
     }
 
+    public void RemoveApplicationTenant(ApplicationTenant tenant) => Tenants.Remove(tenant);
+
     public void RemoveApplicationUser(ApplicationUser user) => base.Users.Remove(user);
 
     public void RemoveApplicationRole(ApplicationRole role) => base.Roles.Remove(role);
 
     public void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole) => base.UserRoles.Remove(identityRole);
+
+    public async Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token) {
+        try {
+            if (tenant == null) return -1;
+            tenant.NormalizedEmail = tenant.AdminEmail?.ToUpperInvariant();
+            tenant.NormalizedName = tenant.Name?.ToUpperInvariant();
+            var result = await Tenants.AddAsync(tenant, token);
+            var count = await base.SaveChangesAsync(token);
+            return count;
+        } catch (System.InvalidOperationException e) {
+            N2IdentityContextLoggingExtensions.LogAddApplicationUserFailed(logger, e.Message, e);
+            return -1;
+        }
+    }
 
     public async Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token) {
         try {
@@ -248,7 +381,6 @@ public class N2IdentityContext(
             N2IdentityContextLoggingExtensions.LogAddApplicationUserFailed(logger, e.Message, e);
             return -1;
         }
-
     }
 
     public async Task<int> AddApplicationRoleAsync(ApplicationRole role, CancellationToken token) {
@@ -273,6 +405,17 @@ public class N2IdentityContext(
         }
     }
 
+    public async Task<int> AddIdentityUserTenantAsync(ApplicationUserTenant identityUserTenant, CancellationToken token) {
+        try {
+            await UserTenants.AddAsync(identityUserTenant, token);
+            var count = await base.SaveChangesAsync(token);
+            return count;
+        } catch (System.InvalidOperationException e) {
+            N2IdentityContextLoggingExtensions.LogAddIdentityUserTenantFailed(logger, e.Message, e);
+            return -1;
+        }
+    }
+
     // Update the Health method to use the LoggerMessage delegate
     public DataContextHealthStatus Health() {
         string? dbName = null;
@@ -288,8 +431,4 @@ public class N2IdentityContext(
         }
 #pragma warning restore CA1031 // Do not catch general exception types
     }
-
-
-
-
 }
