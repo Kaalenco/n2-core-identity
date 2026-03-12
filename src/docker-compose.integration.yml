@@ -37,6 +37,7 @@ services:
       # Double-underscore maps to ':' in .NET configuration, so this populates
       # ConnectionStrings:UserDbMySqlTest which the integration tests read.
       ConnectionStrings__UserDbMySqlTest: "Server=mysql;Port=3306;Database=identitytest;User=testuser;Password=testpass;Version=8.0.0;"
+      Logging__LogLevel__Default: Error
     volumes:
       - ./test-results:/TestResults
     depends_on:

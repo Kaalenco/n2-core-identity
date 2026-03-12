@@ -67,7 +67,8 @@ public class N2AuthenticatorTests : N2IdentityTestsBase {
         var percentDiff = Math.Abs(avgValid - avgInvalid) / avgValid * 100;
 
         Assert.IsLessThan(20,
-percentDiff, $"Timing difference should be < 20% to prevent user enumeration, was {percentDiff:F2}%");
+            percentDiff,
+            $"Timing difference should be < 20% to prevent user enumeration, was {percentDiff:F2}%");
     }
 
     [TestMethod]

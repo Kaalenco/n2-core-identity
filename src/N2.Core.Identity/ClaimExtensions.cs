@@ -8,7 +8,7 @@ public static class ClaimExtensions {
         if (lValue == null || rValue == null) {
             return false;
         }
-        var timer = new TimeoutTimer(10);
+        var timer = new TimeoutTimer(20);
         var len = Math.Max(lValue.Length, rValue.Length);
         var a1 = new byte[len];
         var a2 = new byte[len];

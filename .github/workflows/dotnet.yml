@@ -38,6 +38,9 @@ jobs:
     - name: Build
       run: dotnet build src --no-restore
     - name: Test
+      env:
+        # Limit test output logs to show only errors
+        Logging__LogLevel__Default: Error
       run: dotnet test src --no-build --verbosity normal --filter "TestCategory!=Integration"
 
     - name: Upload unit test results

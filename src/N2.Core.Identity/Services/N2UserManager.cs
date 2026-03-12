@@ -20,7 +20,14 @@ using System.Security.Cryptography;
 namespace N2.Core.Identity.Services;
 
 public class N2UserManager : IUserManager<ApplicationUser> {
-    private const int TimeForAuthenticationMs = 50;
+
+    // This is the amount of time we want to take for the authentication process, regardless of success or failure,
+    // to mitigate timing attacks for user enumeration and password guessing.
+    // It should not be too long to cause a poor user experience, but long enough to make brute-force attacks less feasible.
+    // 500ms is a common choice for this kind of delay, but it can be adjusted based on the expected load
+    // and security requirements of the application. A value of 200 is too short and may not provide sufficient protection,
+    // while a value of 1000 may be unnecessarily long for users with valid credentials.
+    private const int TimeForAuthenticationMs = 500;
 
     private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
 
