@@ -50,9 +50,6 @@ jobs:
         name: unit-test-results
         path: src/TestResults/*.trx
 
-    - name: Publish
-      run: dotnet nuget push **/*.nupkg --api-key ${{ secrets.PACKAGE_N2 }} --source https://api.nuget.org/v3/index.json
-
   # ── Integration Tests (MySQL via Docker Compose) ────────────────────────────
   integration-tests-mysql:
     name: Integration Tests — MySQL
@@ -86,3 +83,32 @@ jobs:
     - name: Tear down MySQL
       if: always()
       run: docker compose -f src/docker-compose.integration.yml down --volumes
+
+  # ── Publish NuGet Package ────────────────────────────────────────────────────
+  publish:
+    name: Publish NuGet Package
+    runs-on: ubuntu-latest
+    needs: integration-tests-mysql
+    if: github.event_name == 'push'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Setup .NET 10.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore src
+
+    - name: Build (Release)
+      run: dotnet build src --no-restore --configuration Release
+
+    - name: Publish
+      run: dotnet nuget push **/*.nupkg --api-key ${{ secrets.PACKAGE_N2 }} --source https://api.nuget.org/v3/index.json
