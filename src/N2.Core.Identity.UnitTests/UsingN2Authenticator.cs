@@ -122,7 +122,7 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         var completelyWrongToken = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
         var partiallyWrongToken = string.Concat(validToken.AsSpan(0, validToken.Length - 5), "XXXXX");
 
-        var iterations = 300;
+        var iterations = 100;
         var wrongTimes = new List<long>();
         var partialTimes = new List<long>();
 

@@ -249,9 +249,11 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         };
 
         var count = await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var updates = await context.Complete();
 
         try {
-            Assert.IsTrue(count > 0);
+            Assert.AreEqual(ResponseStatus.Success, updates.status);
+            Assert.IsGreaterThan(0, count);
             var retrieved = await context.ApplicationTenantAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(uniqueName, retrieved.Name);
@@ -440,8 +442,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var uniqueName = $"LookupTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
         await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var updates = await context.Complete();
 
         try {
+            Assert.AreEqual(ResponseStatus.Success, updates.status);
             var retrieved = await context.ApplicationTenantAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(uniqueName, retrieved.Name);

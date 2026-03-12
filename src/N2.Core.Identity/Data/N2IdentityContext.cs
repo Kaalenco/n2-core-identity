@@ -362,6 +362,9 @@ public class N2IdentityContext(
     public async Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token) {
         try {
             if (tenant == null) return -1;
+            tenant.NormalizedName = (tenant.Name ?? "").Trim().ToUpperInvariant();
+            tenant.NormalizedEmail = (tenant.AdminEmail ??"").Trim().ToUpperInvariant();
+
             var result = await Tenants.AddAsync(tenant, token);
             var count = await base.SaveChangesAsync(token);
             return count;

@@ -92,8 +92,8 @@ type-agnostic snapshots automatically.
 > **To eliminate the warning entirely**, regenerate the migration after the
 > `AgnosticAnnotationCodeGenerator` is in place:
 > ```powershell
-> dotnet ef migrations remove --force --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext
-> dotnet ef migrations add <MigrationName> --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext
+> dotnet ef migrations remove --force --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext --framework net10.0
+> dotnet ef migrations add <MigrationName> --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext --framework net10.0
 > ```
 > The new Designer file and snapshot will have no `HasColumnType()` calls, and
 > the warning will no longer appear.
