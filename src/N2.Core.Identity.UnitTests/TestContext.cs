@@ -164,15 +164,19 @@ internal static class TestContext {
             RoleId = SysAdminRoleGuid
         });
 
-        // Add tenants for CanSignInTenantAsync tests
+        // Add tenants for tenant tests
         context.Tenants.Add(new ApplicationTenant {
             Id = TenantGuid,
             Name = "Test Tenant",
+            NormalizedName = "TEST TENANT",
+            AdminEmail = "admin@testtenant.com",
+            NormalizedEmail = "ADMIN@TESTTENANT.COM",
             IsLocked = false
         });
         context.Tenants.Add(new ApplicationTenant {
             Id = LockedTenantGuid,
             Name = "Locked Tenant",
+            NormalizedName = "LOCKED TENANT",
             IsLocked = true
         });
 
@@ -304,10 +308,28 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
+    public async Task<SelectItemList<UserSelectItem>> TenantsAsync() {
+        await semaphore.WaitAsync();
+        try {
+            return await innerContext.TenantsAsync();
+        } finally {
+            semaphore.Release();
+        }
+    }
+
     public async Task<string> GetNameForUserAsync(Guid userId) {
         await semaphore.WaitAsync();
         try {
             return await innerContext.GetNameForUserAsync(userId);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<string> GetNameForTenantAsync(Guid tenantId) {
+        await semaphore.WaitAsync();
+        try {
+            return await innerContext.GetNameForTenantAsync(tenantId);
         } finally {
             semaphore.Release();
         }
@@ -326,6 +348,15 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         await semaphore.WaitAsync();
         try {
             return await innerContext.CanSignInTenantAsync(userId, tenantId);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public void RemoveApplicationTenant(ApplicationTenant tenant) {
+        semaphore.Wait();
+        try {
+            innerContext.RemoveApplicationTenant(tenant);
         } finally {
             semaphore.Release();
         }
@@ -358,6 +389,24 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
+    public void RemoveApplicationUserTenant(ApplicationUserTenant userTenant) {
+        semaphore.Wait();
+        try {
+            innerContext.RemoveApplicationUserTenant(userTenant);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.AddApplicationTenantAsync(tenant, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
     public async Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token) {
         await semaphore.WaitAsync(token);
         try {
@@ -380,6 +429,15 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         await semaphore.WaitAsync(token);
         try {
             return await innerContext.AddIdentityUserRoleAsync(identityRole, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<int> AddIdentityUserTenantAsync(ApplicationUserTenant identityUserTenant, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.AddIdentityUserTenantAsync(identityUserTenant, token);
         } finally {
             semaphore.Release();
         }
@@ -421,6 +479,33 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
+    public async Task<ApplicationTenant?> ApplicationTenantAsync(string normalizedName, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.ApplicationTenantAsync(normalizedName, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<ApplicationTenant?> FindTenantByIdAsync(Guid tenantId, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.FindTenantByIdAsync(tenantId, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<ApplicationTenant?> FindTenantByEmailAsync(string normalizedEmail, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.FindTenantByEmailAsync(normalizedEmail, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
     public async Task<IdentityUserRole<Guid>?> IdentityUserRoleAsync(Guid userId, Guid roleId, CancellationToken token) {
         await semaphore.WaitAsync(token);
         try {
@@ -434,6 +519,15 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         await semaphore.WaitAsync();
         try {
             return await innerContext.UserRolesAsync(userId);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<IEnumerable<string>> TenantUsersAsync(Guid tenantId) {
+        await semaphore.WaitAsync();
+        try {
+            return await innerContext.TenantUsersAsync(tenantId);
         } finally {
             semaphore.Release();
         }

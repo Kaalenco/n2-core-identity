@@ -36,6 +36,8 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole);
 
+    void RemoveApplicationUserTenant(ApplicationUserTenant userTenant);
+
     Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token);
     Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token);
 

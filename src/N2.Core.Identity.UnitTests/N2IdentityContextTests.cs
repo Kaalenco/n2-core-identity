@@ -201,6 +201,80 @@ public class N2IdentityContextTests : N2IdentityTestsBase {
     }
 
     // -------------------------------------------------------------------------
+    // Tenant persistence
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task AddApplicationTenantAsync_NewTenant_ShouldPersistAndBeRetrievable() {
+        using var context = await GetIdentityContext();
+        var tenant = new ApplicationTenant {
+            Id = Guid.NewGuid(),
+            Name = "NewTenant_ctx",
+            AdminEmail = "new@tenant.com"
+        };
+
+        var count = await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+
+        Assert.IsTrue(count > 0);
+        var retrieved = await context.ApplicationTenantAsync("NEWTENANT_CTX", CancellationToken.None);
+        Assert.IsNotNull(retrieved);
+        Assert.AreEqual("NewTenant_ctx", retrieved.Name);
+    }
+
+    [TestMethod]
+    public async Task RemoveApplicationTenant_ExistingTenant_ShouldNotBeRetrievableAfterComplete() {
+        using var context = await GetIdentityContext();
+        var tenant = new ApplicationTenant {
+            Id = Guid.NewGuid(),
+            Name = "ToRemove_tenant",
+            AdminEmail = "remove@tenant.com"
+        };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+
+        context.RemoveApplicationTenant(tenant);
+        var (status, _) = await context.Complete();
+
+        Assert.AreEqual(ResponseStatus.Success, status);
+        var retrieved = await context.ApplicationTenantAsync("TOREMOVE_TENANT", CancellationToken.None);
+        Assert.IsNull(retrieved);
+    }
+
+    // -------------------------------------------------------------------------
+    // User-tenant assignment
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task AddIdentityUserTenantAsync_ShouldPersistAndBeRetrievable() {
+        using var context = await GetIdentityContext();
+        var userId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+
+        var user = new ApplicationUser {
+            Id = userId,
+            UserName = "tenant_assign_user",
+            NormalizedUserName = "TENANT_ASSIGN_USER",
+            Email = "tenant_assign@test.com",
+            NormalizedEmail = "TENANT_ASSIGN@TEST.COM",
+            SecurityStamp = Guid.NewGuid().ToString(),
+            EmailConfirmed = true
+        };
+        var tenant = new ApplicationTenant {
+            Id = tenantId,
+            Name = "TenantAssignTest",
+            AdminEmail = "assign@tenant.com"
+        };
+        await context.AddApplicationUserAsync(user, CancellationToken.None);
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+
+        var userTenant = new ApplicationUserTenant { Id = Guid.NewGuid(), ApplicationUserId = userId, ApplicationTenantId = tenantId };
+        var count = await context.AddIdentityUserTenantAsync(userTenant, CancellationToken.None);
+
+        Assert.IsTrue(count > 0);
+        var canSignIn = await context.CanSignInTenantAsync(userId, tenantId);
+        Assert.IsTrue(canSignIn, "User should be able to sign in after being linked to the tenant.");
+    }
+
+    // -------------------------------------------------------------------------
     // Lookup queries on seeded data
     // -------------------------------------------------------------------------
 
@@ -242,6 +316,45 @@ public class N2IdentityContextTests : N2IdentityTestsBase {
 
         Assert.IsNotNull(role);
         Assert.AreEqual("SysAdmin", role.Name);
+    }
+
+    [TestMethod]
+    public async Task ApplicationTenantAsync_ByNormalizedName_SeededTenant_ShouldReturn() {
+        using var context = await GetIdentityContext();
+
+        var tenant = await context.ApplicationTenantAsync("TEST TENANT", CancellationToken.None);
+
+        Assert.IsNotNull(tenant);
+        Assert.AreEqual("Test Tenant", tenant.Name);
+    }
+
+    [TestMethod]
+    public async Task FindTenantByIdAsync_SeededTenant_ShouldReturn() {
+        using var context = await GetIdentityContext();
+
+        var tenant = await context.FindTenantByIdAsync(TestContext.TenantGuid, CancellationToken.None);
+
+        Assert.IsNotNull(tenant);
+        Assert.AreEqual(TestContext.TenantGuid, tenant.Id);
+    }
+
+    [TestMethod]
+    public async Task FindTenantByEmailAsync_SeededTenant_ShouldReturn() {
+        using var context = await GetIdentityContext();
+
+        var tenant = await context.FindTenantByEmailAsync("ADMIN@TESTTENANT.COM", CancellationToken.None);
+
+        Assert.IsNotNull(tenant);
+        Assert.AreEqual(TestContext.TenantGuid, tenant.Id);
+    }
+
+    [TestMethod]
+    public async Task FindTenantByIdAsync_UnknownTenant_ShouldReturnNull() {
+        using var context = await GetIdentityContext();
+
+        var tenant = await context.FindTenantByIdAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsNull(tenant);
     }
 
     [TestMethod]
@@ -409,6 +522,24 @@ public class N2IdentityContextTests : N2IdentityTestsBase {
         Assert.IsFalse(string.IsNullOrWhiteSpace(name));
     }
 
+    [TestMethod]
+    public async Task GetNameForTenantAsync_SeededTenant_ShouldReturnNonEmptyName() {
+        using var context = await GetIdentityContext();
+
+        var name = await context.GetNameForTenantAsync(TestContext.TenantGuid);
+
+        Assert.IsFalse(string.IsNullOrWhiteSpace(name));
+    }
+
+    [TestMethod]
+    public async Task GetNameForTenantAsync_UnknownTenant_ShouldReturnUnknown() {
+        using var context = await GetIdentityContext();
+
+        var name = await context.GetNameForTenantAsync(Guid.NewGuid());
+
+        Assert.AreEqual("Unknown", name);
+    }
+
     // -------------------------------------------------------------------------
     // Select-list helpers
     // -------------------------------------------------------------------------
@@ -431,6 +562,53 @@ public class N2IdentityContextTests : N2IdentityTestsBase {
 
         Assert.IsNotNull(users);
         Assert.IsTrue(users.Any(), "At least the seeded users should be present.");
+    }
+
+    [TestMethod]
+    public async Task TenantsAsync_ShouldReturnSeededTenants() {
+        using var context = await GetIdentityContext();
+
+        var tenants = await context.TenantsAsync();
+
+        Assert.IsNotNull(tenants);
+        Assert.IsTrue(tenants.Any(), "At least the seeded tenant should be present.");
+    }
+
+    // -------------------------------------------------------------------------
+    // Tenant membership queries
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task TenantUsersAsync_SeededTenantWithAdmin_ShouldContainUser() {
+        using var context = await GetIdentityContext();
+
+        var users = await context.TenantUsersAsync(TestContext.TenantGuid);
+
+        Assert.IsTrue(users.Any(u => u == "admin"), "Admin should be listed as a user of the seeded tenant.");
+    }
+
+    [TestMethod]
+    public async Task TenantUsersAsync_TenantWithNoUsers_ShouldReturnEmpty() {
+        using var context = await GetIdentityContext();
+        var tenant = new ApplicationTenant {
+            Id = Guid.NewGuid(),
+            Name = "EmptyTenant_ctx",
+            AdminEmail = "empty@tenant.com"
+        };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+
+        var users = await context.TenantUsersAsync(tenant.Id);
+
+        Assert.IsFalse(users.Any());
+    }
+
+    [TestMethod]
+    public async Task TenantUsersAsync_UnknownTenant_ShouldReturnEmpty() {
+        using var context = await GetIdentityContext();
+
+        var users = await context.TenantUsersAsync(Guid.NewGuid());
+
+        Assert.IsFalse(users.Any());
     }
 
     // -------------------------------------------------------------------------

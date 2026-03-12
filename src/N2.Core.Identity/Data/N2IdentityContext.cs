@@ -358,11 +358,11 @@ public class N2IdentityContext(
 
     public void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole) => base.UserRoles.Remove(identityRole);
 
+    public void RemoveApplicationUserTenant(ApplicationUserTenant userTenant) => UserTenants.Remove(userTenant);
+
     public async Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token) {
         try {
             if (tenant == null) return -1;
-            tenant.NormalizedEmail = tenant.AdminEmail?.ToUpperInvariant();
-            tenant.NormalizedName = tenant.Name?.ToUpperInvariant();
             var result = await Tenants.AddAsync(tenant, token);
             var count = await base.SaveChangesAsync(token);
             return count;
