@@ -14,25 +14,36 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     Task<SelectItemList<UserSelectItem>> UsersAsync();
 
+    Task<SelectItemList<UserSelectItem>> TenantsAsync();
+
     Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string normalizedName, CancellationToken token);
     Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token);
+    Task<ApplicationTenant?> FindTenantByIdAsync(Guid tenantId, CancellationToken token);
+    Task<ApplicationTenant?> FindTenantByEmailAsync(string normalizedEmail, CancellationToken token);
     Task<ApplicationUser?> FindByEmailAsync(string normalizedEmail, CancellationToken token);
 
     Task<string> GetNameForUserAsync(Guid userId);
+    Task<string> GetNameForTenantAsync(Guid tenantId);
 
     Task<bool> CanSignInAsync(Guid userId);
 
+    Task<bool> CanSignInTenantAsync(Guid userId, Guid tenantId);
+
+    void RemoveApplicationTenant(ApplicationTenant tenant);
     void RemoveApplicationUser(ApplicationUser user);
 
     void RemoveApplicationRole(ApplicationRole role);
 
     void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole);
 
+    Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token);
     Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token);
 
     Task<int> AddApplicationRoleAsync(ApplicationRole role, CancellationToken token);
 
     Task<int> AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token);
+
+    Task<int> AddIdentityUserTenantAsync(ApplicationUserTenant identityUserTenant, CancellationToken token);
 
     Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token);
 
@@ -42,6 +53,8 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     Task<ApplicationRole?> ApplicationRoleAsync(string normalizedName, CancellationToken token);
 
+    Task<ApplicationTenant?> ApplicationTenantAsync(string normalizedName, CancellationToken token);
+
     Task<IdentityUserRole<Guid>?> IdentityUserRoleAsync(Guid userId, Guid roleId, CancellationToken token);
 
     IQueryable<ApplicationUser> ApplicationUser { get; }
@@ -49,7 +62,7 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
     IQueryable<IdentityUserRole<Guid>> IdentityUserRole { get; }
 
     Task<IEnumerable<string>> UserRolesAsync(Guid userId);
-
+    Task<IEnumerable<string>> TenantUsersAsync(Guid tenantId);
 
 }
 
