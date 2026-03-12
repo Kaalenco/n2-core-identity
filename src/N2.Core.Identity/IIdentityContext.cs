@@ -62,6 +62,7 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
     IQueryable<ApplicationUser> ApplicationUser { get; }
     IQueryable<ApplicationRole> ApplicationRole { get; }
     IQueryable<IdentityUserRole<Guid>> IdentityUserRole { get; }
+    IQueryable<ApplicationUserTenant> ApplicationUserTenant { get; }
 
     Task<IEnumerable<string>> UserRolesAsync(Guid userId);
     Task<IEnumerable<string>> TenantUsersAsync(Guid tenantId);

@@ -104,6 +104,14 @@ internal static class TestContext {
             return new N2UserManager(factory, config, rateLimiter, hasher, "IdentityDb", logger);
         });
 
+        // Register tenant manager
+        serviceCollection.AddScoped<ITenantManager>((s) => {
+            var logger = s.GetRequiredService<ILogger<N2TenantManager>>();
+            var config = s.GetRequiredService<IConfiguration>();
+            var factory = s.GetRequiredService<IIdentityContextFactory>();
+            return new N2TenantManager(factory, config, "IdentityDb", logger);
+        });
+
         serviceCollection.AddScoped<IAuthenticator, N2AuthenticationService>();
 
         // Seed the database with test data
@@ -247,6 +255,7 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
     public IQueryable<ApplicationUser> ApplicationUser => innerContext.ApplicationUser;
     public IQueryable<ApplicationRole> ApplicationRole => innerContext.ApplicationRole;
     public IQueryable<IdentityUserRole<Guid>> IdentityUserRole => innerContext.IdentityUserRole;
+    public IQueryable<ApplicationUserTenant> ApplicationUserTenant => innerContext.ApplicationUserTenant;
     public IQueryable<IChangeLog> ChangeLogs => innerContext.ChangeLogs;
 
     public int MaxLogSize {

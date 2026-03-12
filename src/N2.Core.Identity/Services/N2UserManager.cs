@@ -21,6 +21,11 @@ namespace N2.Core.Identity.Services;
 
 public class N2UserManager : IUserManager<ApplicationUser> {
 
+    /// <summary>
+    /// A divisor for converting ticks to seconds
+    /// </summary>
+    private const long TicksToSeconds = 10000000L;
+
     // This is the amount of time we want to take for the authentication process, regardless of success or failure,
     // to mitigate timing attacks for user enumeration and password guessing.
     // It should not be too long to cause a poor user experience, but long enough to make brute-force attacks less feasible.
@@ -29,7 +34,10 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     // while a value of 1000 may be unnecessarily long for users with valid credentials.
     private const int TimeForAuthenticationMs = 500;
 
-    private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
+    /// <summary>
+    /// The number of ticks as Measured at Midnight Jan 1st 1970;
+    /// </summary>
+    private const long UnicEpocTicks = 621355968000000000L;
 
     private static readonly Action<ILogger, Guid, Exception?> _logRotateMfaSecretDecryptionFailed =
         LoggerMessage.Define<Guid>(
@@ -43,15 +51,18 @@ public class N2UserManager : IUserManager<ApplicationUser> {
             new EventId(1002, nameof(RotateMfaSecretsAsync)),
             "\"RotateMfaSecretsAsync: re-encrypted {Count} MfaSecret(s).\"");
 
-    private readonly string catalog;
-
+    private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
     private readonly AuthenticationConfig configuration;
 
+    /// <summary>
+    /// Gets the name of the database connection used for establishing connections.
+    /// </summary>
+    private readonly string connectionName;
+#pragma warning disable CA2213 // Disposable fields should be disposed
+    private readonly Semaphore contextLock = new(1, 1);
     private readonly IIdentityContextFactory factory;
 
-#pragma warning disable CA2213 // Disposable fields should be disposed
     private readonly Semaphore lockObject = new(1, 1);
-    private readonly Semaphore contextLock = new(1, 1);
 #pragma warning restore CA2213 // Disposable fields should be disposed
 
     private readonly ILogger<N2UserManager> logger;
@@ -72,10 +83,10 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         IConfiguration configuration,
         IRateLimiter rateLimiter,
         IPasswordHasher<ApplicationUser> passwordHasher,
-        string catalog,
+        string connectionName,
         ILogger<N2UserManager> logger) {
         this.factory = identityContextFactory;
-        this.catalog = catalog;
+        this.connectionName = connectionName;
         this.logger = logger;
         this.rateLimiter = rateLimiter;
         this.passwordHasher = passwordHasher;
@@ -102,7 +113,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
         using var ctx = await InitializeContextAsync();
-        var normalizedName = role.ToUpperInvariant();
+        var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem == null) {
             return new RequestResult(ResponseStatus.NotAcceptable, $"Role '{role}' does not exist");
@@ -153,8 +164,8 @@ public class N2UserManager : IUserManager<ApplicationUser> {
 
         var randomBytes = RandomNumberGenerator.GetBytes(32);
         var secret = Convert.ToBase64String(randomBytes);
-        user.NormalizedUserName = user.UserName.ToUpperInvariant();
-        user.NormalizedEmail = user.Email.ToUpperInvariant();
+        user.NormalizedUserName = user.UserName.Trim().ToUpperInvariant();
+        user.NormalizedEmail = user.Email.Trim().ToUpperInvariant();
         user.EmailConfirmed = false;
         user.MfaSecret = MfaSecretEncryption.Encrypt(secret, configuration.MfaTokenSecret);
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
@@ -167,7 +178,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse> CreateRoleAsync(string role, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(role);
         using var ctx = await InitializeContextAsync();
-        var normalizedName = role.ToUpperInvariant();
+        var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem != null) {
             return new RequestResult(406, "Already exists");
@@ -187,6 +198,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         ctx.RemoveApplicationUser(user);
         (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
+    }
+
+    public void Dispose() {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 
     public async Task<ICommandResponse<ApplicationUser>> FindByEmailAsync(string emailAddress, CancellationToken token) {
@@ -272,7 +289,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse<Guid>> GetUserIdAsync(ApplicationUser user, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         using var ctx = await InitializeContextAsync();
-        var normalizedName = user.UserName ?? "".ToUpperInvariant();
+        var normalizedName = (user.UserName ?? "").Trim().ToUpperInvariant();
         var userRecord = await ctx.ApplicationUser.FirstOrDefaultAsync(u => u.NormalizedUserName == normalizedName, token);
         var result = userRecord?.Id ?? Guid.Empty;
         return GuidResponse.Accept(result);
@@ -282,7 +299,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
         using var ctx = await InitializeContextAsync();
-        var normalizedName = role.ToUpperInvariant();
+        var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem == null) {
             return new GuidResponse(Guid.Empty, (int)ResponseStatus.NotFound, $"Role not found: {role}");
@@ -299,7 +316,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
         using var ctx = await InitializeContextAsync();
-        var normalizedName = role.ToUpperInvariant();
+        var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.ApplicationRoleAsync(normalizedName, token);
         if (roleItem == null) {
             return new RequestResult(406, $"Role '{role}' does not exist");
@@ -316,7 +333,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<ICommandResponse> RemoveRoleAsync(string role, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(role);
         using var ctx = await InitializeContextAsync();
-        var normalizedName = role.ToUpperInvariant();
+        var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.ApplicationRole.FirstOrDefaultAsync(r => r.NormalizedName == normalizedName, token);
         if (roleItem == null) {
             return RequestResult.NotFound();
@@ -329,9 +346,68 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     public async Task<bool> RoleExistsAsync(string role, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(role);
         using var ctx = await InitializeContextAsync();
-        var normalizedName = role.ToUpperInvariant();
+        var normalizedName = role.Trim().ToUpperInvariant();
         var roleId = await ctx.ApplicationRoleAsync(normalizedName, token);
         return roleId != null;
+    }
+
+    /// <summary>
+    /// Re-encrypts all <c>MfaSecret</c> values from <c>MfaTokenSecret2</c> (the retiring key)
+    /// to <c>MfaTokenSecret</c> (the new primary key).
+    /// </summary>
+    /// <remarks>
+    /// Key rotation workflow:
+    /// <list type="number">
+    ///   <item>Set <c>MfaTokenSecret2</c> to the current value of <c>MfaTokenSecret</c>.</item>
+    ///   <item>Set <c>MfaTokenSecret</c> to the new key.</item>
+    ///   <item>Deploy the updated configuration.</item>
+    ///   <item>Call this method once to re-encrypt all rows.</item>
+    ///   <item>Clear <c>MfaTokenSecret2</c> after the method completes successfully.</item>
+    /// </list>
+    /// </remarks>
+    /// <returns>The number of rows re-encrypted.</returns>
+    public async Task<int> RotateMfaSecretsAsync(CancellationToken cancellationToken = default) {
+        if (string.IsNullOrEmpty(configuration.MfaTokenSecret2)) {
+            throw new InvalidOperationException(
+                "MfaTokenSecret2 must contain the retiring key before rotation can proceed.");
+        }
+
+        using var ctx = await InitializeContextAsync();
+        var users = await ctx.ApplicationUser
+            .Where(u => u.MfaSecret != null && u.MfaSecret != string.Empty)
+            .ToListAsync(cancellationToken);
+
+        var rotated = 0;
+
+        foreach (var user in users) {
+            var plaintext = MfaSecretEncryption.TryDecrypt(
+                user.MfaSecret,
+                configuration.MfaTokenSecret,
+                configuration.MfaTokenSecret2);
+
+            if (plaintext == null) {
+                _logRotateMfaSecretDecryptionFailed(logger, user.Id, null);
+                continue;
+            }
+
+            // Already encrypted with the primary key — check by re-encrypting only if plaintext
+            // was decrypted via the secondary key (i.e. the stored value used the old key).
+            var reEncrypted = MfaSecretEncryption.Encrypt(plaintext, configuration.MfaTokenSecret);
+            if (reEncrypted == user.MfaSecret) {
+                // Already encrypted with primary key — no change needed
+                continue;
+            }
+
+            user.MfaSecret = reEncrypted;
+            rotated++;
+        }
+
+        if (rotated > 0) {
+            await ctx.Complete();
+            _logRotateMfaSecretRotated(logger, rotated, null);
+        }
+
+        return rotated;
     }
 
     public async Task<ICommandResponse> SetEmailAsync([NotNull] ApplicationUser user, string email, CancellationToken token) {
@@ -345,8 +421,8 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
-        user.Email = email;
-        user.NormalizedEmail = email.ToUpperInvariant();
+        user.Email = email.Trim();
+        user.NormalizedEmail = email.Trim().ToUpperInvariant();
         user.EmailConfirmed = false;
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
@@ -425,14 +501,18 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
-        user.UserName = userName;
-        user.NormalizedUserName = userName.ToUpperInvariant();
+        user.UserName = userName.Trim();
+        user.NormalizedUserName = userName.Trim().ToUpperInvariant();
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
         (var status, var commitMessage) = await ctx.Complete();
         return status.IsSuccess()
             ? RequestResult.Ok()
             : new RequestResult(status, $"Username not set for {user.Id}, {commitMessage}");
+    }
+
+    public void UpdateRateLimiter(Guid userId, string? userName, DateTime newEndDate) {
+        rateLimiter.UpdateRateLimit(userId, userName, newEndDate);
     }
 
     public async Task<ICommandResponse> ValidateAsync(ApplicationUser user, string password, CancellationToken token) {
@@ -483,70 +563,6 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
         return new RequestResult(ResponseStatus.Success, user.UserName ?? string.Empty);
     }
-
-    public void UpdateRateLimiter(Guid userId, string? userName, DateTime newEndDate) {
-        rateLimiter.UpdateRateLimit(userId, userName, newEndDate);
-    }
-
-    /// <summary>
-    /// Re-encrypts all <c>MfaSecret</c> values from <c>MfaTokenSecret2</c> (the retiring key)
-    /// to <c>MfaTokenSecret</c> (the new primary key).
-    /// </summary>
-    /// <remarks>
-    /// Key rotation workflow:
-    /// <list type="number">
-    ///   <item>Set <c>MfaTokenSecret2</c> to the current value of <c>MfaTokenSecret</c>.</item>
-    ///   <item>Set <c>MfaTokenSecret</c> to the new key.</item>
-    ///   <item>Deploy the updated configuration.</item>
-    ///   <item>Call this method once to re-encrypt all rows.</item>
-    ///   <item>Clear <c>MfaTokenSecret2</c> after the method completes successfully.</item>
-    /// </list>
-    /// </remarks>
-    /// <returns>The number of rows re-encrypted.</returns>
-    public async Task<int> RotateMfaSecretsAsync(CancellationToken cancellationToken = default) {
-        if (string.IsNullOrEmpty(configuration.MfaTokenSecret2)) {
-            throw new InvalidOperationException(
-                "MfaTokenSecret2 must contain the retiring key before rotation can proceed.");
-        }
-
-        using var ctx = await InitializeContextAsync();
-        var users = await ctx.ApplicationUser
-            .Where(u => u.MfaSecret != null && u.MfaSecret != string.Empty)
-            .ToListAsync(cancellationToken);
-
-        var rotated = 0;
-
-        foreach (var user in users) {
-            var plaintext = MfaSecretEncryption.TryDecrypt(
-                user.MfaSecret,
-                configuration.MfaTokenSecret,
-                configuration.MfaTokenSecret2);
-
-            if (plaintext == null) {
-                _logRotateMfaSecretDecryptionFailed(logger, user.Id, null);
-                continue;
-            }
-
-            // Already encrypted with the primary key — check by re-encrypting only if plaintext
-            // was decrypted via the secondary key (i.e. the stored value used the old key).
-            var reEncrypted = MfaSecretEncryption.Encrypt(plaintext, configuration.MfaTokenSecret);
-            if (reEncrypted == user.MfaSecret) {
-                // Already encrypted with primary key — no change needed
-                continue;
-            }
-
-            user.MfaSecret = reEncrypted;
-            rotated++;
-        }
-
-        if (rotated > 0) {
-            await ctx.Complete();
-            _logRotateMfaSecretRotated(logger, rotated, null);
-        }
-
-        return rotated;
-    }
-
     public async Task<ICommandResponse> ValidateMultifactorAsync(ApplicationUser user, string multifactorCode, CancellationToken token) {
 
         ArgumentNullException.ThrowIfNull(user);
@@ -675,11 +691,39 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         if (!disposedValue) {
             if (disposing) {
                 context?.Dispose();
-                //lockObject?.Dispose();
+                // lockObject and contextLock (Semaphore) are intentionally not disposed.
+                // Disposing a kernel-backed Semaphore while another thread is blocked on WaitOne()
+                // causes an ObjectDisposedException in that thread. Because this manager is long-lived
+                // and Dispose() may be called at shutdown while MFA validation calls are still in-flight,
+                // it is safer to leave them undisposed. The OS reclaims the handle on process exit,
+                // and WaitHandle's finalizer cleans up the kernel resource during GC.
                 rng?.Dispose();
             }
             disposedValue = true;
         }
+    }
+
+    private static async Task<ApplicationUser?> ApplicationUserByEmailAsync(IIdentityContext ctx, string emailAddress, CancellationToken token) {
+        ArgumentException.ThrowIfNullOrEmpty(emailAddress);
+        var normalizedName = emailAddress.Trim().ToUpperInvariant();
+        return await ctx.ApplicationUserByEmailAsync(normalizedName, token);
+    }
+
+    private static async Task<ApplicationUser?> ApplicationUserByIdAsync(IIdentityContext ctx, Guid userId, CancellationToken token) {
+        ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
+        return await ctx.ApplicationUserAsync(userId, token);
+    }
+
+    private static async Task<ApplicationUser?> ApplicationUserByNameAsync(IIdentityContext ctx, string? userName, CancellationToken token) {
+        ArgumentException.ThrowIfNullOrEmpty(userName);
+        var normalizedName = userName.Trim().ToUpperInvariant();
+        return await ctx.ApplicationUserAsync(normalizedName, token);
+    }
+
+    private static long CalculateTimeStepFromTimestamp(DateTime timestamp, long stepSize) {
+        var unixTimestamp = (timestamp.Ticks - UnicEpocTicks) / TicksToSeconds;
+        var window = unixTimestamp / stepSize;
+        return window;
     }
 
     private static byte[] GenerateQrCode(string uri) {
@@ -695,6 +739,34 @@ public class N2UserManager : IUserManager<ApplicationUser> {
     }
 
     /// <summary>
+    /// Increments the failed access count for a user and locks account if threshold exceeded.
+    /// </summary>
+    private static async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, ILogger logger, CancellationToken token = default) {
+#pragma warning disable CA1031 // Do not catch general exception types
+        try {
+            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
+            if (dbUser == null) {
+                return;
+            }
+
+            dbUser.AccessFailedCount++;
+
+            // Lock account after 5 failed attempts (PCI-DSS allows up to 6)
+            if (dbUser.AccessFailedCount >= 5) {
+                dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15);
+                dbUser.LockoutEnabled = true;
+
+                logger.LogIncrementAccessFailedCount(dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd);
+            }
+
+            await ctx.Complete();
+        } catch (Exception ex) {
+            logger.LogIncrementAccessFailedException(user.UserName ?? user.Id.ToString(), ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    /// <summary>
     /// Checks if a user account is currently locked out.
     /// </summary>
     private static bool IsLockedOut(ApplicationUser user) {
@@ -707,6 +779,12 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
 
         return user.LockoutEnd.Value > DateTimeOffset.UtcNow;
+    }
+
+    private static DateTime TimeStepToTime(long timeStepMatched, int stepSize) {
+        var window = timeStepMatched * (long)stepSize;
+        var ticks = (window * TicksToSeconds) + UnicEpocTicks;
+        return new DateTime(ticks);
     }
 
     private static (bool valid, string message) ValidateEmail(string email) {
@@ -752,73 +830,6 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
     }
 
-    /// <summary>
-    /// The number of ticks as Measured at Midnight Jan 1st 1970;
-    /// </summary>
-    private const long UnicEpocTicks = 621355968000000000L;
-
-    /// <summary>
-    /// A divisor for converting ticks to seconds
-    /// </summary>
-    private const long TicksToSeconds = 10000000L;
-
-    private static long CalculateTimeStepFromTimestamp(DateTime timestamp, long stepSize) {
-        var unixTimestamp = (timestamp.Ticks - UnicEpocTicks) / TicksToSeconds;
-        var window = unixTimestamp / stepSize;
-        return window;
-    }
-
-    private static DateTime TimeStepToTime(long timeStepMatched, int stepSize) {
-        var window = timeStepMatched * (long)stepSize;
-        var ticks = (window * TicksToSeconds) + UnicEpocTicks;
-        return new DateTime(ticks);
-    }
-
-    private static async Task<ApplicationUser?> ApplicationUserByEmailAsync(IIdentityContext ctx, string emailAddress, CancellationToken token) {
-        ArgumentException.ThrowIfNullOrEmpty(emailAddress);
-        var normalizedName = emailAddress.ToUpperInvariant();
-        return await ctx.ApplicationUserByEmailAsync(normalizedName, token);
-    }
-
-    private static async Task<ApplicationUser?> ApplicationUserByIdAsync(IIdentityContext ctx, Guid userId, CancellationToken token) {
-        ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
-        return await ctx.ApplicationUserAsync(userId, token);
-    }
-
-    private static async Task<ApplicationUser?> ApplicationUserByNameAsync(IIdentityContext ctx, string? userName, CancellationToken token) {
-        ArgumentException.ThrowIfNullOrEmpty(userName);
-        var normalizedName = userName.ToUpperInvariant();
-        return await ctx.ApplicationUserAsync(normalizedName, token);
-    }
-
-    /// <summary>
-    /// Increments the failed access count for a user and locks account if threshold exceeded.
-    /// </summary>
-    private static async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, ILogger logger, CancellationToken token = default) {
-#pragma warning disable CA1031 // Do not catch general exception types
-        try {
-            var dbUser = await ctx.ApplicationUser.FirstOrDefaultAsync(m => m.Id == user.Id, token);
-            if (dbUser == null) {
-                return;
-            }
-
-            dbUser.AccessFailedCount++;
-
-            // Lock account after 5 failed attempts (PCI-DSS allows up to 6)
-            if (dbUser.AccessFailedCount >= 5) {
-                dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15);
-                dbUser.LockoutEnabled = true;
-
-                logger.LogIncrementAccessFailedCount(dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd);
-            }
-
-            await ctx.Complete();
-        } catch (Exception ex) {
-            logger.LogIncrementAccessFailedException(user.UserName ?? user.Id.ToString(), ex);
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
-    }
-
     private async Task<IIdentityContext> InitializeContextAsync() {
         if (context != null) {
             return context;
@@ -828,7 +839,7 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         try {
 #pragma warning disable CA1508 // Avoid deadlocks caused by async waits in locks
             // Double-check after acquiring the lock in case another thread initialized it
-            context ??= await factory.CreateAsync(catalog);
+            context ??= await factory.CreateAsync(connectionName);
 #pragma warning restore CA1508 // Avoid deadlocks caused by async waits in locks
         } finally {
             contextLock.Release();
@@ -896,14 +907,6 @@ public class N2UserManager : IUserManager<ApplicationUser> {
         }
 
         return (flowControl: verified.Status.IsSuccess(), value: verified, dbUser);
-    }
-
-
-
-    public void Dispose() {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 }
 

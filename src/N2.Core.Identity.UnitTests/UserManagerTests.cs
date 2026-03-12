@@ -9,8 +9,8 @@ using System.Security.Cryptography;
 namespace N2.Core.Identity.UnitTests;
 
 [TestClass]
-public class N2UserManagerTests {
-    public N2UserManagerTests() {
+public class UsingN2UserManager {
+    public UsingN2UserManager() {
         ServiceCollection serviceCollection = new();
         TestContext.ConfigureServices(serviceCollection);
         serviceProvider = serviceCollection.BuildServiceProvider();

@@ -1,11 +1,3 @@
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-
-using Moq;
-
-using N2.Core.Commands;
-using N2.Core.Entity;
 using N2.Core.Identity.Data;
 
 namespace N2.Core.Identity.UnitTests;

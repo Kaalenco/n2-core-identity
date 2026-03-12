@@ -8,13 +8,13 @@ using N2.Core.Identity.Data;
 namespace N2.Core.Identity.UnitTests;
 
 [TestClass]
-public class N2IdentityContextFactoryTests {
+public class UsingN2IdentityContextFactory {
     private const string SqlServerConnectionName = "UserDbSqlServerTest";
     private const string MySqlConnectionName = "UserDbMySqlTest";
 
     private static IConfiguration BuildConfiguration() =>
         new ConfigurationBuilder()
-            .AddUserSecrets<N2IdentityContextFactoryTests>()
+            .AddUserSecrets<UsingN2IdentityContextFactory>()
             .AddEnvironmentVariables()   // CI injects ConnectionStrings__UserDbMySqlTest etc.
             .Build();
 

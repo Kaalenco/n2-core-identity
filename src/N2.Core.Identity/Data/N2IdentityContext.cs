@@ -32,7 +32,6 @@ public class N2IdentityContext(
     public DbSet<ApplicationTenant> Tenants { get; set; } = null!;
     public DbSet<ApplicationUserTenant> UserTenants { get; set; } = null!;
 
-
     public IQueryable<ApplicationTenant> ApplicationTenant => Tenants;
     public IQueryable<ApplicationUser> ApplicationUser => Users;
     public IQueryable<ApplicationRole> ApplicationRole => Roles;

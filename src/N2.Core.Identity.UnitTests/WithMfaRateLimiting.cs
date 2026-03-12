@@ -9,7 +9,7 @@ using System.Globalization;
 namespace N2.Core.Identity.UnitTests;
 
 [TestClass]
-public class MfaRateLimitingTests : N2IdentityTestsBase {
+public class WithMfaRateLimiting : N2IdentityTestsBase {
 
     [TestMethod]
     public async Task ValidateMFA_FiveFailedAttempts_ShouldLockout() {

@@ -9,7 +9,7 @@ using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
 [TestClass]
-public class JwtKeySecurityTests {
+public class UsingJwtKeySecurity {
 
     [TestMethod]
     public void JwtConfiguration_KeyTooShort_ShouldThrowException() {

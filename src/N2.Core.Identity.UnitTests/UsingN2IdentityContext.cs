@@ -11,7 +11,7 @@ namespace N2.Core.Identity.UnitTests;
 /// that verify the context behaves correctly as a data layer.
 /// </summary>
 [TestClass]
-public class N2IdentityContextTests : N2IdentityTestsBase {
+public class UsingN2IdentityContext : N2IdentityTestsBase {
     private static readonly Guid AdminGuid = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     // -------------------------------------------------------------------------
