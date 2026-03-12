@@ -12,7 +12,7 @@
 # To mark a test as a MySQL integration test it must have:
 #   [TestCategory("Integration.MySql")]
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0
+FROM mcr.microsoft.com/dotnet/sdk:10.0
 WORKDIR /src
 
 # Restore (layer-cached until .csproj files change)
@@ -20,16 +20,15 @@ COPY N2.Core.Identity.sln .
 COPY N2.Core.Identity/N2.Core.Identity.csproj                   N2.Core.Identity/
 COPY N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj  N2.Core.Identity.UnitTests/
 RUN dotnet restore N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj \
-      -p:TargetFramework=net8.0
+      -p:TargetFramework=net10.0
 
 # Copy source (invalidates cache when code changes)
 COPY . .
 
 # Build + run MySQL integration tests when the container starts.
-# --framework net8.0   avoids building the net10.0 TFM (not supported by SDK 9).
 CMD ["dotnet", "test", "N2.Core.Identity.UnitTests/N2.Core.Identity.UnitTests.csproj", \
      "--no-restore", \
-     "--framework", "net8.0", \
+     "--framework", "net10.0", \
      "--filter", "TestCategory=Integration.MySql", \
      "--logger", "console;verbosity=normal", \
      "--logger", "trx;LogFileName=integration-results.trx", \
