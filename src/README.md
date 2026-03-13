@@ -75,8 +75,8 @@ Test results (`.trx`) are written to `src/test-results/` via the volume mount de
 
 ### Build and publish (`.github/workflows/dotnet.yml`)
 
-Runs on push and PR to `trunk`, **only when files under `src/` have changed**. Commits that
-touch only documentation, scripts, or workflow files will not trigger a build. Three jobs
+Runs on push and PR to `trunk`, **only when files under `src/N2.*/**` have changed**. So only
+changes in source code that follows the required namespace will run this workflow. Three jobs
 execute in sequence:
 
 | # | Job | Trigger |

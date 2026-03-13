@@ -7,11 +7,11 @@ on:
   push:
     branches: [ "trunk" ]
     paths:
-      - 'src/**'
+      - 'src/N2.*/**'
   pull_request:
     branches: [ "trunk" ]
     paths:
-      - 'src/**'
+      - 'src/N2.*/**'
 
 jobs:
   # For the checkout and upload artifacts, we use the latest versions of the actions as of March 2026.
