@@ -10,6 +10,13 @@ on:
     branches: [ "trunk" ]
 
 jobs:
+  # For the checkout and upload artifacts, we use the latest versions of the actions as of March 2026.
+  # For the .NET setup, we use v4 which supports both .NET 8 and 10.
+  # Before update, use gh (github cli) to check for the latest versions of these actions:
+  # gh release list --repo actions/checkout --limit 5
+  # gh release list --repo actions/upload-artifact --limit 5
+  # Always check for compatibility issues when updating action versions, especially for major version changes.
+
   # ── Build and Unit Tests ───────────────────────────────────────────────────────
   build:
     name: Build and Test
@@ -29,7 +36,7 @@ jobs:
         dotnet-version: 8.0.x
 
     - name: Setup .NET 10.0
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 10.0.x
 
@@ -41,7 +48,7 @@ jobs:
       env:
         # Limit test output logs to show only errors
         Logging__LogLevel__Default: Error
-      run: dotnet test src --no-build --verbosity normal --filter "TestCategory!=Integration"
+      run: dotnet test src --no-build --verbosity normal --filter "TestCategory!=Integration" --logger trx --results-directory src/TestResults
 
     - name: Upload unit test results
       uses: actions/upload-artifact@v4
@@ -110,5 +117,21 @@ jobs:
     - name: Build (Release)
       run: dotnet build src --no-restore --configuration Release
 
+    - name: Check if version already exists on NuGet
+      id: version_check
+      run: |
+        VERSION=$(grep -oP '(?<=<PackageVersion>)[^<]+' src/N2.Core.Identity/N2.Core.Identity.csproj)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          https://api.nuget.org/v3-flatcontainer/n2.core.identity/$VERSION/n2.core.identity.$VERSION.nupkg)
+        if [ "$STATUS" = "200" ]; then
+          echo "Version $VERSION already exists on NuGet — skipping publish."
+          echo "already_published=true" >> $GITHUB_OUTPUT
+        else
+          echo "Version $VERSION is new — will publish."
+          echo "already_published=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Publish
+      if: steps.version_check.outputs.already_published == 'false'
       run: dotnet nuget push **/*.nupkg --api-key ${{ secrets.PACKAGE_N2 }} --source https://api.nuget.org/v3/index.json

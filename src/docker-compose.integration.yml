@@ -32,7 +32,7 @@ services:
   integration-tests:
     build:
       context: .                                                    # ./src relative to this file
-      dockerfile: N2.Core.Identity.UnitTests/Dockerfile.integration
+      dockerfile: Dockerfile.integration
     environment:
       # Double-underscore maps to ':' in .NET configuration, so this populates
       # ConnectionStrings:UserDbMySqlTest which the integration tests read.
