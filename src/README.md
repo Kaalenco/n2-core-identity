@@ -86,8 +86,24 @@ execute in sequence:
 | 3 | **Publish NuGet** — Release build + `nuget push` | push to `trunk` only, after job 2 passes |
 
 The NuGet package is only published after **both** test stages pass, and only when the
-`<PackageVersion>` in `N2.Core.Identity.csproj` is not yet present on nuget.org. PRs never
+`<PackageVersion>` in the publishable `.csproj` is not yet present on nuget.org. PRs never
 trigger a publish.
+
+A `Verify workflow parameters` step runs first in the publish job and gates all subsequent
+steps — if any required parameter is missing the job fails immediately with a clear error
+message before any build work is done.
+
+The publish job reads two **repository variables** (set under `Settings → Secrets and variables → Actions → Variables`):
+
+| Variable | Description | Example value |
+|----------|-------------|---------------|
+| `CSPROJ_PATH` | Relative path to the `.csproj` of the project being published | `src/N2.Core.Identity/N2.Core.Identity.csproj` |
+| `NUGET_PACKAGE_ID` | NuGet package ID in lowercase, as it appears on nuget.org | `n2.core.identity` |
+
+> **Important:** `CSPROJ_PATH` must point to the single project that produces the NuGet package.
+> If the solution contains multiple publishable projects, each one needs its own workflow (or
+> a matrix job), with `CSPROJ_PATH` and `NUGET_PACKAGE_ID` set to match the correct project.
+> Test projects and other non-publishable projects should never be referenced here.
 
 ### CodeQL security scanning (`.github/workflows/codeql.yml`)
 
@@ -106,8 +122,26 @@ tab.
 Runs every **Sunday at 03:00 UTC** (and can be triggered manually from the GitHub Actions UI).
 Executes `scripts/delete-workflow-runs.sh`, which deletes:
 
-- Failed workflow runs older than 10 days
-- All `codeql.yml` runs older than 10 days
+- Failed workflow runs older than `RETENTION_DAYS` days (default: 10)
+- All `codeql.yml` runs older than `RETENTION_DAYS` days
+
+A `Verify workflow parameters` step runs first and gates all subsequent steps — if
+`GH_MAINTENANCE` is not set the job fails immediately with a clear error message.
+
+The script reads its configuration from environment variables set by the workflow:
+
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `REPO` | `github.repository` | Set automatically — no configuration needed |
+| `RETENTION_DAYS` | repository variable (optional) | Override the default of 10 days |
+| `GH_TOKEN` | secret `GH_MAINTENANCE` | PAT for authenticating GitHub API calls |
+
+The script can also be run locally:
+```bash
+REPO="Kaalenco/n2-core-identity" bash scripts/delete-workflow-runs.sh
+# With custom retention:
+REPO="Kaalenco/n2-core-identity" RETENTION_DAYS=30 bash scripts/delete-workflow-runs.sh
+```
 
 **Required secret:** `GH_MAINTENANCE` — a fine-grained Personal Access Token with
 **Actions: Read and Write** permission on this repository. Create it at

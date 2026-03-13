@@ -1,3 +1,17 @@
+# delete-workflow-runs.sh
+#
+# Deletes old workflow runs from a GitHub repository:
+#   - Failed runs older than RETENTION_DAYS days
+#   - All codeql.yml runs older than RETENTION_DAYS days
+#
+# Environment variables:
+#   REPO            GitHub repository in "owner/repo" format (required)
+#   RETENTION_DAYS  Number of days to retain runs (optional, default: 10)
+#   GH_TOKEN        GitHub PAT with Actions: Read and Write permission (required)
+#
+# Usage:
+#   REPO="owner/repo" bash scripts/delete-workflow-runs.sh
+#
 # Workflow run object — useful properties:
 #   .id              numeric run ID (used for delete/re-run API calls)
 #   .name            display name of the run (e.g. "CI Build")
@@ -12,14 +26,17 @@
 #   .head_sha        commit SHA that triggered the run
 #   .html_url        URL to view the run in the GitHub UI
 
-REPO="Kaalenco/n2-core-identity"
-RETENTION_DAYS=10
+REPO="${REPO:?Environment variable REPO is required (format: owner/repo)}"
+RETENTION_DAYS="${RETENTION_DAYS:-10}"
 CUTOFF=$(date -d "$RETENTION_DAYS days ago" --utc +%Y-%m-%dT%H:%M:%SZ)
 
-# Optional: count runs first
-gh api --paginate "/repos/$REPO/actions/runs?per_page=100" --jq '.workflow_runs[].id' | wc -l
+echo "Cleaning up runs older than $RETENTION_DAYS days ($CUTOFF) in $REPO"
 
-# Delete failed runs older than 10 days, and ALL codeql.yml runs older than 10 days
+# Optional: count runs first
+TOTAL=$(gh api --paginate "/repos/$REPO/actions/runs?per_page=100" --jq '.workflow_runs[].id' | wc -l)
+echo "Total runs found: $TOTAL"
+
+# Delete failed runs older than RETENTION_DAYS, and ALL codeql.yml runs older than RETENTION_DAYS
 gh api --paginate "/repos/$REPO/actions/runs?per_page=100" \
   --jq '.workflow_runs[] | select(.created_at < "'"$CUTOFF"'") | select(.conclusion == "failure" or .path == ".github/workflows/codeql.yml") | .id' \
 | while read -r RUN_ID; do
