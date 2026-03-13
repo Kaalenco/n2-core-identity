@@ -1,0 +1,29 @@
+# Maintenance workflow
+#
+# Runs weekly to delete old workflow runs:
+#   - Failed runs older than 10 days
+#   - All codeql.yml runs older than 10 days
+#
+# Requires a repository secret GH_MAINTENANCE containing a fine-grained PAT
+# with Actions: Read and Write permission on this repository.
+
+name: Maintenance
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'   # every Sunday at 03:00 UTC
+  workflow_dispatch:        # allow manual trigger from the GitHub UI
+
+jobs:
+  # ── Cleanup Old Workflow Runs ────────────────────────────────────────────────
+  cleanup-workflow-runs:
+    name: Delete Old Workflow Runs
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Delete old workflow runs
+      env:
+        GH_TOKEN: ${{ secrets.GH_MAINTENANCE }}
+      run: bash scripts/delete-workflow-runs.sh
