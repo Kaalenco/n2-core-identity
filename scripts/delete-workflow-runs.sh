@@ -1,13 +1,15 @@
 # delete-workflow-runs.sh
 #
-# Deletes old workflow runs from a GitHub repository:
-#   - Failed runs older than RETENTION_DAYS days
-#   - All codeql.yml runs older than RETENTION_DAYS days
+# Deletes workflow runs according to these rules:
+#   - All runs older than LOG_RETENTION_DAYS are removed (logs have expired, no audit value)
+#   - Runs older than RETENTION_DAYS are removed, except successful dotnet.yml runs
+#     (kept as a release audit trail until logs expire)
 #
 # Environment variables:
-#   REPO            GitHub repository in "owner/repo" format (required)
-#   RETENTION_DAYS  Number of days to retain runs (optional, default: 10)
-#   GH_TOKEN        GitHub PAT with Actions: Read and Write permission (required)
+#   REPO                GitHub repository in "owner/repo" format (required)
+#   RETENTION_DAYS      Days to retain non-publish runs (optional, default: 10)
+#   LOG_RETENTION_DAYS  Days after which all runs are removed regardless of conclusion (optional, default: 90)
+#   GH_TOKEN            GitHub PAT with Actions: Read and Write permission (required)
 #
 # Usage:
 #   REPO="owner/repo" bash scripts/delete-workflow-runs.sh
@@ -28,17 +30,27 @@
 
 REPO="${REPO:?Environment variable REPO is required (format: owner/repo)}"
 RETENTION_DAYS="${RETENTION_DAYS:-10}"
+LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-90}"
 CUTOFF=$(date -d "$RETENTION_DAYS days ago" --utc +%Y-%m-%dT%H:%M:%SZ)
+LOG_CUTOFF=$(date -d "$LOG_RETENTION_DAYS days ago" --utc +%Y-%m-%dT%H:%M:%SZ)
 
-echo "Cleaning up runs older than $RETENTION_DAYS days ($CUTOFF) in $REPO"
+echo "Cleaning up runs in $REPO"
+echo "  Regular cutoff : older than $RETENTION_DAYS days ($CUTOFF)"
+echo "  Log expiry cutoff: older than $LOG_RETENTION_DAYS days ($LOG_CUTOFF)"
 
-# Optional: count runs first
+# Count runs first
 TOTAL=$(gh api --paginate "/repos/$REPO/actions/runs?per_page=100" --jq '.workflow_runs[].id' | wc -l)
 echo "Total runs found: $TOTAL"
 
-# Delete failed runs older than RETENTION_DAYS, and ALL codeql.yml runs older than RETENTION_DAYS
+# Delete runs matching either condition:
+#   1. Older than LOG_RETENTION_DAYS (logs expired — always remove)
+#   2. Older than RETENTION_DAYS and not a successful dotnet.yml run
 gh api --paginate "/repos/$REPO/actions/runs?per_page=100" \
-  --jq '.workflow_runs[] | select(.created_at < "'"$CUTOFF"'") | select(.conclusion == "failure" or .path == ".github/workflows/codeql.yml") | .id' \
+  --jq '.workflow_runs[] |
+    select(
+      .created_at < "'"$LOG_CUTOFF"'" or
+      (.created_at < "'"$CUTOFF"'" and ((.path == ".github/workflows/dotnet.yml" and .conclusion == "success") | not))
+    ) | .id' \
 | while read -r RUN_ID; do
     echo "Deleting run $RUN_ID"
     gh api -X DELETE "/repos/$REPO/actions/runs/$RUN_ID" >/dev/null
