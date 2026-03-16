@@ -19,17 +19,21 @@ jobs:
   cleanup-workflow-runs:
     name: Delete Old Workflow Runs
     runs-on: ubuntu-latest
+    # Hoist secrets to job level so every step can access them without
+    # repeating env blocks. GH_MAINTENANCE is a repository secret.
+    # GH_TOKEN is set to the same PAT (not the auto-provided GITHUB_TOKEN):
+    # GITHUB_TOKEN cannot delete runs created by other workflows and returns
+    # 403; the PAT acts as a user-level credential and can delete any run.
+    env:
+      GH_MAINTENANCE: ${{ secrets.GH_MAINTENANCE }}
+      GH_TOKEN: ${{ secrets.GH_MAINTENANCE }}
+      REPO: ${{ github.repository }}
 
     steps:
     - uses: actions/checkout@v6
 
     - name: Verify workflow parameters
-      env:
-        GH_MAINTENANCE: ${{ secrets.GH_MAINTENANCE }}
       run: bash scripts/verify-workflow-params.sh GH_MAINTENANCE RETENTION_DAYS=10
 
     - name: Delete old workflow runs
-      env:
-        GH_TOKEN: ${{ secrets.GH_MAINTENANCE }}
-        REPO: ${{ github.repository }}
       run: bash scripts/delete-workflow-runs.sh

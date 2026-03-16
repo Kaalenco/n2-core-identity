@@ -65,15 +65,27 @@ jobs:
   # Set repository variable MYSQL_INTEGRATION_TESTS=true to enable this job.
   # If the variable is absent or any other value, the job is skipped.
   integration-tests-mysql:
-    name: Integration Tests — MySQL
+    name: Integration Tests
     runs-on: ubuntu-latest
     needs: build
-    if: vars.MYSQL_INTEGRATION_TESTS == 'true'
 
     steps:
+    - name: Check if integration tests are enabled
+      id: check
+      run: |
+        if [ "${{ vars.MYSQL_INTEGRATION_TESTS }}" = "true" ]; then
+          echo "MySQL integration tests are enabled — proceeding."
+          echo "enabled=true" >> $GITHUB_OUTPUT
+        else
+          echo "MySQL integration tests are disabled (set repository variable MYSQL_INTEGRATION_TESTS=true to enable)."
+          echo "enabled=false" >> $GITHUB_OUTPUT
+        fi
+
     - uses: actions/checkout@v4
+      if: steps.check.outputs.enabled == 'true'
 
     - name: Run MySQL integration tests
+      if: steps.check.outputs.enabled == 'true'
       # --build               rebuilds the test image so code changes are picked up
       # --exit-code-from      propagates the test container's exit code as the job result
       # --abort-on-container-exit  stops all services once the test container exits
@@ -84,18 +96,18 @@ jobs:
           --abort-on-container-exit
 
     - name: Show integration test logs
-      if: always()
+      if: always() && steps.check.outputs.enabled == 'true'
       run: docker compose -f src/docker-compose.integration.yml logs integration-tests
 
     - name: Upload integration test results
       uses: actions/upload-artifact@v4
-      if: always()
+      if: always() && steps.check.outputs.enabled == 'true'
       with:
         name: integration-test-results-mysql
         path: src/test-results/*.trx
 
     - name: Tear down MySQL
-      if: always()
+      if: always() && steps.check.outputs.enabled == 'true'
       run: docker compose -f src/docker-compose.integration.yml down --volumes
 
   # ── Publish NuGet Package ────────────────────────────────────────────────────
@@ -106,15 +118,18 @@ jobs:
     if: |
       github.event_name == 'push' &&
       (needs.integration-tests-mysql.result == 'success' || needs.integration-tests-mysql.result == 'skipped')
+    # Hoist all vars/secrets to job level so every step can access them without
+    # repeating env blocks. CSPROJ_PATH and NUGET_PACKAGE_ID are repository
+    # variables (non-secret); PACKAGE_N2 is a repository secret.
+    env:
+      CSPROJ_PATH: ${{ vars.CSPROJ_PATH }}
+      NUGET_PACKAGE_ID: ${{ vars.NUGET_PACKAGE_ID }}
+      PACKAGE_N2: ${{ secrets.PACKAGE_N2 }}
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Verify workflow parameters
-      env:
-        CSPROJ_PATH: ${{ vars.CSPROJ_PATH }}
-        NUGET_PACKAGE_ID: ${{ vars.NUGET_PACKAGE_ID }}
-        PACKAGE_N2: ${{ secrets.PACKAGE_N2 }}
       run: bash scripts/verify-workflow-params.sh CSPROJ_PATH NUGET_PACKAGE_ID PACKAGE_N2
 
     - name: Setup .NET 8.0
@@ -135,9 +150,6 @@ jobs:
 
     - name: Check if version already exists on NuGet
       id: version_check
-      env:
-        CSPROJ_PATH: ${{ vars.CSPROJ_PATH }}
-        NUGET_PACKAGE_ID: ${{ vars.NUGET_PACKAGE_ID }}
       run: |
         VERSION=$(grep -oP '(?<=<PackageVersion>)[^<]+' "$CSPROJ_PATH")
         echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -152,5 +164,9 @@ jobs:
         fi
 
     - name: Publish
-      if: steps.version_check.outputs.already_published == 'false'
-      run: dotnet nuget push **/*.nupkg --api-key ${{ secrets.PACKAGE_N2 }} --source https://api.nuget.org/v3/index.json
+      run: |
+        if [ "${{ steps.version_check.outputs.already_published }}" = "true" ]; then
+          echo "Version ${{ steps.version_check.outputs.version }} already exists on NuGet — nothing to publish."
+          exit 0
+        fi
+        dotnet nuget push **/*.nupkg --api-key $PACKAGE_N2 --source https://api.nuget.org/v3/index.json

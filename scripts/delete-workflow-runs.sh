@@ -9,7 +9,13 @@
 #   REPO                GitHub repository in "owner/repo" format (required)
 #   RETENTION_DAYS      Days to retain non-publish runs (optional, default: 10)
 #   LOG_RETENTION_DAYS  Days after which all runs are removed regardless of conclusion (optional, default: 90)
-#   GH_TOKEN            GitHub PAT with Actions: Read and Write permission (required)
+#   GH_TOKEN            Fine-grained PAT with Actions: Read and Write permission (required).
+#                       Must NOT be the auto-provided GITHUB_TOKEN: that token is scoped to the
+#                       current workflow run and GitHub will return 403 when it tries to delete
+#                       runs created by other workflows or tokens. A PAT acts as a user-level
+#                       credential and can delete any run in the repository.
+#                       The gh CLI resolves credentials in order: GH_TOKEN → GITHUB_TOKEN →
+#                       stored login, so setting GH_TOKEN here ensures the PAT is used.
 #
 # Usage:
 #   REPO="owner/repo" bash scripts/delete-workflow-runs.sh
