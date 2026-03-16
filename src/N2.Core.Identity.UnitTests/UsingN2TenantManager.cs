@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
@@ -20,8 +23,19 @@ public class UsingN2TenantManager {
     // Helpers
     // -------------------------------------------------------------------------
 
-    private ITenantManager GetTenantManager() => serviceProvider.GetRequiredService<ITenantManager>();
-    private IUserManager<ApplicationUser> GetUserManager() => serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
+    private ITenantManager BuildTenantManager() {
+        var config = serviceProvider.GetRequiredService<IConfiguration>();
+        var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
+        return new N2TenantManager(factory, config, "IdentityDb", NullLogger<N2TenantManager>.Instance);
+    }
+
+    private IUserManager<ApplicationUser> BuildUserManager() {
+        var config = serviceProvider.GetRequiredService<IConfiguration>();
+        var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
+        var hasher = serviceProvider.GetRequiredService<IPasswordHasher<ApplicationUser>>();
+        var rateLimiter = serviceProvider.GetRequiredService<IRateLimiter>();
+        return new N2UserManager(factory, config, rateLimiter, hasher, "IdentityDb", NullLogger<N2UserManager>.Instance);
+    }
 
     private static ApplicationTenant NewTenant(string name = "Acme Corp", string email = "admin@acme.com") => new() {
         Id = Guid.NewGuid(),
@@ -31,7 +45,7 @@ public class UsingN2TenantManager {
 
     private async Task<ApplicationTenant> CreateTenantAsync(string name, string email = "admin@acme.com") {
         var tenant = NewTenant(name, email);
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var result = await manager.CreateAsync(tenant, CancellationToken.None);
         if (!result.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to seed tenant: {result.Message}");
@@ -43,7 +57,7 @@ public class UsingN2TenantManager {
     }
 
     private async Task<ApplicationUser> CreateUserAsync(string userName) {
-        using var userManager = GetUserManager();
+        using var userManager = BuildUserManager();
         ApplicationUser user = new() {
             UserName = userName,
             Email = $"{userName}@test.com"
@@ -62,7 +76,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task CreateAsync_NewTenant_ShouldSucceed() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var tenant = NewTenant($"New Tenant {Guid.NewGuid()}");
 
         var result = await manager.CreateAsync(tenant, CancellationToken.None);
@@ -73,7 +87,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task CreateAsync_NormalizesNameAndEmail() {
         var uniqueName = $"Norm Tenant {Guid.NewGuid()}";
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var tenant = NewTenant(uniqueName, "  Admin@NormTest.com  ");
         tenant.Name = $"  {uniqueName}  "; // add whitespace to test trimming
 
@@ -89,7 +103,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task CreateAsync_DuplicateTenant_ShouldFail() {
         var tenant = await CreateTenantAsync($"Dup Tenant {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         // Use the same normalized name
         var duplicate = NewTenant(tenant.Name!);
@@ -106,7 +120,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task DeleteAsync_ExistingTenant_ShouldSucceed() {
         var tenant = await CreateTenantAsync($"Delete Me {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var result = await manager.DeleteAsync(tenant, CancellationToken.None);
 
@@ -117,7 +131,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task DeleteAsync_NonExistentTenant_ShouldFail() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var ghost = NewTenant("Ghost");
         // Id not seeded in DB
 
@@ -128,7 +142,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task DeleteAsync_EmptyId_ShouldThrow() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var badTenant = NewTenant("Bad");
         badTenant.Id = Guid.Empty;
 
@@ -143,7 +157,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task UpdateAsync_ExistingTenant_ShouldPersistChanges() {
         var tenant = await CreateTenantAsync($"Before Update {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         tenant.Name = "After Update";
         tenant.AdminEmail = "new@email.com";
@@ -163,7 +177,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task UpdateAsync_NonExistentTenant_ShouldFail() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var ghost = NewTenant("Ghost");
 
         var result = await manager.UpdateAsync(ghost, CancellationToken.None);
@@ -174,7 +188,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task UpdateAsync_EmptyName_ShouldThrow() {
         var tenant = await CreateTenantAsync($"Has Name {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         tenant.Name = "  "; // whitespace only
 
         await Assert.ThrowsAsync<ArgumentException>(
@@ -187,7 +201,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByIdAsync_ExistingTenant_ShouldReturn() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByIdAsync(TestContext.TenantGuid, CancellationToken.None);
 
@@ -197,7 +211,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByIdAsync_UnknownId_ShouldReturnNull() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByIdAsync(Guid.NewGuid(), CancellationToken.None);
 
@@ -206,7 +220,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByIdAsync_EmptyId_ShouldThrow() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => manager.FindByIdAsync(Guid.Empty, CancellationToken.None));
@@ -218,7 +232,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByNameAsync_ExistingTenant_ShouldReturn() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByNameAsync("Test Tenant", CancellationToken.None);
 
@@ -228,7 +242,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByNameAsync_NormalizesInput_ShouldFindWithMixedCase() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByNameAsync("  test tenant  ", CancellationToken.None);
 
@@ -238,7 +252,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByNameAsync_UnknownName_ShouldReturnNull() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByNameAsync("Does Not Exist XYZ", CancellationToken.None);
 
@@ -251,7 +265,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByEmailAsync_ExistingEmail_ShouldReturn() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByEmailAsync("admin@testtenant.com", CancellationToken.None);
 
@@ -261,7 +275,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByEmailAsync_NormalizesInput_ShouldFindWithMixedCase() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByEmailAsync("  ADMIN@TestTenant.COM  ", CancellationToken.None);
 
@@ -271,7 +285,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task FindByEmailAsync_UnknownEmail_ShouldReturnNull() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var found = await manager.FindByEmailAsync("nobody@nowhere.com", CancellationToken.None);
 
@@ -284,7 +298,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task GetTenantsAsync_ShouldReturnSeededTenants() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var list = await manager.GetTenantsAsync(CancellationToken.None);
 
@@ -299,7 +313,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task LockAsync_UnlockedTenant_ShouldSetIsLockedTrue() {
         var tenant = await CreateTenantAsync($"To Lock {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var result = await manager.LockAsync(tenant, CancellationToken.None);
 
@@ -310,7 +324,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task LockAsync_NonExistentTenant_ShouldFail() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var result = await manager.LockAsync(NewTenant("Ghost"), CancellationToken.None);
 
@@ -319,7 +333,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task UnlockAsync_LockedTenant_ShouldSetIsLockedFalse() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var lockedTenant = await manager.FindByIdAsync(TestContext.LockedTenantGuid, CancellationToken.None);
         Assert.IsNotNull(lockedTenant);
         Assert.IsTrue(lockedTenant!.IsLocked);
@@ -333,7 +347,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task UnlockAsync_NonExistentTenant_ShouldFail() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var result = await manager.UnlockAsync(NewTenant("Ghost"), CancellationToken.None);
 
@@ -348,7 +362,7 @@ public class UsingN2TenantManager {
     public async Task AddUserAsync_NewAssignment_ShouldSucceed() {
         var user = await CreateUserAsync($"tenant.new.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Add User Tenant {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var result = await manager.AddUserAsync(user, tenant, CancellationToken.None);
 
@@ -361,7 +375,7 @@ public class UsingN2TenantManager {
     public async Task AddUserAsync_AlreadyAssigned_ShouldBeIdempotent() {
         var user = await CreateUserAsync($"tenant.idem.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Idempotent Tenant {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         await manager.AddUserAsync(user, tenant, CancellationToken.None);
 
         // Second call — should not error
@@ -375,7 +389,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task AddUserAsync_NonExistentUser_ShouldFail() {
         var tenant = await CreateTenantAsync($"Ghost User Tenant {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var ghost = new ApplicationUser { Id = Guid.NewGuid() };
 
         var result = await manager.AddUserAsync(ghost, tenant, CancellationToken.None);
@@ -386,7 +400,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task AddUserAsync_NonExistentTenant_ShouldFail() {
         var user = await CreateUserAsync($"tenant.ghost.{Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var result = await manager.AddUserAsync(user, NewTenant("Ghost Tenant"), CancellationToken.None);
 
@@ -397,7 +411,7 @@ public class UsingN2TenantManager {
     public async Task RemoveUserAsync_ExistingAssignment_ShouldSucceed() {
         var user = await CreateUserAsync($"tenant.remove.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Remove User Tenant {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         await manager.AddUserAsync(user, tenant, CancellationToken.None);
 
         var result = await manager.RemoveUserAsync(user, tenant, CancellationToken.None);
@@ -411,7 +425,7 @@ public class UsingN2TenantManager {
     public async Task RemoveUserAsync_NotAssigned_ShouldBeIdempotent() {
         var user = await CreateUserAsync($"tenant.notassigned.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"No Assignment Tenant {Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var result = await manager.RemoveUserAsync(user, tenant, CancellationToken.None);
 
@@ -424,7 +438,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task GetUsersForTenantAsync_ShouldReturnAssignedUsers() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var users = (await manager.GetUsersForTenantAsync(TestContext.TenantGuid, CancellationToken.None)).ToList();
 
@@ -434,7 +448,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task GetUsersForTenantAsync_LockedTenant_ShouldReturnEmpty() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         // TenantUsersAsync skips locked tenants
         var users = await manager.GetUsersForTenantAsync(TestContext.LockedTenantGuid, CancellationToken.None);
@@ -444,7 +458,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task GetTenantIdsForUserAsync_ShouldReturnAssignedTenants() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         var ids = (await manager.GetTenantIdsForUserAsync(adminId, CancellationToken.None)).ToList();
@@ -455,7 +469,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task GetTenantIdsForUserAsync_UnknownUser_ShouldReturnEmpty() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var ids = await manager.GetTenantIdsForUserAsync(Guid.NewGuid(), CancellationToken.None);
 
@@ -468,7 +482,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task CanSignInAsync_ActiveUserActiveTenant_ShouldReturnTrue() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         var canSignIn = await manager.CanSignInAsync(adminId, TestContext.TenantGuid, CancellationToken.None);
@@ -478,7 +492,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task CanSignInAsync_ActiveUserLockedTenant_ShouldReturnFalse() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         var canSignIn = await manager.CanSignInAsync(adminId, TestContext.LockedTenantGuid, CancellationToken.None);
@@ -489,7 +503,7 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task CanSignInAsync_UserNotAssignedToTenant_ShouldReturnFalse() {
         var user = await CreateUserAsync($"unassigned.{Guid.NewGuid()}");
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         var canSignIn = await manager.CanSignInAsync(user.Id, TestContext.TenantGuid, CancellationToken.None);
 
@@ -498,7 +512,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task CanSignInAsync_EmptyUserId_ShouldThrow() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => manager.CanSignInAsync(Guid.Empty, TestContext.TenantGuid, CancellationToken.None));
@@ -506,7 +520,7 @@ public class UsingN2TenantManager {
 
     [TestMethod]
     public async Task CanSignInAsync_EmptyTenantId_ShouldThrow() {
-        using var manager = GetTenantManager();
+        var manager = BuildTenantManager();
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(

@@ -7,10 +7,14 @@ using N2.Core.Identity.Data;
 
 using System.Diagnostics.CodeAnalysis;
 
+using static System.Net.Mime.MediaTypeNames;
+
 
 namespace N2.Core.Identity.Services;
 
 public class N2TenantManager : ITenantManager {
+
+    private readonly DatabaseProvider provider;
 
     /// <summary>
     /// Gets the name of the database connection used for establishing connections.
@@ -18,26 +22,18 @@ public class N2TenantManager : ITenantManager {
     private readonly string connectionName;
 
     private readonly AuthenticationConfig configuration;
-
-#pragma warning disable CA2213 // Disposable fields should be disposed
-    private readonly Semaphore contextLock = new(1, 1);
     private readonly IIdentityContextFactory factory;
-
-#pragma warning restore CA2213 // Disposable fields should be disposed
-
     private readonly ILogger<N2TenantManager> logger;
-
-    private IIdentityContext? context;
-
-    private bool disposedValue;
 
     public N2TenantManager(
         IIdentityContextFactory identityContextFactory,
         IConfiguration configuration,
         string connectionName,
-        ILogger<N2TenantManager> logger) {
+        ILogger<N2TenantManager> logger,
+        DatabaseProvider provider = DatabaseProvider.SqlServer) {
         this.factory = identityContextFactory;
         this.connectionName = connectionName;
+        this.provider = provider;
         this.logger = logger;
 
 
@@ -59,40 +55,11 @@ public class N2TenantManager : ITenantManager {
         }
     }
 
-    protected virtual void Dispose(bool disposing) {
-        if (!disposedValue) {
-            if (disposing) {
-                context?.Dispose();
-            }
-            disposedValue = true;
-        }
-    }
-
-    public void Dispose() {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-
-    private async Task<IIdentityContext> InitializeContextAsync() {
-        if (context != null) {
-            return context;
-        }
-
-        contextLock.WaitOne();
-        try {
-#pragma warning disable CA1508 // Avoid deadlocks caused by async waits in locks
-            // Double-check after acquiring the lock in case another thread initialized it
-            context ??= await factory.CreateAsync(connectionName);
-#pragma warning restore CA1508 // Avoid deadlocks caused by async waits in locks
-        } finally {
-            contextLock.Release();
-        }
-        return context;
-    }
+    private Task<IIdentityContext> CreateContextAsync() =>
+        factory.CreateAsync(provider, connectionName);
 
     public async Task<ICommandResponse> CreateAsync([NotNull] ApplicationTenant tenant, CancellationToken token) {
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         // Check for existing tenant
         var existingTenant = await ctx.ApplicationTenantAsync(tenant.NormalizedName!, token);
         if (existingTenant != null) { 
@@ -113,7 +80,7 @@ public class N2TenantManager : ITenantManager {
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         var existing = await ctx.FindTenantByIdAsync(tenant.Id, token);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
@@ -129,7 +96,7 @@ public class N2TenantManager : ITenantManager {
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenant.Name);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         var existing = await ctx.FindTenantByIdAsync(tenant.Id, token);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
@@ -142,8 +109,9 @@ public class N2TenantManager : ITenantManager {
         existing.NormalizedEmail = tenant.AdminEmail?.Trim().ToUpperInvariant();
         existing.ContactInfo = tenant.ContactInfo?.Trim();
         existing.ImagePath = tenant.ImagePath?.Trim();
-        existing.UserLimit = tenant.UserLimit;
+        existing.UserLimit = tenant.UserLimit != 0 ? tenant.UserLimit : existing.UserLimit;
         existing.IsHidden = tenant.IsHidden;
+        existing.MfaSecret = string.IsNullOrEmpty(tenant.MfaSecret) ? existing.MfaSecret : tenant.MfaSecret;
 
         (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
@@ -152,26 +120,26 @@ public class N2TenantManager : ITenantManager {
     public async Task<ApplicationTenant?> FindByIdAsync(Guid tenantId, CancellationToken token) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         return await ctx.FindTenantByIdAsync(tenantId, token);
     }
 
     public async Task<ApplicationTenant?> FindByNameAsync(string name, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(name);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         return await ctx.ApplicationTenantAsync(name.Trim().ToUpperInvariant(), token);
     }
 
     public async Task<ApplicationTenant?> FindByEmailAsync(string email, CancellationToken token) {
         ArgumentException.ThrowIfNullOrEmpty(email);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         return await ctx.FindTenantByEmailAsync(email.Trim().ToUpperInvariant(), token);
     }
 
     public async Task<SelectItemList<UserSelectItem>> GetTenantsAsync(CancellationToken token) {
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         return await ctx.TenantsAsync();
     }
 
@@ -179,7 +147,7 @@ public class N2TenantManager : ITenantManager {
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         var existing = await ctx.FindTenantByIdAsync(tenant.Id, token);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
@@ -194,7 +162,7 @@ public class N2TenantManager : ITenantManager {
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         var existing = await ctx.FindTenantByIdAsync(tenant.Id, token);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
@@ -211,7 +179,7 @@ public class N2TenantManager : ITenantManager {
         ArgumentOutOfRangeException.ThrowIfEqual(user.Id, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         var existingTenant = await ctx.FindTenantByIdAsync(tenant.Id, token);
         if (existingTenant == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
@@ -245,7 +213,7 @@ public class N2TenantManager : ITenantManager {
         ArgumentOutOfRangeException.ThrowIfEqual(user.Id, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         var userTenant = await ctx.ApplicationUserTenant
             .FirstOrDefaultAsync(ut => ut.ApplicationUserId == user.Id && ut.ApplicationTenantId == tenant.Id, token);
 
@@ -262,14 +230,14 @@ public class N2TenantManager : ITenantManager {
     public async Task<IEnumerable<string>> GetUsersForTenantAsync(Guid tenantId, CancellationToken token) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         return await ctx.TenantUsersAsync(tenantId);
     }
 
     public async Task<IEnumerable<Guid>> GetTenantIdsForUserAsync(Guid userId, CancellationToken token) {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         return await ctx.ApplicationUserTenant
             .AsNoTracking()
             .Where(ut => ut.ApplicationUserId == userId)
@@ -281,7 +249,7 @@ public class N2TenantManager : ITenantManager {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await InitializeContextAsync();
+        using var ctx = await CreateContextAsync();
         return await ctx.CanSignInTenantAsync(userId, tenantId);
     }
 }

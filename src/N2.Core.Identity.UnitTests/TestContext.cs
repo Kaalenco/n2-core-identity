@@ -20,6 +20,7 @@ internal static class TestContext {
     private static readonly Guid PublisherRoleGuid = Guid.Parse("33333333-3333-3333-3333-333333333333");
     public static readonly Guid TenantGuid = Guid.Parse("44444444-4444-4444-4444-444444444444");
     public static readonly Guid LockedTenantGuid = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    public static readonly Guid ApplicationGuid = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
     public static void ConfigureServices(ServiceCollection serviceCollection) {
         ConfigurationBuilder config = new();
@@ -188,6 +189,15 @@ internal static class TestContext {
             IsLocked = true
         });
 
+        // Add seeded application linked to the active tenant
+        context.Applications.Add(new Application {
+            Id = ApplicationGuid,
+            Name = "Test App",
+            NormalizedName = "TEST APP",
+            ApplicationTenantId = TenantGuid,
+            IsLocked = false
+        });
+
         // Link admin user to the active tenant
         context.UserTenants.Add(new ApplicationUserTenant {
             Id = Guid.NewGuid(),
@@ -256,6 +266,7 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
     public IQueryable<ApplicationRole> ApplicationRole => innerContext.ApplicationRole;
     public IQueryable<IdentityUserRole<Guid>> IdentityUserRole => innerContext.IdentityUserRole;
     public IQueryable<ApplicationUserTenant> ApplicationUserTenant => innerContext.ApplicationUserTenant;
+    public IQueryable<Application> Application => innerContext.Application;
     public IQueryable<IChangeLog> ChangeLogs => innerContext.ChangeLogs;
 
     public int MaxLogSize {
@@ -321,6 +332,60 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         await semaphore.WaitAsync();
         try {
             return await innerContext.TenantsAsync();
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<SelectItemList<UserSelectItem>> ApplicationsAsync(Guid tenantId) {
+        await semaphore.WaitAsync();
+        try {
+            return await innerContext.ApplicationsAsync(tenantId);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<Application?> FindApplicationByIdAsync(Guid applicationId, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.FindApplicationByIdAsync(applicationId, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<Application?> ApplicationAsync(Guid tenantId, string name, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.ApplicationAsync(tenantId, name, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<string> GetNameForApplicationAsync(Guid applicationId) {
+        await semaphore.WaitAsync();
+        try {
+            return await innerContext.GetNameForApplicationAsync(applicationId);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public void RemoveApplication(Application application) {
+        semaphore.Wait();
+        try {
+            innerContext.RemoveApplication(application);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<int> AddApplicationAsync(Application application, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.AddApplicationAsync(application, token);
         } finally {
             semaphore.Release();
         }

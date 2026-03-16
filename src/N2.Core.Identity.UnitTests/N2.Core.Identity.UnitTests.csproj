@@ -10,6 +10,17 @@
 
     <AssemblyVersion>1.1.0</AssemblyVersion>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
+    <NoWarn>
+      CA1859;
+      CA1707;
+      CA2007;
+      CA1819;
+      CA1515;
+      CS1591;
+      CA1812;
+      IDE0011;
+      IDE0022;
+    </NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -16,6 +16,19 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     Task<SelectItemList<UserSelectItem>> TenantsAsync();
 
+    Task<SelectItemList<UserSelectItem>> ApplicationsAsync(Guid tenantId);
+
+    Task<Application?> FindApplicationByIdAsync(Guid applicationId, CancellationToken token);
+    Task<Application?> ApplicationAsync(Guid tenantId, string name, CancellationToken token);
+
+    Task<string> GetNameForApplicationAsync(Guid applicationId);
+
+    void RemoveApplication(Application application);
+
+    Task<int> AddApplicationAsync(Application application, CancellationToken token);
+
+    IQueryable<Application> Application { get; }
+
     Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string normalizedName, CancellationToken token);
     Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token);
     Task<ApplicationTenant?> FindTenantByIdAsync(Guid tenantId, CancellationToken token);

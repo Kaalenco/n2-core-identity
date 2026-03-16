@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using N2.Core.Identity.Data;
 
@@ -11,9 +12,11 @@ using N2.Core.Identity.Data;
 namespace N2.Core.Identity.Migrations
 {
     [DbContext(typeof(N2IdentityContext))]
-    partial class N2IdentityContextModelSnapshot : ModelSnapshot
+    [Migration("20260316091425_ApplicationDataSet")]
+    partial class ApplicationDataSet
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -116,13 +119,7 @@ namespace N2.Core.Identity.Migrations
 
                     b.Property<bool>("IsLocked");
 
-                    b.Property<string>("MfaSecret")
-                        .HasMaxLength(128);
-
                     b.Property<string>("Name")
-                        .HasMaxLength(100);
-
-                    b.Property<string>("NormalizedName")
                         .HasMaxLength(100);
 
                     b.HasKey("Id");
@@ -156,42 +153,6 @@ namespace N2.Core.Identity.Migrations
                     b.ToTable("AspNetRoles", (string)null);
                 });
 
-            modelBuilder.Entity("N2.Core.Identity.Data.ApplicationSecret", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000);
-
-                    b.Property<DateTime?>("Expiration");
-
-                    b.Property<string>("HashedToken")
-                        .IsRequired()
-                        .HasMaxLength(256);
-
-                    b.Property<string>("Name")
-                        .HasMaxLength(100);
-
-                    b.Property<string>("NormalizedName")
-                        .HasMaxLength(100);
-
-                    b.Property<string>("Policies")
-                        .HasMaxLength(1000);
-
-                    b.Property<Guid>("ReferenceId");
-
-                    b.Property<string>("ReferenceType")
-                        .IsRequired();
-
-                    b.Property<byte[]>("Secret")
-                        .HasMaxLength(4000);
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ApplicationSecrets");
-                });
-
             modelBuilder.Entity("N2.Core.Identity.Data.ApplicationTenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -214,9 +175,6 @@ namespace N2.Core.Identity.Migrations
                     b.Property<bool>("IsLocked");
 
                     b.Property<bool>("IsRemoved");
-
-                    b.Property<string>("MfaSecret")
-                        .HasMaxLength(128);
 
                     b.Property<string>("Name")
                         .HasMaxLength(100);

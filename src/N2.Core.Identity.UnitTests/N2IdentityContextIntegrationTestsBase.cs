@@ -474,6 +474,15 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     }
 
     [TestMethod]
+    public async Task FindTenantByIdAsync_UnknownId_ShouldReturnNull() {
+        using var context = await CreateAndPrepareAsync();
+
+        var retrieved = await context.FindTenantByIdAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsNull(retrieved);
+    }
+
+    [TestMethod]
     public async Task FindTenantByEmailAsync_ExistingTenant_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
@@ -676,6 +685,15 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     }
 
     [TestMethod]
+    public async Task GetNameForTenantAsync_UnknownId_ShouldReturnUnknown() {
+        using var context = await CreateAndPrepareAsync();
+
+        var name = await context.GetNameForTenantAsync(Guid.NewGuid());
+
+        Assert.AreEqual("Unknown", name);
+    }
+
+    [TestMethod]
     public async Task GetNameForTenantAsync_ExistingTenant_ShouldReturnNonEmptyName() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
@@ -818,6 +836,253 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(originalName + "_v2", updated.Name);
         } finally {
             context.RemoveApplicationRole(role);
+            await context.Complete();
+        }
+    }
+
+    // ── Application persistence ───────────────────────────────────────────────
+
+    [TestMethod]
+    public async Task AddApplicationAsync_NewApp_ShouldPersistAndBeRetrievable() {
+        using var context = await CreateAndPrepareAsync();
+        var tenantId = Guid.NewGuid();
+        var tName = $"AppTenant_{tenantId:N}";
+        var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var app = new Application { Id = Guid.NewGuid(), Name = $"App_{Guid.NewGuid():N}", ApplicationTenantId = tenantId };
+
+        var count = await context.AddApplicationAsync(app, CancellationToken.None);
+
+        try {
+            Assert.IsGreaterThan(0, count);
+            var retrieved = await context.FindApplicationByIdAsync(app.Id, CancellationToken.None);
+            Assert.IsNotNull(retrieved);
+            Assert.AreEqual(app.Name, retrieved.Name);
+            Assert.AreEqual(tenantId, retrieved.ApplicationTenantId);
+        } finally {
+            context.RemoveApplication(app);
+            context.RemoveApplicationTenant(tenant);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task RemoveApplication_ShouldNotBeRetrievableAfterComplete() {
+        using var context = await CreateAndPrepareAsync();
+        var tenantId = Guid.NewGuid();
+        var tName = $"DelAppTenant_{tenantId:N}";
+        var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var app = new Application { Id = Guid.NewGuid(), Name = $"DelApp_{Guid.NewGuid():N}", ApplicationTenantId = tenantId };
+        await context.AddApplicationAsync(app, CancellationToken.None);
+
+        context.RemoveApplication(app);
+        var (status, _) = await context.Complete();
+
+        try {
+            Assert.AreEqual(ResponseStatus.Success, status);
+            var retrieved = await context.FindApplicationByIdAsync(app.Id, CancellationToken.None);
+            Assert.IsNull(retrieved);
+        } finally {
+            context.RemoveApplicationTenant(tenant);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task ApplicationAsync_ByTenantAndName_ShouldReturn() {
+        using var context = await CreateAndPrepareAsync();
+        var tenantId = Guid.NewGuid();
+        var tName = $"NameAppTenant_{tenantId:N}";
+        var appName = $"NamedApp_{Guid.NewGuid():N}";
+        var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var app = new Application { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
+        await context.AddApplicationAsync(app, CancellationToken.None);
+        await context.Complete();
+
+        try {
+            var retrieved = await context.ApplicationAsync(tenantId, appName, CancellationToken.None);
+            Assert.IsNotNull(retrieved);
+            Assert.AreEqual(app.Id, retrieved.Id);
+        } finally {
+            context.RemoveApplication(app);
+            context.RemoveApplicationTenant(tenant);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task ApplicationAsync_SameNameDifferentTenants_ShouldReturnCorrectOne() {
+        using var context = await CreateAndPrepareAsync();
+        const string sharedName = "SharedAppName";
+        var tenant1Id = Guid.NewGuid();
+        var tenant2Id = Guid.NewGuid();
+        var tenant1 = new ApplicationTenant { Id = tenant1Id, Name = $"T1_{tenant1Id:N}", AdminEmail = $"t1_{tenant1Id:N}@test.com" };
+        var tenant2 = new ApplicationTenant { Id = tenant2Id, Name = $"T2_{tenant2Id:N}", AdminEmail = $"t2_{tenant2Id:N}@test.com" };
+        await context.AddApplicationTenantAsync(tenant1, CancellationToken.None);
+        await context.AddApplicationTenantAsync(tenant2, CancellationToken.None);
+        var app1 = new Application { Id = Guid.NewGuid(), Name = sharedName, ApplicationTenantId = tenant1Id };
+        var app2 = new Application { Id = Guid.NewGuid(), Name = sharedName, ApplicationTenantId = tenant2Id };
+        await context.AddApplicationAsync(app1, CancellationToken.None);
+        await context.AddApplicationAsync(app2, CancellationToken.None);
+
+        try {
+            var r1 = await context.ApplicationAsync(tenant1Id, sharedName, CancellationToken.None);
+            var r2 = await context.ApplicationAsync(tenant2Id, sharedName, CancellationToken.None);
+            Assert.IsNotNull(r1);
+            Assert.IsNotNull(r2);
+            Assert.AreNotEqual(r1.Id, r2.Id);
+        } finally {
+            context.RemoveApplication(app1);
+            context.RemoveApplication(app2);
+            context.RemoveApplicationTenant(tenant1);
+            context.RemoveApplicationTenant(tenant2);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task FindApplicationByIdAsync_UnknownId_ShouldReturnNull() {
+        using var context = await CreateAndPrepareAsync();
+
+        var retrieved = await context.FindApplicationByIdAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsNull(retrieved);
+    }
+
+    [TestMethod]
+    public async Task GetNameForApplicationAsync_ExistingApp_ShouldReturnName() {
+        using var context = await CreateAndPrepareAsync();
+        var tenantId = Guid.NewGuid();
+        var tName = $"NameTenant_{tenantId:N}";
+        var appName = $"AppName_{Guid.NewGuid():N}";
+        var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var app = new Application { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
+        await context.AddApplicationAsync(app, CancellationToken.None);
+
+        try {
+            var name = await context.GetNameForApplicationAsync(app.Id);
+            Assert.AreEqual(appName, name);
+        } finally {
+            context.RemoveApplication(app);
+            context.RemoveApplicationTenant(tenant);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task GetNameForApplicationAsync_UnknownId_ShouldReturnUnknown() {
+        using var context = await CreateAndPrepareAsync();
+
+        var name = await context.GetNameForApplicationAsync(Guid.NewGuid());
+
+        Assert.AreEqual("Unknown", name);
+    }
+
+    [TestMethod]
+    public async Task AddApplicationAsync_NullApp_ShouldReturnMinusOne() {
+        using var context = await CreateAndPrepareAsync();
+
+        var count = await context.AddApplicationAsync(null!, CancellationToken.None);
+
+        Assert.AreEqual(-1, count);
+    }
+
+    [TestMethod]
+    public async Task ApplicationAsync_WrongTenant_ShouldReturnNull() {
+        using var context = await CreateAndPrepareAsync();
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        var tName = $"WrongT_{tenantId:N}";
+        var appName = $"WrongTApp_{Guid.NewGuid():N}";
+        var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var app = new Application { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
+        await context.AddApplicationAsync(app, CancellationToken.None);
+
+        try {
+            var retrieved = await context.ApplicationAsync(otherTenantId, appName, CancellationToken.None);
+            Assert.IsNull(retrieved);
+        } finally {
+            context.RemoveApplication(app);
+            context.RemoveApplicationTenant(tenant);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task ApplicationAsync_UnknownName_ShouldReturnNull() {
+        using var context = await CreateAndPrepareAsync();
+        var tenantId = Guid.NewGuid();
+        var tName = $"UnknownNameT_{tenantId:N}";
+        var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+
+        try {
+            var retrieved = await context.ApplicationAsync(tenantId, $"DoesNotExist_{Guid.NewGuid():N}", CancellationToken.None);
+            Assert.IsNull(retrieved);
+        } finally {
+            context.RemoveApplicationTenant(tenant);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task ApplicationsAsync_UnknownTenant_ShouldReturnEmpty() {
+        using var context = await CreateAndPrepareAsync();
+
+        var list = await context.ApplicationsAsync(Guid.NewGuid());
+
+        Assert.IsFalse(list.Any());
+    }
+
+    [TestMethod]
+    public async Task ApplicationsAsync_LockedApp_ShouldIndicateLockedInDisplayName() {
+        using var context = await CreateAndPrepareAsync();
+        var tenantId = Guid.NewGuid();
+        var tName = $"LockedAppT_{tenantId:N}";
+        var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
+        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var app = new Application { Id = Guid.NewGuid(), Name = $"LockMe_{Guid.NewGuid():N}", ApplicationTenantId = tenantId, IsLocked = true };
+        await context.AddApplicationAsync(app, CancellationToken.None);
+
+        try {
+            var list = await context.ApplicationsAsync(tenantId);
+            var item = list.FirstOrDefault(i => i.Key == app.Id);
+            Assert.IsNotNull(item, "Locked app should still appear in the list.");
+            Assert.IsTrue(item.Value?.DisplayName?.Contains("(Locked)", StringComparison.OrdinalIgnoreCase));
+        } finally {
+            context.RemoveApplication(app);
+            context.RemoveApplicationTenant(tenant);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task ApplicationsAsync_FilteredByTenant_ShouldOnlyReturnTenantApps() {
+        using var context = await CreateAndPrepareAsync();
+        var tenant1Id = Guid.NewGuid();
+        var tenant2Id = Guid.NewGuid();
+        var tenant1 = new ApplicationTenant { Id = tenant1Id, Name = $"ListT1_{tenant1Id:N}", AdminEmail = $"t1_{tenant1Id:N}@test.com" };
+        var tenant2 = new ApplicationTenant { Id = tenant2Id, Name = $"ListT2_{tenant2Id:N}", AdminEmail = $"t2_{tenant2Id:N}@test.com" };
+        await context.AddApplicationTenantAsync(tenant1, CancellationToken.None);
+        await context.AddApplicationTenantAsync(tenant2, CancellationToken.None);
+        var app1 = new Application { Id = Guid.NewGuid(), Name = $"ListApp1_{Guid.NewGuid():N}", ApplicationTenantId = tenant1Id };
+        var app2 = new Application { Id = Guid.NewGuid(), Name = $"ListApp2_{Guid.NewGuid():N}", ApplicationTenantId = tenant2Id };
+        await context.AddApplicationAsync(app1, CancellationToken.None);
+        await context.AddApplicationAsync(app2, CancellationToken.None);
+
+        try {
+            var list = await context.ApplicationsAsync(tenant1Id);
+            Assert.IsTrue(list.Any(i => i.Key == app1.Id), "Tenant 1 app should appear in its own list.");
+            Assert.IsFalse(list.Any(i => i.Key == app2.Id), "Tenant 2 app must not appear in tenant 1's list.");
+        } finally {
+            context.RemoveApplication(app1);
+            context.RemoveApplication(app2);
+            context.RemoveApplicationTenant(tenant1);
+            context.RemoveApplicationTenant(tenant2);
             await context.Complete();
         }
     }
