@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +53,8 @@ public class ApplicationUser : IdentityUser<Guid>, IIdentityUser
 /// Represents an application registered under an <see cref="ApplicationTenant"/>.
 /// Applications can be locked to prevent access without removing them from the system.
 /// </summary>
-public class Application {
+[Table("Applications")]
+public class ApplicationDefinition {
     /// <summary>Gets or sets the unique identifier for the application.</summary>
     [Key()]
     public Guid Id { get; set; }

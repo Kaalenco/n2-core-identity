@@ -62,6 +62,10 @@ public class UsingN2UserManager {
         var iterations = 100;
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
 
+        // Warmup to eliminate JIT compilation variance before measuring
+        await userManager.ValidateAsync(user, "WarmupPassword1!", CancellationToken.None);
+        await userManager.ValidateAsync(user, "WarmupPassword2!", CancellationToken.None);
+
         // Act - Test with passwords differing in first vs last character
         var timesFirstChar = new List<long>();
         var timesLastChar = new List<long>();

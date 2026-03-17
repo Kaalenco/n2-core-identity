@@ -107,7 +107,7 @@ public class AccountLockoutTests : N2IdentityTestsBase {
         }
 
         // Simulate lockout expiration (in real test, might need to adjust lockout time)
-        var dbUser = await identityContext.ApplicationUserAsync(userName.ToUpperInvariant(), CancellationToken.None);
+        var dbUser = await identityContext.UserFindRecord(userName.ToUpperInvariant(), CancellationToken.None);
         Assert.IsNotNull(dbUser);
         dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddSeconds(-1);
         await identityContext.Complete();

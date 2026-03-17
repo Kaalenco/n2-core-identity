@@ -4,7 +4,7 @@ using N2.Core.Identity.Data;
 namespace N2.Core.Identity.UnitTests;
 
 /// <summary>
-/// Tests for <see cref="Application"/> CRUD and query operations via <see cref="IIdentityContext"/>.
+/// Tests for <see cref="ApplicationDefinition"/> CRUD and query operations via <see cref="IIdentityContext"/>.
 /// Applications are always scoped to a tenant — name uniqueness is per-tenant, not global.
 /// </summary>
 [TestClass]
@@ -14,7 +14,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static Application NewApp(Guid tenantId, string name = "My App") {
+    private static ApplicationDefinition NewApp(Guid tenantId, string name = "My App") {
         return new() {
             Id = Guid.NewGuid(),
             Name = name,
@@ -23,42 +23,42 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
         };
     }
 
-    private static async Task<Application> CreateAppAsync(IIdentityContext context, Guid tenantId, string name = "My App") {
+    private static async Task<ApplicationDefinition> CreateAppAsync(IIdentityContext context, Guid tenantId, string name = "My App") {
         var app = NewApp(tenantId, name);
-        var count = await context.AddApplicationAsync(app, CancellationToken.None);
+        var count = await context.ApplicationAdd(app, CancellationToken.None);
         if (count <= 0) throw new InvalidOperationException($"Failed to seed application '{name}'.");
         return app;
     }
 
     // -------------------------------------------------------------------------
-    // AddApplicationAsync
+    // ApplicationAdd
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public async Task AddApplicationAsync_NewApp_ShouldPersistAndBeRetrievable() {
+    public async Task ApplicationAdd_NewApp_ShouldPersistAndBeRetrievable() {
         using var context = await GetIdentityContext();
 
         var app = NewApp(TestContext.TenantGuid, $"App {Guid.NewGuid()}");
-        var count = await context.AddApplicationAsync(app, CancellationToken.None);
+        var count = await context.ApplicationAdd(app, CancellationToken.None);
 
         Assert.IsGreaterThan(0, count, "SaveChanges should report at least one row affected.");
-        var retrieved = await context.FindApplicationByIdAsync(app.Id, CancellationToken.None);
+        var retrieved = await context.ApplicationFindRecord(app.Id, CancellationToken.None);
         Assert.IsNotNull(retrieved);
         Assert.AreEqual(app.Name, retrieved.Name);
         Assert.AreEqual(TestContext.TenantGuid, retrieved.ApplicationTenantId);
     }
 
     [TestMethod]
-    public async Task AddApplicationAsync_NullApp_ShouldReturnMinusOne() {
+    public async Task ApplicationAdd_NullApp_ShouldReturnMinusOne() {
         using var context = await GetIdentityContext();
 
-        var count = await context.AddApplicationAsync(null!, CancellationToken.None);
+        var count = await context.ApplicationAdd(null!, CancellationToken.None);
 
         Assert.AreEqual(-1, count);
     }
 
     [TestMethod]
-    public async Task AddApplicationAsync_SameNameDifferentTenants_ShouldBothPersist() {
+    public async Task ApplicationAdd_SameNameDifferentTenants_ShouldBothPersist() {
         using var context = await GetIdentityContext();
         const string sharedName = "Shared App Name";
 
@@ -68,13 +68,13 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
             Name = $"Other Tenant {Guid.NewGuid()}",
             AdminEmail = "other@tenant.com"
         };
-        await context.AddApplicationTenantAsync(otherTenant, CancellationToken.None);
+        await context.TenantAdd(otherTenant, CancellationToken.None);
 
         var app1 = await CreateAppAsync(context, TestContext.TenantGuid, sharedName);
         var app2 = await CreateAppAsync(context, otherTenant.Id, sharedName);
 
-        var retrieved1 = await context.ApplicationAsync(TestContext.TenantGuid, sharedName, CancellationToken.None);
-        var retrieved2 = await context.ApplicationAsync(otherTenant.Id, sharedName, CancellationToken.None);
+        var retrieved1 = await context.ApplicationFindRecord(TestContext.TenantGuid, sharedName, CancellationToken.None);
+        var retrieved2 = await context.ApplicationFindRecord(otherTenant.Id, sharedName, CancellationToken.None);
 
         Assert.IsNotNull(retrieved1);
         Assert.IsNotNull(retrieved2);
@@ -90,23 +90,23 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
         using var context = await GetIdentityContext();
         var app = await CreateAppAsync(context, TestContext.TenantGuid, $"To Remove {Guid.NewGuid()}");
 
-        context.RemoveApplication(app);
+        context.ApplicationDelete(app);
         var (status, _) = await context.Complete();
 
         Assert.AreEqual(ResponseStatus.Success, status);
-        var retrieved = await context.FindApplicationByIdAsync(app.Id, CancellationToken.None);
+        var retrieved = await context.ApplicationFindRecord(app.Id, CancellationToken.None);
         Assert.IsNull(retrieved);
     }
 
     // -------------------------------------------------------------------------
-    // FindApplicationByIdAsync
+    // ApplicationFindRecord
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public async Task FindApplicationByIdAsync_SeededApp_ShouldReturn() {
+    public async Task ApplicationFindRecord_SeededApp_ShouldReturn() {
         using var context = await GetIdentityContext();
 
-        var app = await context.FindApplicationByIdAsync(TestContext.ApplicationGuid, CancellationToken.None);
+        var app = await context.ApplicationFindRecord(TestContext.ApplicationGuid, CancellationToken.None);
 
         Assert.IsNotNull(app);
         Assert.AreEqual(TestContext.ApplicationGuid, app.Id);
@@ -114,10 +114,10 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
     }
 
     [TestMethod]
-    public async Task FindApplicationByIdAsync_UnknownId_ShouldReturnNull() {
+    public async Task ApplicationFindRecord_UnknownId_ShouldReturnNull() {
         using var context = await GetIdentityContext();
 
-        var app = await context.FindApplicationByIdAsync(Guid.NewGuid(), CancellationToken.None);
+        var app = await context.ApplicationFindRecord(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsNull(app);
     }
@@ -130,7 +130,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
     public async Task ApplicationAsync_SeededApp_ShouldReturn() {
         using var context = await GetIdentityContext();
 
-        var app = await context.ApplicationAsync(TestContext.TenantGuid, "Test App", CancellationToken.None);
+        var app = await context.ApplicationFindRecord(TestContext.TenantGuid, "Test App", CancellationToken.None);
 
         Assert.IsNotNull(app);
         Assert.AreEqual(TestContext.ApplicationGuid, app.Id);
@@ -141,7 +141,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
         using var context = await GetIdentityContext();
 
         // "Test App" exists under TenantGuid but not under LockedTenantGuid
-        var app = await context.ApplicationAsync(TestContext.LockedTenantGuid, "Test App", CancellationToken.None);
+        var app = await context.ApplicationFindRecord(TestContext.LockedTenantGuid, "Test App", CancellationToken.None);
 
         Assert.IsNull(app);
     }
@@ -150,42 +150,42 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
     public async Task ApplicationAsync_UnknownName_ShouldReturnNull() {
         using var context = await GetIdentityContext();
 
-        var app = await context.ApplicationAsync(TestContext.TenantGuid, "Does Not Exist", CancellationToken.None);
+        var app = await context.ApplicationFindRecord(TestContext.TenantGuid, "Does Not Exist", CancellationToken.None);
 
         Assert.IsNull(app);
     }
 
     // -------------------------------------------------------------------------
-    // GetNameForApplicationAsync
+    // ApplicationGetName
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public async Task GetNameForApplicationAsync_SeededApp_ShouldReturnName() {
+    public async Task ApplicationGetName_SeededApp_ShouldReturnName() {
         using var context = await GetIdentityContext();
 
-        var name = await context.GetNameForApplicationAsync(TestContext.ApplicationGuid);
+        var name = await context.ApplicationGetName(TestContext.ApplicationGuid, CancellationToken.None);
 
         Assert.AreEqual("Test App", name);
     }
 
     [TestMethod]
-    public async Task GetNameForApplicationAsync_UnknownId_ShouldReturnUnknown() {
+    public async Task ApplicationGetName_UnknownId_ShouldReturnUnknown() {
         using var context = await GetIdentityContext();
 
-        var name = await context.GetNameForApplicationAsync(Guid.NewGuid());
+        var name = await context.ApplicationGetName(Guid.NewGuid(), CancellationToken.None);
 
         Assert.AreEqual("Unknown", name);
     }
 
     // -------------------------------------------------------------------------
-    // ApplicationsAsync (select list, scoped to tenant)
+    // ApplicationGetSelectList (select list, scoped to tenant)
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public async Task ApplicationsAsync_SeededTenant_ShouldReturnSeededApp() {
+    public async Task ApplicationGetSelectList_SeededTenant_ShouldReturnSeededApp() {
         using var context = await GetIdentityContext();
 
-        var list = await context.ApplicationsAsync(TestContext.TenantGuid);
+        var list = await context.ApplicationGetSelectList(TestContext.TenantGuid, CancellationToken.None);
 
         Assert.IsNotNull(list);
         Assert.Contains(i => i.Key == TestContext.ApplicationGuid, list,
@@ -193,37 +193,37 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
     }
 
     [TestMethod]
-    public async Task ApplicationsAsync_OtherTenant_ShouldNotReturnAppsFromDifferentTenant() {
+    public async Task ApplicationGetSelectList_OtherTenant_ShouldNotReturnAppsFromDifferentTenant() {
         using var context = await GetIdentityContext();
 
         // LockedTenantGuid has no applications seeded
-        var list = await context.ApplicationsAsync(TestContext.LockedTenantGuid);
+        var list = await context.ApplicationGetSelectList(TestContext.LockedTenantGuid, CancellationToken.None);
 
         Assert.DoesNotContain(i => i.Key == TestContext.ApplicationGuid, list,
             "Applications from a different tenant must not appear.");
     }
 
     [TestMethod]
-    public async Task ApplicationsAsync_UnknownTenant_ShouldReturnEmpty() {
+    public async Task ApplicationGetSelectList_UnknownTenant_ShouldReturnEmpty() {
         using var context = await GetIdentityContext();
 
-        var list = await context.ApplicationsAsync(Guid.NewGuid());
+        var list = await context.ApplicationGetSelectList(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsFalse(list.Any());
     }
 
     [TestMethod]
-    public async Task ApplicationsAsync_LockedApp_ShouldIndicateLockedInDisplayName() {
+    public async Task ApplicationGetSelectList_LockedApp_ShouldIndicateLockedInDisplayName() {
         using var context = await GetIdentityContext();
         var app = await CreateAppAsync(context, TestContext.TenantGuid, $"Lock Me {Guid.NewGuid()}");
 
         // Lock the app directly
-        var retrieved = await context.FindApplicationByIdAsync(app.Id, CancellationToken.None);
+        var retrieved = await context.ApplicationFindRecord(app.Id, CancellationToken.None);
         Assert.IsNotNull(retrieved);
         retrieved.IsLocked = true;
         await context.Complete();
 
-        var list = await context.ApplicationsAsync(TestContext.TenantGuid);
+        var list = await context.ApplicationGetSelectList(TestContext.TenantGuid, CancellationToken.None);
         var item = list.FirstOrDefault(i => i.Key == app.Id);
 
         Assert.IsNotNull(item, "Locked app should still appear in the list.");
@@ -232,7 +232,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
     }
 
     // -------------------------------------------------------------------------
-    // Application queryable property
+    // ApplicationDefinition queryable property
     // -------------------------------------------------------------------------
 
     [TestMethod]

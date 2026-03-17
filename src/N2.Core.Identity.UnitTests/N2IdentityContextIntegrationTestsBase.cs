@@ -57,7 +57,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     // ── User persistence ──────────────────────────────────────────────────────
 
     [TestMethod]
-    public async Task AddApplicationUserAsync_NewUser_ShouldPersistAndBeRetrievable() {
+    public async Task ApplicationUserAdd_NewUser_ShouldPersistAndBeRetrievable() {
         using var context = await CreateAndPrepareAsync();
         var userId = Guid.NewGuid();
         var uniqueName = $"intg_{userId:N}";
@@ -70,21 +70,21 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             SecurityStamp = Guid.NewGuid().ToString()
         };
 
-        var count = await context.AddApplicationUserAsync(user, CancellationToken.None);
+        var count = await context.UserAdd(user, CancellationToken.None);
 
         try {
             Assert.IsTrue(count > 0, "SaveChanges should report at least one row affected.");
-            var retrieved = await context.ApplicationUserAsync(userId, CancellationToken.None);
+            var retrieved = await context.UserFindRecord(userId, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(uniqueName, retrieved.UserName);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task AddApplicationUserAsync_ExtendedProperties_ShouldRoundTrip() {
+    public async Task ApplicationUserAdd_ExtendedProperties_ShouldRoundTrip() {
         using var context = await CreateAndPrepareAsync();
         var userId = Guid.NewGuid();
         var uniqueName = $"ext_{userId:N}";
@@ -104,11 +104,11 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             MfaConfirmed = false
         };
 
-        await context.AddApplicationUserAsync(user, CancellationToken.None);
+        await context.UserAdd(user, CancellationToken.None);
 
         try {
             using var verifyContext = await CreateAndPrepareAsync();
-            var retrieved = await verifyContext.ApplicationUserAsync(userId, CancellationToken.None);
+            var retrieved = await verifyContext.UserFindRecord(userId, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual("Jane", retrieved.FirstName);
             Assert.AreEqual("Doe", retrieved.LastName);
@@ -118,7 +118,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(MultiFactorType.Email, retrieved.MfaType);
             Assert.IsFalse(retrieved.MfaConfirmed);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -136,20 +136,20 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             NormalizedEmail = $"{uniqueName}@test.com".ToUpperInvariant(),
             SecurityStamp = Guid.NewGuid().ToString()
         };
-        await context.AddApplicationUserAsync(user, CancellationToken.None);
+        await context.UserAdd(user, CancellationToken.None);
 
-        context.RemoveApplicationUser(user);
+        context.UserDelete(user);
         var (status, _) = await context.Complete();
 
         Assert.AreEqual(ResponseStatus.Success, status);
-        var retrieved = await context.ApplicationUserAsync(userId, CancellationToken.None);
+        var retrieved = await context.UserFindRecord(userId, CancellationToken.None);
         Assert.IsNull(retrieved);
     }
 
     // ── Role persistence ──────────────────────────────────────────────────────
 
     [TestMethod]
-    public async Task AddApplicationRoleAsync_NewRole_ShouldPersistAndBeRetrievable() {
+    public async Task ApplicationRoleAdd_NewRole_ShouldPersistAndBeRetrievable() {
         using var context = await CreateAndPrepareAsync();
         var roleId = Guid.NewGuid();
         var uniqueName = $"Role_{roleId:N}";
@@ -159,15 +159,15 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             NormalizedName = uniqueName.ToUpperInvariant()
         };
 
-        var count = await context.AddApplicationRoleAsync(role, CancellationToken.None);
+        var count = await context.RoleAdd(role, CancellationToken.None);
 
         try {
             Assert.IsTrue(count > 0);
-            var retrieved = await context.ApplicationRoleAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
+            var retrieved = await context.RoleFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
-            context.RemoveApplicationRole(role);
+            context.RoleDelete(role);
             await context.Complete();
         }
     }
@@ -182,31 +182,31 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Name = uniqueName,
             NormalizedName = uniqueName.ToUpperInvariant()
         };
-        await context.AddApplicationRoleAsync(role, CancellationToken.None);
+        await context.RoleAdd(role, CancellationToken.None);
 
-        context.RemoveApplicationRole(role);
+        context.RoleDelete(role);
         var (status, _) = await context.Complete();
 
         Assert.AreEqual(ResponseStatus.Success, status);
-        var retrieved = await context.ApplicationRoleAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
+        var retrieved = await context.RoleFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
         Assert.IsNull(retrieved);
     }
 
     // ── User-role assignment ──────────────────────────────────────────────────
 
     [TestMethod]
-    public async Task AddIdentityUserRoleAsync_ShouldPersistAndBeRetrievable() {
+    public async Task ApplicationUserRoleAdd_ShouldPersistAndBeRetrievable() {
         using var context = await CreateAndPrepareAsync();
         var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
         var (user, role) = await SeedUserAndRoleAsync(context, userId, roleId);
 
         var userRole = new IdentityUserRole<Guid> { UserId = userId, RoleId = roleId };
-        var count = await context.AddIdentityUserRoleAsync(userRole, CancellationToken.None);
+        var count = await context.UserRoleAdd(userRole, CancellationToken.None);
 
         try {
             Assert.IsTrue(count > 0);
-            var retrieved = await context.IdentityUserRoleAsync(userId, roleId, CancellationToken.None);
+            var retrieved = await context.UserRoleFindRecord(userId, roleId, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(userId, retrieved.UserId);
             Assert.AreEqual(roleId, retrieved.RoleId);
@@ -222,13 +222,13 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var roleId = Guid.NewGuid();
         var (user, role) = await SeedUserAndRoleAsync(context, userId, roleId);
         var userRole = new IdentityUserRole<Guid> { UserId = userId, RoleId = roleId };
-        await context.AddIdentityUserRoleAsync(userRole, CancellationToken.None);
+        await context.UserRoleAdd(userRole, CancellationToken.None);
 
-        context.RemoveApplicationUserRole(userRole);
+        context.UserRoleDelete(userRole);
         await context.Complete();
 
         try {
-            var retrieved = await context.IdentityUserRoleAsync(userId, roleId, CancellationToken.None);
+            var retrieved = await context.UserRoleFindRecord(userId, roleId, CancellationToken.None);
             Assert.IsNull(retrieved);
         } finally {
             await CleanupUserRoleAsync(context, user, role, null);
@@ -238,7 +238,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     // ── Tenant persistence ────────────────────────────────────────────────────
 
     [TestMethod]
-    public async Task AddApplicationTenantAsync_NewTenant_ShouldPersistAndBeRetrievable() {
+    public async Task ApplicationTenantAdd_NewTenant_ShouldPersistAndBeRetrievable() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var uniqueName = $"Tenant_{tenantId:N}";
@@ -248,17 +248,17 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             AdminEmail = $"{uniqueName}@test.com"
         };
 
-        var count = await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        var count = await context.TenantAdd(tenant, CancellationToken.None);
         var updates = await context.Complete();
 
         try {
             Assert.AreEqual(ResponseStatus.Success, updates.status);
             Assert.IsGreaterThan(0, count);
-            var retrieved = await context.ApplicationTenantAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
+            var retrieved = await context.TenantFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -273,26 +273,26 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Name = uniqueName,
             AdminEmail = $"{uniqueName}@test.com"
         };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
 
-        context.RemoveApplicationTenant(tenant);
+        context.TenantDelete(tenant);
         var (status, _) = await context.Complete();
 
         Assert.AreEqual(ResponseStatus.Success, status);
-        var retrieved = await context.ApplicationTenantAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
+        var retrieved = await context.TenantFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
         Assert.IsNull(retrieved);
     }
 
     // ── User-tenant assignment ────────────────────────────────────────────────
 
     [TestMethod]
-    public async Task AddIdentityUserTenantAsync_ShouldPersistAndBeRetrievable() {
+    public async Task ApplicationUserTenantAdd_ShouldPersistAndBeRetrievable() {
         using var context = await CreateAndPrepareAsync();
         var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: false);
 
         try {
-            var canSignIn = await context.CanSignInTenantAsync(user.Id, tenant.Id);
-            Assert.IsTrue(canSignIn, "User should be linkable to a tenant via AddIdentityUserTenantAsync.");
+            var canSignIn = await context.UserCanSignInTenant(user.Id, tenant.Id, CancellationToken.None);
+            Assert.IsTrue(canSignIn, "User should be linkable to a tenant via ApplicationUserTenantAdd.");
         } finally {
             await CleanupUserTenantAsync(context, user, tenant, userTenant);
         }
@@ -302,15 +302,15 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     public async Task RemoveApplicationUserTenant_ShouldPreventSignInAfterComplete() {
         using var context = await CreateAndPrepareAsync();
         var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: false);
-        context.RemoveApplicationUserTenant(userTenant);
+        context.UserTenantDelete(userTenant);
         await context.Complete();
 
         try {
-            var canSignIn = await context.CanSignInTenantAsync(user.Id, tenant.Id);
+            var canSignIn = await context.UserCanSignInTenant(user.Id, tenant.Id, CancellationToken.None);
             Assert.IsFalse(canSignIn, "User should no longer access tenant after the link is removed.");
         } finally {
-            context.RemoveApplicationTenant(tenant);
-            context.RemoveApplicationUser(user);
+            context.TenantDelete(tenant);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -318,46 +318,46 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     // ── Lookup queries ────────────────────────────────────────────────────────
 
     [TestMethod]
-    public async Task ApplicationUserAsync_ByNormalizedName_ShouldReturn() {
+    public async Task ApplicationUserFindRecord_ByNormalizedName_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var retrieved = await context.ApplicationUserAsync(user.NormalizedUserName!, CancellationToken.None);
+            var retrieved = await context.UserFindRecord(user.NormalizedUserName!, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(user.Id, retrieved.Id);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task ApplicationUserAsync_ByGuid_ShouldReturn() {
+    public async Task ApplicationUserFindRecord_ByGuid_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var retrieved = await context.ApplicationUserAsync(user.Id, CancellationToken.None);
+            var retrieved = await context.UserFindRecord(user.Id, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(user.UserName, retrieved.UserName);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task ApplicationUserByEmailAsync_ShouldReturn() {
+    public async Task ApplicationUserFindRecordByEmail_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var retrieved = await context.ApplicationUserByEmailAsync(user.NormalizedEmail!, CancellationToken.None);
+            var retrieved = await context.UserFindRecordByEmail(user.NormalizedEmail!, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(user.Id, retrieved.Id);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -368,12 +368,12 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var result = await context.FindByNameAsync(user.NormalizedUserName!, CancellationToken.None);
+            var result = await context.UserFind(user.NormalizedUserName!, CancellationToken.None);
             Assert.AreEqual(ResponseStatus.Success, result.Status);
             Assert.IsNotNull(result.Value);
             Assert.AreEqual(user.Id, result.Value.Id);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -382,7 +382,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     public async Task FindByNameAsync_NonExistentUser_ShouldReturnNotFound() {
         using var context = await CreateAndPrepareAsync();
 
-        var result = await context.FindByNameAsync($"GHOST_{Guid.NewGuid():N}", CancellationToken.None);
+        var result = await context.UserFind($"GHOST_{Guid.NewGuid():N}", CancellationToken.None);
 
         Assert.AreNotEqual(ResponseStatus.Success, result.Status);
     }
@@ -393,11 +393,11 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var retrieved = await context.FindByIdAsync(user.Id, CancellationToken.None);
+            var retrieved = await context.UserFindRecord(user.Id, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(user.UserName, retrieved.UserName);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -408,94 +408,94 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var retrieved = await context.FindByEmailAsync(user.NormalizedEmail!, CancellationToken.None);
+            var retrieved = await context.UserFindRecordByEmail(user.NormalizedEmail!, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(user.Id, retrieved.Id);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task ApplicationRoleAsync_ByNormalizedName_ShouldReturn() {
+    public async Task ApplicationRoleFindRecord_ByNormalizedName_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var roleId = Guid.NewGuid();
         var uniqueName = $"LookupRole_{roleId:N}";
         var role = new ApplicationRole { Id = roleId, Name = uniqueName, NormalizedName = uniqueName.ToUpperInvariant() };
-        await context.AddApplicationRoleAsync(role, CancellationToken.None);
+        await context.RoleAdd(role, CancellationToken.None);
 
         try {
-            var retrieved = await context.ApplicationRoleAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
+            var retrieved = await context.RoleFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
-            context.RemoveApplicationRole(role);
+            context.RoleDelete(role);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task ApplicationTenantAsync_ByNormalizedName_ShouldReturn() {
+    public async Task ApplicationTenantFindRecord_ByNormalizedName_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var uniqueName = $"LookupTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
         var updates = await context.Complete();
 
         try {
             Assert.AreEqual(ResponseStatus.Success, updates.status);
-            var retrieved = await context.ApplicationTenantAsync(uniqueName.ToUpperInvariant(), CancellationToken.None);
+            var retrieved = await context.TenantFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task FindTenantByIdAsync_ExistingTenant_ShouldReturn() {
+    public async Task ApplicationTenantFindRecord_ExistingTenant_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var uniqueName = $"IdTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
 
         try {
-            var retrieved = await context.FindTenantByIdAsync(tenantId, CancellationToken.None);
+            var retrieved = await context.TenantFindRecord(tenantId, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(tenantId, retrieved.Id);
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task FindTenantByIdAsync_UnknownId_ShouldReturnNull() {
+    public async Task ApplicationTenantFindRecord_UnknownId_ShouldReturnNull() {
         using var context = await CreateAndPrepareAsync();
 
-        var retrieved = await context.FindTenantByIdAsync(Guid.NewGuid(), CancellationToken.None);
+        var retrieved = await context.TenantFindRecord(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsNull(retrieved);
     }
 
     [TestMethod]
-    public async Task FindTenantByEmailAsync_ExistingTenant_ShouldReturn() {
+    public async Task ApplicationTenantFindRecordByEmail_ExistingTenant_ShouldReturn() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var uniqueName = $"EmailTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
 
         try {
-            var retrieved = await context.FindTenantByEmailAsync(tenant.NormalizedEmail!, CancellationToken.None);
+            var retrieved = await context.TenantFindRecordByEmail(tenant.NormalizedEmail!, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(tenantId, retrieved.Id);
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -508,10 +508,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var canSignIn = await context.CanSignInAsync(user.Id);
+            var canSignIn = await context.UserCanSignIn(user.Id, CancellationToken.None);
             Assert.IsTrue(canSignIn);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -531,13 +531,13 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             LockoutEnabled = true,
             LockoutEnd = DateTimeOffset.UtcNow.AddDays(1)
         };
-        await context.AddApplicationUserAsync(lockedUser, CancellationToken.None);
+        await context.UserAdd(lockedUser, CancellationToken.None);
 
         try {
-            var canSignIn = await context.CanSignInAsync(userId);
+            var canSignIn = await context.UserCanSignIn(userId, CancellationToken.None);
             Assert.IsFalse(canSignIn);
         } finally {
-            context.RemoveApplicationUser(lockedUser);
+            context.UserDelete(lockedUser);
             await context.Complete();
         }
     }
@@ -546,7 +546,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     public async Task CanSignInAsync_UnknownUser_ShouldReturnFalse() {
         using var context = await CreateAndPrepareAsync();
 
-        var canSignIn = await context.CanSignInAsync(Guid.NewGuid());
+        var canSignIn = await context.UserCanSignIn(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsFalse(canSignIn);
     }
@@ -557,7 +557,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: false);
 
         try {
-            var canSignIn = await context.CanSignInTenantAsync(user.Id, tenant.Id);
+            var canSignIn = await context.UserCanSignInTenant(user.Id, tenant.Id, CancellationToken.None);
             Assert.IsTrue(canSignIn);
         } finally {
             await CleanupUserTenantAsync(context, user, tenant, userTenant);
@@ -570,7 +570,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: true);
 
         try {
-            var canSignIn = await context.CanSignInTenantAsync(user.Id, tenant.Id);
+            var canSignIn = await context.UserCanSignInTenant(user.Id, tenant.Id, CancellationToken.None);
             Assert.IsFalse(canSignIn);
         } finally {
             await CleanupUserTenantAsync(context, user, tenant, userTenant);
@@ -583,10 +583,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var canSignIn = await context.CanSignInTenantAsync(user.Id, Guid.NewGuid());
+            var canSignIn = await context.UserCanSignInTenant(user.Id, Guid.NewGuid(), CancellationToken.None);
             Assert.IsFalse(canSignIn);
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -606,20 +606,20 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             LockoutEnabled = true,
             LockoutEnd = DateTimeOffset.UtcNow.AddDays(1)
         };
-        await context.AddApplicationUserAsync(lockedUser, CancellationToken.None);
+        await context.UserAdd(lockedUser, CancellationToken.None);
         var tenantId = Guid.NewGuid();
         var tenant = new ApplicationTenant { Id = tenantId, Name = $"T_{tenantId:N}", AdminEmail = $"t_{tenantId:N}@test.com", IsLocked = false };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
         var userTenant = new ApplicationUserTenant { Id = Guid.NewGuid(), ApplicationUserId = userId, ApplicationTenantId = tenantId };
-        await context.AddIdentityUserTenantAsync(userTenant, CancellationToken.None);
+        await context.UserTenantAdd(userTenant, CancellationToken.None);
 
         try {
-            var canSignIn = await context.CanSignInTenantAsync(userId, tenant.Id);
+            var canSignIn = await context.UserCanSignInTenant(userId, tenant.Id, CancellationToken.None);
             Assert.IsFalse(canSignIn);
         } finally {
-            context.RemoveApplicationUserTenant(userTenant);
-            context.RemoveApplicationTenant(tenant);
-            context.RemoveApplicationUser(lockedUser);
+            context.UserTenantDelete(userTenant);
+            context.TenantDelete(tenant);
+            context.UserDelete(lockedUser);
             await context.Complete();
         }
     }
@@ -628,7 +628,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     public async Task CanSignInTenantAsync_UnknownUser_ShouldReturnFalse() {
         using var context = await CreateAndPrepareAsync();
 
-        var canSignIn = await context.CanSignInTenantAsync(Guid.NewGuid(), Guid.NewGuid());
+        var canSignIn = await context.UserCanSignInTenant(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsFalse(canSignIn);
     }
@@ -636,17 +636,17 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     // ── Role membership queries ───────────────────────────────────────────────
 
     [TestMethod]
-    public async Task UserRolesAsync_UserWithRole_ShouldContainRole() {
+    public async Task ApplicationUserGetRoles_UserWithRole_ShouldContainRole() {
         using var context = await CreateAndPrepareAsync();
         var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
         var (user, role) = await SeedUserAndRoleAsync(context, userId, roleId);
         var userRole = new IdentityUserRole<Guid> { UserId = userId, RoleId = roleId };
-        await context.AddIdentityUserRoleAsync(userRole, CancellationToken.None);
+        await context.UserRoleAdd(userRole, CancellationToken.None);
         await context.Complete();
 
         try {
-            var roles = await context.UserRolesAsync(userId);
+            var roles = await context.UserGetRoles(userId, CancellationToken.None);
             Assert.Contains(r => r == role.Name, roles);
         } finally {
             await CleanupUserRoleAsync(context, user, role, userRole);
@@ -655,15 +655,15 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     }
 
     [TestMethod]
-    public async Task UserRolesAsync_UserWithNoRoles_ShouldReturnEmpty() {
+    public async Task ApplicationUserGetRoles_UserWithNoRoles_ShouldReturnEmpty() {
         using var context = await CreateAndPrepareAsync();
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var roles = await context.UserRolesAsync(user.Id);
+            var roles = await context.UserGetRoles(user.Id, CancellationToken.None);
             Assert.IsFalse(roles.Any());
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -671,41 +671,41 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     // ── Display name ──────────────────────────────────────────────────────────
 
     [TestMethod]
-    public async Task GetNameForUserAsync_ExistingUser_ShouldReturnNonEmptyName() {
+    public async Task ApplicationUserGetName_ExistingUser_ShouldReturnNonEmptyName() {
         using var context = await CreateAndPrepareAsync();
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var name = await context.GetNameForUserAsync(user.Id);
+            var name = await context.UserGetName(user.Id, CancellationToken.None);
             Assert.IsFalse(string.IsNullOrWhiteSpace(name));
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task GetNameForTenantAsync_UnknownId_ShouldReturnUnknown() {
+    public async Task ApplicationTenantGetName_UnknownId_ShouldReturnUnknown() {
         using var context = await CreateAndPrepareAsync();
 
-        var name = await context.GetNameForTenantAsync(Guid.NewGuid());
+        var name = await context.TenantGetName(Guid.NewGuid(), CancellationToken.None);
 
         Assert.AreEqual("Unknown", name);
     }
 
     [TestMethod]
-    public async Task GetNameForTenantAsync_ExistingTenant_ShouldReturnNonEmptyName() {
+    public async Task ApplicationTenantGetName_ExistingTenant_ShouldReturnNonEmptyName() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var uniqueName = $"NameTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
 
         try {
-            var name = await context.GetNameForTenantAsync(tenantId);
+            var name = await context.TenantGetName(tenantId, CancellationToken.None);
             Assert.IsFalse(string.IsNullOrWhiteSpace(name));
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -718,13 +718,13 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var roleId = Guid.NewGuid();
         var uniqueName = $"ListRole_{roleId:N}";
         var role = new ApplicationRole { Id = roleId, Name = uniqueName, NormalizedName = uniqueName.ToUpperInvariant() };
-        await context.AddApplicationRoleAsync(role, CancellationToken.None);
+        await context.RoleAdd(role, CancellationToken.None);
 
         try {
-            var roles = await context.RolesAsync();
+            var roles = await context.RoleGetSelectList(CancellationToken.None);
             Assert.IsTrue(roles.Any());
         } finally {
-            context.RemoveApplicationRole(role);
+            context.RoleDelete(role);
             await context.Complete();
         }
     }
@@ -735,10 +735,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, _) = await SeedSingleUserAsync(context);
 
         try {
-            var users = await context.UsersAsync();
+            var users = await context.UserGetSelectList(CancellationToken.None);
             Assert.IsTrue(users.Any());
         } finally {
-            context.RemoveApplicationUser(user);
+            context.UserDelete(user);
             await context.Complete();
         }
     }
@@ -749,13 +749,13 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var tenantId = Guid.NewGuid();
         var uniqueName = $"ListTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
 
         try {
-            var tenants = await context.TenantsAsync();
+            var tenants = await context.TenantGetSelectList(CancellationToken.None);
             Assert.IsTrue(tenants.Any());
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -763,12 +763,12 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     // ── Tenant membership queries ─────────────────────────────────────────────
 
     [TestMethod]
-    public async Task TenantUsersAsync_TenantWithUser_ShouldContainUser() {
+    public async Task ApplicationTenantGetUsers_TenantWithUser_ShouldContainUser() {
         using var context = await CreateAndPrepareAsync();
         var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: false);
 
         try {
-            var users = await context.TenantUsersAsync(tenant.Id);
+            var users = await context.TenantGetUsers(tenant.Id, CancellationToken.None);
             Assert.IsTrue(users.Any(u => u == user.UserName));
         } finally {
             await CleanupUserTenantAsync(context, user, tenant, userTenant);
@@ -776,27 +776,27 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     }
 
     [TestMethod]
-    public async Task TenantUsersAsync_TenantWithNoUsers_ShouldReturnEmpty() {
+    public async Task ApplicationTenantGetUsers_TenantWithNoUsers_ShouldReturnEmpty() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var uniqueName = $"NoUserTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
 
         try {
-            var users = await context.TenantUsersAsync(tenantId);
+            var users = await context.TenantGetUsers(tenantId, CancellationToken.None);
             Assert.IsFalse(users.Any());
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task TenantUsersAsync_UnknownTenant_ShouldReturnEmpty() {
+    public async Task ApplicationTenantGetUsers_UnknownTenant_ShouldReturnEmpty() {
         using var context = await CreateAndPrepareAsync();
 
-        var users = await context.TenantUsersAsync(Guid.NewGuid());
+        var users = await context.TenantGetUsers(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsFalse(users.Any());
     }
@@ -821,7 +821,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var roleId = Guid.NewGuid();
         var originalName = $"MutRole_{roleId:N}";
         var role = new ApplicationRole { Id = roleId, Name = originalName, NormalizedName = originalName.ToUpperInvariant() };
-        await context.AddApplicationRoleAsync(role, CancellationToken.None);
+        await context.RoleAdd(role, CancellationToken.None);
 
         try {
             role.Name = originalName + "_v2";
@@ -831,37 +831,37 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsNotNull(message);
 
             using var verifyContext = await CreateAndPrepareAsync();
-            var updated = await verifyContext.ApplicationRoleAsync(originalName.ToUpperInvariant(), CancellationToken.None);
+            var updated = await verifyContext.RoleFindRecord(originalName.ToUpperInvariant(), CancellationToken.None);
             Assert.IsNotNull(updated);
             Assert.AreEqual(originalName + "_v2", updated.Name);
         } finally {
-            context.RemoveApplicationRole(role);
+            context.RoleDelete(role);
             await context.Complete();
         }
     }
 
-    // ── Application persistence ───────────────────────────────────────────────
+    // ── ApplicationDefinition persistence ───────────────────────────────────────────────
 
     [TestMethod]
-    public async Task AddApplicationAsync_NewApp_ShouldPersistAndBeRetrievable() {
+    public async Task ApplicationAdd_NewApp_ShouldPersistAndBeRetrievable() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var tName = $"AppTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
-        var app = new Application { Id = Guid.NewGuid(), Name = $"App_{Guid.NewGuid():N}", ApplicationTenantId = tenantId };
+        await context.TenantAdd(tenant, CancellationToken.None);
+        var app = new ApplicationDefinition { Id = Guid.NewGuid(), Name = $"App_{Guid.NewGuid():N}", ApplicationTenantId = tenantId };
 
-        var count = await context.AddApplicationAsync(app, CancellationToken.None);
+        var count = await context.ApplicationAdd(app, CancellationToken.None);
 
         try {
             Assert.IsGreaterThan(0, count);
-            var retrieved = await context.FindApplicationByIdAsync(app.Id, CancellationToken.None);
+            var retrieved = await context.ApplicationFindRecord(app.Id, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(app.Name, retrieved.Name);
             Assert.AreEqual(tenantId, retrieved.ApplicationTenantId);
         } finally {
-            context.RemoveApplication(app);
-            context.RemoveApplicationTenant(tenant);
+            context.ApplicationDelete(app);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -872,19 +872,19 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var tenantId = Guid.NewGuid();
         var tName = $"DelAppTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
-        var app = new Application { Id = Guid.NewGuid(), Name = $"DelApp_{Guid.NewGuid():N}", ApplicationTenantId = tenantId };
-        await context.AddApplicationAsync(app, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
+        var app = new ApplicationDefinition { Id = Guid.NewGuid(), Name = $"DelApp_{Guid.NewGuid():N}", ApplicationTenantId = tenantId };
+        await context.ApplicationAdd(app, CancellationToken.None);
 
-        context.RemoveApplication(app);
+        context.ApplicationDelete(app);
         var (status, _) = await context.Complete();
 
         try {
             Assert.AreEqual(ResponseStatus.Success, status);
-            var retrieved = await context.FindApplicationByIdAsync(app.Id, CancellationToken.None);
+            var retrieved = await context.ApplicationFindRecord(app.Id, CancellationToken.None);
             Assert.IsNull(retrieved);
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -896,18 +896,18 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var tName = $"NameAppTenant_{tenantId:N}";
         var appName = $"NamedApp_{Guid.NewGuid():N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
-        var app = new Application { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
-        await context.AddApplicationAsync(app, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
+        var app = new ApplicationDefinition { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
+        await context.ApplicationAdd(app, CancellationToken.None);
         await context.Complete();
 
         try {
-            var retrieved = await context.ApplicationAsync(tenantId, appName, CancellationToken.None);
+            var retrieved = await context.ApplicationFindRecord(tenantId, appName, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(app.Id, retrieved.Id);
         } finally {
-            context.RemoveApplication(app);
-            context.RemoveApplicationTenant(tenant);
+            context.ApplicationDelete(app);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -920,72 +920,72 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var tenant2Id = Guid.NewGuid();
         var tenant1 = new ApplicationTenant { Id = tenant1Id, Name = $"T1_{tenant1Id:N}", AdminEmail = $"t1_{tenant1Id:N}@test.com" };
         var tenant2 = new ApplicationTenant { Id = tenant2Id, Name = $"T2_{tenant2Id:N}", AdminEmail = $"t2_{tenant2Id:N}@test.com" };
-        await context.AddApplicationTenantAsync(tenant1, CancellationToken.None);
-        await context.AddApplicationTenantAsync(tenant2, CancellationToken.None);
-        var app1 = new Application { Id = Guid.NewGuid(), Name = sharedName, ApplicationTenantId = tenant1Id };
-        var app2 = new Application { Id = Guid.NewGuid(), Name = sharedName, ApplicationTenantId = tenant2Id };
-        await context.AddApplicationAsync(app1, CancellationToken.None);
-        await context.AddApplicationAsync(app2, CancellationToken.None);
+        await context.TenantAdd(tenant1, CancellationToken.None);
+        await context.TenantAdd(tenant2, CancellationToken.None);
+        var app1 = new ApplicationDefinition { Id = Guid.NewGuid(), Name = sharedName, ApplicationTenantId = tenant1Id };
+        var app2 = new ApplicationDefinition { Id = Guid.NewGuid(), Name = sharedName, ApplicationTenantId = tenant2Id };
+        await context.ApplicationAdd(app1, CancellationToken.None);
+        await context.ApplicationAdd(app2, CancellationToken.None);
 
         try {
-            var r1 = await context.ApplicationAsync(tenant1Id, sharedName, CancellationToken.None);
-            var r2 = await context.ApplicationAsync(tenant2Id, sharedName, CancellationToken.None);
+            var r1 = await context.ApplicationFindRecord(tenant1Id, sharedName, CancellationToken.None);
+            var r2 = await context.ApplicationFindRecord(tenant2Id, sharedName, CancellationToken.None);
             Assert.IsNotNull(r1);
             Assert.IsNotNull(r2);
             Assert.AreNotEqual(r1.Id, r2.Id);
         } finally {
-            context.RemoveApplication(app1);
-            context.RemoveApplication(app2);
-            context.RemoveApplicationTenant(tenant1);
-            context.RemoveApplicationTenant(tenant2);
+            context.ApplicationDelete(app1);
+            context.ApplicationDelete(app2);
+            context.TenantDelete(tenant1);
+            context.TenantDelete(tenant2);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task FindApplicationByIdAsync_UnknownId_ShouldReturnNull() {
+    public async Task ApplicationFindRecord_UnknownId_ShouldReturnNull() {
         using var context = await CreateAndPrepareAsync();
 
-        var retrieved = await context.FindApplicationByIdAsync(Guid.NewGuid(), CancellationToken.None);
+        var retrieved = await context.ApplicationFindRecord(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsNull(retrieved);
     }
 
     [TestMethod]
-    public async Task GetNameForApplicationAsync_ExistingApp_ShouldReturnName() {
+    public async Task ApplicationGetName_ExistingApp_ShouldReturnName() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var tName = $"NameTenant_{tenantId:N}";
         var appName = $"AppName_{Guid.NewGuid():N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
-        var app = new Application { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
-        await context.AddApplicationAsync(app, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
+        var app = new ApplicationDefinition { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
+        await context.ApplicationAdd(app, CancellationToken.None);
 
         try {
-            var name = await context.GetNameForApplicationAsync(app.Id);
+            var name = await context.ApplicationGetName(app.Id, CancellationToken.None);
             Assert.AreEqual(appName, name);
         } finally {
-            context.RemoveApplication(app);
-            context.RemoveApplicationTenant(tenant);
+            context.ApplicationDelete(app);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task GetNameForApplicationAsync_UnknownId_ShouldReturnUnknown() {
+    public async Task ApplicationGetName_UnknownId_ShouldReturnUnknown() {
         using var context = await CreateAndPrepareAsync();
 
-        var name = await context.GetNameForApplicationAsync(Guid.NewGuid());
+        var name = await context.ApplicationGetName(Guid.NewGuid(), CancellationToken.None);
 
         Assert.AreEqual("Unknown", name);
     }
 
     [TestMethod]
-    public async Task AddApplicationAsync_NullApp_ShouldReturnMinusOne() {
+    public async Task ApplicationAdd_NullApp_ShouldReturnMinusOne() {
         using var context = await CreateAndPrepareAsync();
 
-        var count = await context.AddApplicationAsync(null!, CancellationToken.None);
+        var count = await context.ApplicationAdd(null!, CancellationToken.None);
 
         Assert.AreEqual(-1, count);
     }
@@ -998,16 +998,16 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var tName = $"WrongT_{tenantId:N}";
         var appName = $"WrongTApp_{Guid.NewGuid():N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
-        var app = new Application { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
-        await context.AddApplicationAsync(app, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
+        var app = new ApplicationDefinition { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
+        await context.ApplicationAdd(app, CancellationToken.None);
 
         try {
-            var retrieved = await context.ApplicationAsync(otherTenantId, appName, CancellationToken.None);
+            var retrieved = await context.ApplicationFindRecord(otherTenantId, appName, CancellationToken.None);
             Assert.IsNull(retrieved);
         } finally {
-            context.RemoveApplication(app);
-            context.RemoveApplicationTenant(tenant);
+            context.ApplicationDelete(app);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
@@ -1018,71 +1018,71 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var tenantId = Guid.NewGuid();
         var tName = $"UnknownNameT_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
 
         try {
-            var retrieved = await context.ApplicationAsync(tenantId, $"DoesNotExist_{Guid.NewGuid():N}", CancellationToken.None);
+            var retrieved = await context.ApplicationFindRecord(tenantId, $"DoesNotExist_{Guid.NewGuid():N}", CancellationToken.None);
             Assert.IsNull(retrieved);
         } finally {
-            context.RemoveApplicationTenant(tenant);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task ApplicationsAsync_UnknownTenant_ShouldReturnEmpty() {
+    public async Task ApplicationGetSelectList_UnknownTenant_ShouldReturnEmpty() {
         using var context = await CreateAndPrepareAsync();
 
-        var list = await context.ApplicationsAsync(Guid.NewGuid());
+        var list = await context.ApplicationGetSelectList(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsFalse(list.Any());
     }
 
     [TestMethod]
-    public async Task ApplicationsAsync_LockedApp_ShouldIndicateLockedInDisplayName() {
+    public async Task ApplicationGetSelectList_LockedApp_ShouldIndicateLockedInDisplayName() {
         using var context = await CreateAndPrepareAsync();
         var tenantId = Guid.NewGuid();
         var tName = $"LockedAppT_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com" };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
-        var app = new Application { Id = Guid.NewGuid(), Name = $"LockMe_{Guid.NewGuid():N}", ApplicationTenantId = tenantId, IsLocked = true };
-        await context.AddApplicationAsync(app, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
+        var app = new ApplicationDefinition { Id = Guid.NewGuid(), Name = $"LockMe_{Guid.NewGuid():N}", ApplicationTenantId = tenantId, IsLocked = true };
+        await context.ApplicationAdd(app, CancellationToken.None);
 
         try {
-            var list = await context.ApplicationsAsync(tenantId);
+            var list = await context.ApplicationGetSelectList(tenantId, CancellationToken.None);
             var item = list.FirstOrDefault(i => i.Key == app.Id);
             Assert.IsNotNull(item, "Locked app should still appear in the list.");
             Assert.IsTrue(item.Value?.DisplayName?.Contains("(Locked)", StringComparison.OrdinalIgnoreCase));
         } finally {
-            context.RemoveApplication(app);
-            context.RemoveApplicationTenant(tenant);
+            context.ApplicationDelete(app);
+            context.TenantDelete(tenant);
             await context.Complete();
         }
     }
 
     [TestMethod]
-    public async Task ApplicationsAsync_FilteredByTenant_ShouldOnlyReturnTenantApps() {
+    public async Task ApplicationGetSelectList_FilteredByTenant_ShouldOnlyReturnTenantApps() {
         using var context = await CreateAndPrepareAsync();
         var tenant1Id = Guid.NewGuid();
         var tenant2Id = Guid.NewGuid();
         var tenant1 = new ApplicationTenant { Id = tenant1Id, Name = $"ListT1_{tenant1Id:N}", AdminEmail = $"t1_{tenant1Id:N}@test.com" };
         var tenant2 = new ApplicationTenant { Id = tenant2Id, Name = $"ListT2_{tenant2Id:N}", AdminEmail = $"t2_{tenant2Id:N}@test.com" };
-        await context.AddApplicationTenantAsync(tenant1, CancellationToken.None);
-        await context.AddApplicationTenantAsync(tenant2, CancellationToken.None);
-        var app1 = new Application { Id = Guid.NewGuid(), Name = $"ListApp1_{Guid.NewGuid():N}", ApplicationTenantId = tenant1Id };
-        var app2 = new Application { Id = Guid.NewGuid(), Name = $"ListApp2_{Guid.NewGuid():N}", ApplicationTenantId = tenant2Id };
-        await context.AddApplicationAsync(app1, CancellationToken.None);
-        await context.AddApplicationAsync(app2, CancellationToken.None);
+        await context.TenantAdd(tenant1, CancellationToken.None);
+        await context.TenantAdd(tenant2, CancellationToken.None);
+        var app1 = new ApplicationDefinition { Id = Guid.NewGuid(), Name = $"ListApp1_{Guid.NewGuid():N}", ApplicationTenantId = tenant1Id };
+        var app2 = new ApplicationDefinition { Id = Guid.NewGuid(), Name = $"ListApp2_{Guid.NewGuid():N}", ApplicationTenantId = tenant2Id };
+        await context.ApplicationAdd(app1, CancellationToken.None);
+        await context.ApplicationAdd(app2, CancellationToken.None);
 
         try {
-            var list = await context.ApplicationsAsync(tenant1Id);
+            var list = await context.ApplicationGetSelectList(tenant1Id, CancellationToken.None);
             Assert.IsTrue(list.Any(i => i.Key == app1.Id), "Tenant 1 app should appear in its own list.");
             Assert.IsFalse(list.Any(i => i.Key == app2.Id), "Tenant 2 app must not appear in tenant 1's list.");
         } finally {
-            context.RemoveApplication(app1);
-            context.RemoveApplication(app2);
-            context.RemoveApplicationTenant(tenant1);
-            context.RemoveApplicationTenant(tenant2);
+            context.ApplicationDelete(app1);
+            context.ApplicationDelete(app2);
+            context.TenantDelete(tenant1);
+            context.TenantDelete(tenant2);
             await context.Complete();
         }
     }
@@ -1101,7 +1101,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             SecurityStamp = Guid.NewGuid().ToString(),
             EmailConfirmed = true
         };
-        await context.AddApplicationUserAsync(user, CancellationToken.None);
+        await context.UserAdd(user, CancellationToken.None);
         return (user, uniqueName);
     }
 
@@ -1119,8 +1119,8 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             EmailConfirmed = true
         };
         var role = new ApplicationRole { Id = roleId, Name = rName, NormalizedName = rName.ToUpperInvariant() };
-        await context.AddApplicationUserAsync(user, CancellationToken.None);
-        await context.AddApplicationRoleAsync(role, CancellationToken.None);
+        await context.UserAdd(user, CancellationToken.None);
+        await context.RoleAdd(role, CancellationToken.None);
         return (user, role);
     }
 
@@ -1130,9 +1130,9 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var tenantId = Guid.NewGuid();
         var tName = $"Tenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = tName, AdminEmail = $"{tName}@test.com", IsLocked = isLocked };
-        await context.AddApplicationTenantAsync(tenant, CancellationToken.None);
+        await context.TenantAdd(tenant, CancellationToken.None);
         var userTenant = new ApplicationUserTenant { Id = Guid.NewGuid(), ApplicationUserId = user.Id, ApplicationTenantId = tenantId };
-        await context.AddIdentityUserTenantAsync(userTenant, CancellationToken.None);
+        await context.UserTenantAdd(userTenant, CancellationToken.None);
         return (user, tenant, userTenant);
     }
 
@@ -1141,9 +1141,9 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         ApplicationUser user,
         ApplicationTenant tenant,
         ApplicationUserTenant userTenant) {
-        context.RemoveApplicationUserTenant(userTenant);
-        context.RemoveApplicationTenant(tenant);
-        context.RemoveApplicationUser(user);
+        context.UserTenantDelete(userTenant);
+        context.TenantDelete(tenant);
+        context.UserDelete(user);
         await context.Complete();
     }
 
@@ -1153,9 +1153,9 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         ApplicationRole role,
         IdentityUserRole<Guid>? userRole) {
         if (userRole is not null)
-            context.RemoveApplicationUserRole(userRole);
-        context.RemoveApplicationRole(role);
-        context.RemoveApplicationUser(user);
+            context.UserRoleDelete(userRole);
+        context.RoleDelete(role);
+        context.UserDelete(user);
         await context.Complete();
     }
 }

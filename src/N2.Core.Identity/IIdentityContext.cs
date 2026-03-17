@@ -4,82 +4,97 @@ using N2.Core.Commands;
 using N2.Core.Entity;
 using N2.Core.Identity.Data;
 
+using System.Data;
+
+using static System.Net.Mime.MediaTypeNames;
+
 namespace N2.Core.Identity;
 
 public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 {
+    IQueryable<Data.ApplicationDefinition> Application { get; }
+    IQueryable<ApplicationSecret> ApplicationSecret { get; }
     int MaxLogSize { get; set; }
 
-    Task<SelectItemList<HtmlString>> RolesAsync();
+    IQueryable<ApplicationRole> Role { get; }
 
-    Task<SelectItemList<UserSelectItem>> UsersAsync();
+    IQueryable<ApplicationTenant> Tenant { get; }
 
-    Task<SelectItemList<UserSelectItem>> TenantsAsync();
+    //Task<ApplicationSecret?> SecretFindRecord(Guid applicationSecretId, CancellationToken token);
+    //Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token);
 
-    Task<SelectItemList<UserSelectItem>> ApplicationsAsync(Guid tenantId);
+    IQueryable<ApplicationUser> User { get; }
 
-    Task<Application?> FindApplicationByIdAsync(Guid applicationId, CancellationToken token);
-    Task<Application?> ApplicationAsync(Guid tenantId, string name, CancellationToken token);
+    IQueryable<IdentityUserRole<Guid>> UserRole { get; }
 
-    Task<string> GetNameForApplicationAsync(Guid applicationId);
+    IQueryable<ApplicationUserTenant> UserTenant { get; }
 
-    void RemoveApplication(Application application);
+    Task<int> ApplicationAdd(ApplicationDefinition application, CancellationToken token);
 
-    Task<int> AddApplicationAsync(Application application, CancellationToken token);
+    void ApplicationDelete(ApplicationDefinition application);
 
-    IQueryable<Application> Application { get; }
+    Task<ApplicationDefinition?> ApplicationFindRecord(Guid applicationId, CancellationToken token);
 
-    Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string normalizedName, CancellationToken token);
-    Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token);
-    Task<ApplicationTenant?> FindTenantByIdAsync(Guid tenantId, CancellationToken token);
-    Task<ApplicationTenant?> FindTenantByEmailAsync(string normalizedEmail, CancellationToken token);
-    Task<ApplicationUser?> FindByEmailAsync(string normalizedEmail, CancellationToken token);
+    Task<ApplicationDefinition?> ApplicationFindRecord(Guid tenantId, string name, CancellationToken token);
 
-    Task<string> GetNameForUserAsync(Guid userId);
-    Task<string> GetNameForTenantAsync(Guid tenantId);
+    Task<string> ApplicationGetName(Guid applicationId, CancellationToken token);
 
-    Task<bool> CanSignInAsync(Guid userId);
+    Task<SelectItemList<UserSelectItem>> ApplicationGetSelectList(Guid tenantId, CancellationToken token);
 
-    Task<bool> CanSignInTenantAsync(Guid userId, Guid tenantId);
+    Task<int> RoleAdd(ApplicationRole role, CancellationToken token);
 
-    void RemoveApplicationTenant(ApplicationTenant tenant);
-    void RemoveApplicationUser(ApplicationUser user);
+    void RoleDelete(ApplicationRole role);
 
-    void RemoveApplicationRole(ApplicationRole role);
+    Task<ApplicationRole?> RoleFindRecord(string normalizedName, CancellationToken token);
 
-    void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole);
+    Task<SelectItemList<HtmlString>> RoleGetSelectList(CancellationToken token);
 
-    void RemoveApplicationUserTenant(ApplicationUserTenant userTenant);
+    Task<int> TenantAdd(ApplicationTenant tenant, CancellationToken token);
 
-    Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token);
-    Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token);
+    void TenantDelete(ApplicationTenant tenant);
 
-    Task<int> AddApplicationRoleAsync(ApplicationRole role, CancellationToken token);
+    Task<ApplicationTenant?> TenantFindRecord(Guid tenantId, CancellationToken token);
 
-    Task<int> AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token);
+    Task<ApplicationTenant?> TenantFindRecord(string normalizedName, CancellationToken token);
 
-    Task<int> AddIdentityUserTenantAsync(ApplicationUserTenant identityUserTenant, CancellationToken token);
+    Task<ApplicationTenant?> TenantFindRecordByEmail(string normalizedEmail, CancellationToken token);
 
-    Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token);
+    Task<string> TenantGetName(Guid tenantId, CancellationToken token);
 
-    Task<ApplicationUser?> ApplicationUserAsync(Guid userId, CancellationToken token);
+    Task<SelectItemList<UserSelectItem>> TenantGetSelectList(CancellationToken token);
 
-    Task<ApplicationUser?> ApplicationUserByEmailAsync(string normalizedEmail, CancellationToken token);
+    Task<IEnumerable<string>> TenantGetUsers(Guid tenantId, CancellationToken token);
 
-    Task<ApplicationRole?> ApplicationRoleAsync(string normalizedName, CancellationToken token);
+    Task<int> UserAdd(ApplicationUser user, CancellationToken token);
 
-    Task<ApplicationTenant?> ApplicationTenantAsync(string normalizedName, CancellationToken token);
+    Task<bool> UserCanSignIn(Guid userId, CancellationToken token);
 
-    Task<IdentityUserRole<Guid>?> IdentityUserRoleAsync(Guid userId, Guid roleId, CancellationToken token);
+    Task<bool> UserCanSignInTenant(Guid userId, Guid tenantId, CancellationToken token);
 
-    IQueryable<ApplicationUser> ApplicationUser { get; }
-    IQueryable<ApplicationRole> ApplicationRole { get; }
-    IQueryable<IdentityUserRole<Guid>> IdentityUserRole { get; }
-    IQueryable<ApplicationUserTenant> ApplicationUserTenant { get; }
+    void UserDelete(ApplicationUser user);
 
-    Task<IEnumerable<string>> UserRolesAsync(Guid userId);
-    Task<IEnumerable<string>> TenantUsersAsync(Guid tenantId);
+    Task<ICommandResponse<ApplicationUser>> UserFind(string normalizedName, CancellationToken token);
 
+    Task<ApplicationUser?> UserFindRecord(Guid userId, CancellationToken token);
+
+    Task<ApplicationUser?> UserFindRecord(string normalizedName, CancellationToken token);
+
+    Task<ApplicationUser?> UserFindRecordByEmail(string normalizedEmail, CancellationToken token);
+
+    Task<string> UserGetName(Guid userId, CancellationToken token);
+
+    Task<IEnumerable<string>> UserGetRoles(Guid userId, CancellationToken token);
+
+    Task<SelectItemList<UserSelectItem>> UserGetSelectList(CancellationToken token);
+    Task<int> UserRoleAdd(IdentityUserRole<Guid> identityRole, CancellationToken token);
+
+    void UserRoleDelete(IdentityUserRole<Guid> identityRole);
+
+    Task<IdentityUserRole<Guid>?> UserRoleFindRecord(Guid userId, Guid roleId, CancellationToken token);
+
+    Task<int> UserTenantAdd(ApplicationUserTenant identityUserTenant, CancellationToken token);
+
+    void UserTenantDelete(ApplicationUserTenant userTenant);
 }
 
 public interface IIdentityContextFactory : ICoreDataContextFactory<IIdentityContext> {

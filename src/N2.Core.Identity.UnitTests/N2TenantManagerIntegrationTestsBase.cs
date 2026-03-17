@@ -106,9 +106,9 @@ public abstract class N2TenantManagerIntegrationTestsBase {
 
     private async Task DeleteUserAsync(ApplicationUser user) {
         using var context = await CreateAndPrepareContextAsync();
-        var existing = await context.FindByIdAsync(user.Id, CancellationToken.None);
+        var existing = await context.UserFindRecord(user.Id, CancellationToken.None);
         if (existing != null) {
-            context.RemoveApplicationUser(existing);
+            context.UserDelete(existing);
             await context.Complete();
         }
     }
@@ -624,7 +624,7 @@ public abstract class N2TenantManagerIntegrationTestsBase {
         await manager.AddUserAsync(user, tenant, CancellationToken.None);
 
         try {
-            var canSignIn = await manager.CanSignInAsync(user.Id, tenant.Id, CancellationToken.None);
+            var canSignIn = await manager.ApplicationUserCanSignIn(user.Id, tenant.Id, CancellationToken.None);
             Assert.IsTrue(canSignIn);
         } finally {
             await manager.RemoveUserAsync(user, tenant, CancellationToken.None);
@@ -642,7 +642,7 @@ public abstract class N2TenantManagerIntegrationTestsBase {
         await manager.LockAsync(tenant, CancellationToken.None);
 
         try {
-            var canSignIn = await manager.CanSignInAsync(user.Id, tenant.Id, CancellationToken.None);
+            var canSignIn = await manager.ApplicationUserCanSignIn(user.Id, tenant.Id, CancellationToken.None);
             Assert.IsFalse(canSignIn);
         } finally {
             await manager.RemoveUserAsync(user, tenant, CancellationToken.None);
@@ -658,7 +658,7 @@ public abstract class N2TenantManagerIntegrationTestsBase {
         var tenant = await CreateTenantAsync(manager);
 
         try {
-            var canSignIn = await manager.CanSignInAsync(user.Id, tenant.Id, CancellationToken.None);
+            var canSignIn = await manager.ApplicationUserCanSignIn(user.Id, tenant.Id, CancellationToken.None);
             Assert.IsFalse(canSignIn);
         } finally {
             await manager.DeleteAsync(tenant, CancellationToken.None);
@@ -671,7 +671,7 @@ public abstract class N2TenantManagerIntegrationTestsBase {
         var manager = BuildTenantManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.CanSignInAsync(Guid.Empty, Guid.NewGuid(), CancellationToken.None));
+            () => manager.ApplicationUserCanSignIn(Guid.Empty, Guid.NewGuid(), CancellationToken.None));
     }
 
     [TestMethod]
@@ -679,6 +679,6 @@ public abstract class N2TenantManagerIntegrationTestsBase {
         var manager = BuildTenantManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.CanSignInAsync(Guid.NewGuid(), Guid.Empty, CancellationToken.None));
+            () => manager.ApplicationUserCanSignIn(Guid.NewGuid(), Guid.Empty, CancellationToken.None));
     }
 }

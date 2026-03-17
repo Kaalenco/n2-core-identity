@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace N2.Core.Identity.Data;
 
@@ -8,25 +8,25 @@ public static class N2IdentityContextLoggingExtensions {
         LoggerMessage.Define<string>(
         LogLevel.Warning,
         new EventId(1, nameof(LogAddApplicationRoleFailed)),
-        "AddApplicationRoleAsync failed with {Message}");
+        "ApplicationRoleAdd failed with {Message}");
 
     private static readonly Action<ILogger, string, Exception?> logAddApplicationUserFail =
         LoggerMessage.Define<string>(
         LogLevel.Warning,
         new EventId(2, nameof(LogAddApplicationUserFailed)),
-        "AddApplicationUserAsync failed with {Message}");
+        "ApplicationUserAdd failed with {Message}");
 
     private static readonly Action<ILogger, string, Exception?> logAddIdentityUserRoleFail =
         LoggerMessage.Define<string>(
         LogLevel.Warning,
         new EventId(3, nameof(LogAddIdentityUserRoleFailed)),
-        "AddApplicationRoleAsync failed with {Message}");
+        "ApplicationRoleAdd failed with {Message}");
 
     private static readonly Action<ILogger, string, Exception?> logAddIdentityUserTenantFail =
         LoggerMessage.Define<string>(
         LogLevel.Warning,
         new EventId(4, nameof(LogAddIdentityUserTenantFailed)),
-        "AddIdentityUserTenantAsync failed with {Message}");
+        "ApplicationUserTenantAdd failed with {Message}");
     
 
     private static readonly Action<ILogger, string, Exception?> logHealthStatusFail =

@@ -450,7 +450,7 @@ public class UsingN2TenantManager {
     public async Task GetUsersForTenantAsync_LockedTenant_ShouldReturnEmpty() {
         var manager = BuildTenantManager();
 
-        // TenantUsersAsync skips locked tenants
+        // TenantGetUsers skips locked tenants
         var users = await manager.GetUsersForTenantAsync(TestContext.LockedTenantGuid, CancellationToken.None);
 
         Assert.IsFalse(users.Any());
@@ -485,7 +485,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        var canSignIn = await manager.CanSignInAsync(adminId, TestContext.TenantGuid, CancellationToken.None);
+        var canSignIn = await manager.ApplicationUserCanSignIn(adminId, TestContext.TenantGuid, CancellationToken.None);
 
         Assert.IsTrue(canSignIn);
     }
@@ -495,7 +495,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        var canSignIn = await manager.CanSignInAsync(adminId, TestContext.LockedTenantGuid, CancellationToken.None);
+        var canSignIn = await manager.ApplicationUserCanSignIn(adminId, TestContext.LockedTenantGuid, CancellationToken.None);
 
         Assert.IsFalse(canSignIn);
     }
@@ -505,7 +505,7 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"unassigned.{Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        var canSignIn = await manager.CanSignInAsync(user.Id, TestContext.TenantGuid, CancellationToken.None);
+        var canSignIn = await manager.ApplicationUserCanSignIn(user.Id, TestContext.TenantGuid, CancellationToken.None);
 
         Assert.IsFalse(canSignIn);
     }
@@ -515,7 +515,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.CanSignInAsync(Guid.Empty, TestContext.TenantGuid, CancellationToken.None));
+            () => manager.ApplicationUserCanSignIn(Guid.Empty, TestContext.TenantGuid, CancellationToken.None));
     }
 
     [TestMethod]
@@ -524,6 +524,6 @@ public class UsingN2TenantManager {
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.CanSignInAsync(adminId, Guid.Empty, CancellationToken.None));
+            () => manager.ApplicationUserCanSignIn(adminId, Guid.Empty, CancellationToken.None));
     }
 }

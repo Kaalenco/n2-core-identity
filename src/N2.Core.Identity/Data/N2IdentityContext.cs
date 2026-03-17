@@ -31,15 +31,15 @@ public class N2IdentityContext(
 
     public DbSet<ApplicationTenant> Tenants { get; set; } = null!;
     public DbSet<ApplicationUserTenant> UserTenants { get; set; } = null!;
-    public DbSet<Application> Applications { get; set; } = null!;
+    public DbSet<ApplicationDefinition> ApplicationDefinitions { get; set; } = null!;
     public DbSet<ApplicationSecret> ApplicationSecrets { get; set; } = null!;
 
-    public IQueryable<ApplicationTenant> ApplicationTenant => Tenants;
-    public IQueryable<Application> Application => Applications;
-    public IQueryable<ApplicationUser> ApplicationUser => Users;
-    public IQueryable<ApplicationRole> ApplicationRole => Roles;
-    public IQueryable<IdentityUserRole<Guid>> IdentityUserRole => UserRoles;
-    public IQueryable<ApplicationUserTenant> ApplicationUserTenant => UserTenants;
+    public IQueryable<ApplicationTenant> Tenant => Tenants;
+    public IQueryable<ApplicationDefinition> Application => ApplicationDefinitions;
+    public IQueryable<ApplicationUser> User => base.Users;
+    public IQueryable<ApplicationRole> Role => base.Roles;
+    public IQueryable<IdentityUserRole<Guid>> UserRole => base.UserRoles;
+    public IQueryable<ApplicationUserTenant> UserTenant => UserTenants;
     public IQueryable<ApplicationSecret> ApplicationSecret => ApplicationSecrets;
 
 
@@ -47,47 +47,41 @@ public class N2IdentityContext(
 
     // Use the 'StringComparison' method overloads to perform case-insensitive string comparisons
     // Except for linq2sql queryables, where stringcomparison method can have side effects.
-    public async Task<ICommandResponse<ApplicationUser>> FindByNameAsync(string normalizedName, CancellationToken token) {
-        var result = await ApplicationUserAsync(normalizedName, token);
+    public async Task<ICommandResponse<ApplicationUser>> UserFind(string normalizedName, CancellationToken token) {
+        var result = await UserFindRecord(normalizedName, token);
         return new ApplicationUserResponse(result);
     }
 
-    public Task<ApplicationUser?> ApplicationUserAsync(string normalizedName, CancellationToken token)
+    public Task<ApplicationUser?> UserFindRecord(string normalizedName, CancellationToken token)
         => Users.Where(u => u.NormalizedUserName == normalizedName).FirstOrDefaultAsync(token);
 
-    public Task<ApplicationUser?> FindByIdAsync(Guid userId, CancellationToken token)
+    public Task<ApplicationUser?> UserFindRecord(Guid userId, CancellationToken token)
         => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
 
-    public Task<ApplicationTenant?> FindTenantByIdAsync(Guid tenantId, CancellationToken token)
+    public Task<ApplicationTenant?> TenantFindRecord(Guid tenantId, CancellationToken token)
         => Tenants.Where(t => t.Id == tenantId).FirstOrDefaultAsync(token);
 
-    public Task<ApplicationUser?> ApplicationUserAsync(Guid userId, CancellationToken token)
-        => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
-
-    public Task<ApplicationTenant?> ApplicationTenantAsync(string normalizedName, CancellationToken token)
+    public Task<ApplicationTenant?> TenantFindRecord(string normalizedName, CancellationToken token)
         => Tenants.Where(t => t.NormalizedName == normalizedName).FirstOrDefaultAsync(token);
 
-    public Task<ApplicationUser?> FindByEmailAsync(string normalizedEmail, CancellationToken token)
+    public Task<ApplicationUser?> UserFindRecordByEmail(string normalizedEmail, CancellationToken token)
         => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
 
-    public Task<ApplicationTenant?> FindTenantByEmailAsync(string normalizedEmail, CancellationToken token)
+    public Task<ApplicationTenant?> TenantFindRecordByEmail(string normalizedEmail, CancellationToken token)
         => Tenants.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
 
-    public Task<Application?> FindApplicationByIdAsync(Guid applicationId, CancellationToken token)
-        => Applications.Where(a => a.Id == applicationId).FirstOrDefaultAsync(token);
+    public Task<ApplicationDefinition?> ApplicationFindRecord(Guid applicationId, CancellationToken token)
+        => Application.Where(a => a.Id == applicationId).FirstOrDefaultAsync(token);
 
-    public Task<Application?> ApplicationAsync(Guid tenantId, string name, CancellationToken token) {
+    public Task<ApplicationDefinition?> ApplicationFindRecord(Guid tenantId, string name, CancellationToken token) {
         var normalizedName = (name ?? "").Trim().ToUpperInvariant();
-        return Applications.Where(a => a.ApplicationTenantId == tenantId && a.NormalizedName == normalizedName).FirstOrDefaultAsync(token);
+        return Application.Where(a => a.ApplicationTenantId == tenantId && a.NormalizedName == normalizedName).FirstOrDefaultAsync(token);
     }
 
-    public Task<ApplicationUser?> ApplicationUserByEmailAsync(string normalizedEmail, CancellationToken token)
-        => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
-
-    public Task<ApplicationRole?> ApplicationRoleAsync(string normalizedName, CancellationToken token)
+    public Task<ApplicationRole?> RoleFindRecord(string normalizedName, CancellationToken token)
         => Roles.Where(r => r.NormalizedName == normalizedName).FirstOrDefaultAsync(token);
 
-    public Task<IdentityUserRole<Guid>?> IdentityUserRoleAsync(Guid userId, Guid roleId, CancellationToken token)
+    public Task<IdentityUserRole<Guid>?> UserRoleFindRecord(Guid userId, Guid roleId, CancellationToken token)
         => UserRoles.Where(ur => ur.UserId == userId && ur.RoleId == roleId).FirstOrDefaultAsync(token);
 
     public Task<List<KeyValuePair<string, string>>> GetSelectListAsync(string tableName)
@@ -107,27 +101,27 @@ public class N2IdentityContext(
         _ => throw new ArgumentOutOfRangeException(nameof(tableName), "Unknown table name.")
     };
 
-    public async Task<string> GetNameForUserAsync(Guid userId) {
+    public async Task<string> UserGetName(Guid userId, CancellationToken token) {
         var user = await base.Users
             .Where(u => u.Id == userId)
             .Select(u => u.DisplayName ?? u.UserName ?? "???")
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
         return user ?? "Unknown";
     }
 
-    public async Task<string> GetNameForTenantAsync(Guid tenantId) {
+    public async Task<string> TenantGetName(Guid tenantId, CancellationToken token) {
         var tenant = await Tenants
             .Where(t => t.Id == tenantId)
             .Select(t => t.Name ?? "???")
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
         return tenant ?? "Unknown";
     }
 
-    public async Task<string> GetNameForApplicationAsync(Guid applicationId) {
-        var application = await Applications
+    public async Task<string> ApplicationGetName(Guid applicationId, CancellationToken token) {
+        var application = await Application
             .Where(a => a.Id == applicationId)
             .Select(a => a.Name ?? "???")
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
         return application ?? "Unknown";
     }
 
@@ -186,7 +180,7 @@ public class N2IdentityContext(
         }
     }
 
-    public async Task<SelectItemList<HtmlString>> RolesAsync() {
+    public async Task<SelectItemList<HtmlString>> RoleGetSelectList(CancellationToken token) {
         SelectItemList<HtmlString> result = new();
         var roles = await base.Roles
             .Where(r => r.Name != null)
@@ -194,7 +188,7 @@ public class N2IdentityContext(
                 m.Id,
                 m.Name
             })
-            .ToArrayAsync();
+            .ToArrayAsync(token);
         if (roles == null) {
             return result;
         }
@@ -208,7 +202,7 @@ public class N2IdentityContext(
         return result;
     }
 
-    public async Task<SelectItemList<UserSelectItem>> UsersAsync() {
+    public async Task<SelectItemList<UserSelectItem>> UserGetSelectList(CancellationToken token) {
         SelectItemList<UserSelectItem> result = new();
         var items = await
             base.Users
@@ -223,7 +217,7 @@ public class N2IdentityContext(
                     Email = m.Email
                 }
             })
-            .ToArrayAsync();
+            .ToArrayAsync(token);
         if (items == null) {
             return result;
         }
@@ -237,7 +231,7 @@ public class N2IdentityContext(
         return result;
     }
 
-    public async Task<SelectItemList<UserSelectItem>> TenantsAsync() {
+    public async Task<SelectItemList<UserSelectItem>> TenantGetSelectList(CancellationToken token) {
         SelectItemList<UserSelectItem> result = new();
         var items = await
             Tenants
@@ -252,7 +246,7 @@ public class N2IdentityContext(
                     Email = m.AdminEmail
                 }
             })
-            .ToArrayAsync();
+            .ToArrayAsync(token);
         if (items == null) {
             return result;
         }
@@ -266,10 +260,10 @@ public class N2IdentityContext(
         return result;
     }
 
-    public async Task<SelectItemList<UserSelectItem>> ApplicationsAsync(Guid tenantId) {
+    public async Task<SelectItemList<UserSelectItem>> ApplicationGetSelectList(Guid tenantId, CancellationToken token) {
         SelectItemList<UserSelectItem> result = new();
         var items = await
-            Applications
+            Application
             .AsNoTracking()
             .Where(m => m.ApplicationTenantId == tenantId)
             .Select(m => new {
@@ -279,7 +273,7 @@ public class N2IdentityContext(
                     DisplayName = m.Name + (m.IsLocked ? " (Locked)" : ""),
                 }
             })
-            .ToArrayAsync();
+            .ToArrayAsync(token);
         if (items == null) {
             return result;
         }
@@ -293,7 +287,7 @@ public class N2IdentityContext(
         return result;
     }
 
-    public Task<bool> CanSignInAsync(Guid userId) {
+    public Task<bool> UserCanSignIn(Guid userId, CancellationToken token) {
         return  base.Users
             .AsNoTracking()
             .Where(u => u.Id == userId &&
@@ -305,10 +299,10 @@ public class N2IdentityContext(
                 )
             )
             .Select(u => u.EmailConfirmed || u.PhoneNumberConfirmed || u.MfaType == MultiFactorType.None)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
     }
 
-    public async Task<bool> CanSignInTenantAsync(Guid userId, Guid tenantId) {
+    public async Task<bool> UserCanSignInTenant(Guid userId, Guid tenantId, CancellationToken token) {
         var userAllowed = await base.Users
             .AsNoTracking()
             .Where(u => u.Id == userId &&
@@ -320,7 +314,7 @@ public class N2IdentityContext(
                 )
             )
             .Select(u => u.EmailConfirmed || u.PhoneNumberConfirmed || u.MfaType == MultiFactorType.None)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
         if (!userAllowed)
             return false;
 
@@ -330,7 +324,7 @@ public class N2IdentityContext(
             .Where(ut => ut.ApplicationUserId == userId && ut.ApplicationTenantId == tenantId)
             .Join(Tenants, ut => ut.ApplicationTenantId, t => t.Id, (ut, t) => t)
             .Select(t => new { t.Id, t.IsLocked })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
         if (tenantAllowed == null) {
             return false;
         }
@@ -340,11 +334,11 @@ public class N2IdentityContext(
         return true;
     }
 
-    public async Task<IEnumerable<string>> TenantUsersAsync(Guid tenantId) {
+    public async Task<IEnumerable<string>> TenantGetUsers(Guid tenantId, CancellationToken token) {
         var tenant = await Tenants
             .AsNoTracking()
             .Where(m => !(m.IsLocked || m.IsRemoved) && m.Id == tenantId)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
         if (tenant == null) {
             return Enumerable.Empty<string>();
         }
@@ -353,7 +347,7 @@ public class N2IdentityContext(
             .AsNoTracking()
             .Where(m => m.ApplicationTenantId == tenantId)
             .Join(base.Users, ut => ut.ApplicationUserId, r => r.Id, (ut, r) => r.UserName)
-            .ToArrayAsync();
+            .ToArrayAsync(token);
         if (users == null) {
             return Enumerable.Empty<string>();
         }
@@ -368,11 +362,11 @@ public class N2IdentityContext(
         return result;
     }
 
-    public async Task<IEnumerable<string>> UserRolesAsync(Guid userId) {
+    public async Task<IEnumerable<string>> UserGetRoles(Guid userId, CancellationToken token) {
         var user = await base.Users
             .AsNoTracking()
             .Where(m => m.EmailConfirmed && m.UserName != null && m.Id == userId)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(token);
         if (user == null) {
             return Enumerable.Empty<string>();
         }
@@ -381,7 +375,7 @@ public class N2IdentityContext(
             .AsNoTracking()
             .Where(m => m.UserId == userId)
             .Join(base.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
-            .ToArrayAsync();
+            .ToArrayAsync(token);
         if (roles == null) {
             return Enumerable.Empty<string>();
         }
@@ -396,23 +390,23 @@ public class N2IdentityContext(
         return result;
     }
 
-    public void RemoveApplication(Application application) => Applications.Remove(application);
+    public void ApplicationDelete(ApplicationDefinition application) => ApplicationDefinitions.Remove(application);
 
-    public void RemoveApplicationTenant(ApplicationTenant tenant) => Tenants.Remove(tenant);
+    public void TenantDelete(ApplicationTenant tenant) => Tenants.Remove(tenant);
 
-    public void RemoveApplicationUser(ApplicationUser user) => base.Users.Remove(user);
+    public void UserDelete(ApplicationUser user) => base.Users.Remove(user);
 
-    public void RemoveApplicationRole(ApplicationRole role) => base.Roles.Remove(role);
+    public void RoleDelete(ApplicationRole role) => base.Roles.Remove(role);
 
-    public void RemoveApplicationUserRole(IdentityUserRole<Guid> identityRole) => base.UserRoles.Remove(identityRole);
+    public void UserRoleDelete(IdentityUserRole<Guid> identityRole) => base.UserRoles.Remove(identityRole);
 
-    public void RemoveApplicationUserTenant(ApplicationUserTenant userTenant) => UserTenants.Remove(userTenant);
+    public void UserTenantDelete(ApplicationUserTenant userTenant) => UserTenants.Remove(userTenant);
 
-    public async Task<int> AddApplicationAsync(Application application, CancellationToken token) {
+    public async Task<int> ApplicationAdd(ApplicationDefinition application, CancellationToken token) {
         try {
             if (application == null) return -1;
             application.NormalizedName = (application.Name ?? "").Trim().ToUpperInvariant();
-            await Applications.AddAsync(application, token);
+            await ApplicationDefinitions.AddAsync(application, token);
             var count = await base.SaveChangesAsync(token);
             return count;
         } catch (System.InvalidOperationException e) {
@@ -421,7 +415,7 @@ public class N2IdentityContext(
         }
     }
 
-    public async Task<int> AddApplicationTenantAsync(ApplicationTenant tenant, CancellationToken token) {
+    public async Task<int> TenantAdd(ApplicationTenant tenant, CancellationToken token) {
         try {
             if (tenant == null) return -1;
             tenant.NormalizedName = (tenant.Name ?? "").Trim().ToUpperInvariant();
@@ -436,7 +430,7 @@ public class N2IdentityContext(
         }
     }
 
-    public async Task<int> AddApplicationUserAsync(ApplicationUser user, CancellationToken token) {
+    public async Task<int> UserAdd(ApplicationUser user, CancellationToken token) {
         try {
             var result = await base.Users.AddAsync(user, token);
             var count = await base.SaveChangesAsync(token);
@@ -447,7 +441,7 @@ public class N2IdentityContext(
         }
     }
 
-    public async Task<int> AddApplicationRoleAsync(ApplicationRole role, CancellationToken token) {
+    public async Task<int> RoleAdd(ApplicationRole role, CancellationToken token) {
         try {
             await base.Roles.AddAsync(role, token);
             var count = await base.SaveChangesAsync(token);
@@ -458,7 +452,7 @@ public class N2IdentityContext(
         }
     }
 
-    public async Task<int> AddIdentityUserRoleAsync(IdentityUserRole<Guid> identityRole, CancellationToken token) {
+    public async Task<int> UserRoleAdd(IdentityUserRole<Guid> identityRole, CancellationToken token) {
         try {
             await base.UserRoles.AddAsync(identityRole, token);
             var count = await base.SaveChangesAsync(token);
@@ -469,7 +463,7 @@ public class N2IdentityContext(
         }
     }
 
-    public async Task<int> AddIdentityUserTenantAsync(ApplicationUserTenant identityUserTenant, CancellationToken token) {
+    public async Task<int> UserTenantAdd(ApplicationUserTenant identityUserTenant, CancellationToken token) {
         try {
             await UserTenants.AddAsync(identityUserTenant, token);
             var count = await base.SaveChangesAsync(token);

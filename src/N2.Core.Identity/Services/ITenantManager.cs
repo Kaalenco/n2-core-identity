@@ -1,4 +1,4 @@
-using N2.Core.Commands;
+﻿using N2.Core.Commands;
 using N2.Core.Identity.Data;
 
 using System.Diagnostics.CodeAnalysis;
@@ -84,7 +84,7 @@ public interface ITenantManager
     /// Checks whether the given user is allowed to sign in within the context of the given tenant.
     /// Returns <c>false</c> if either the user or the tenant is locked or removed.
     /// </summary>
-    Task<bool> CanSignInAsync(Guid userId, Guid tenantId, CancellationToken token);
+    Task<bool> ApplicationUserCanSignIn(Guid userId, Guid tenantId, CancellationToken token);
 
 }
 

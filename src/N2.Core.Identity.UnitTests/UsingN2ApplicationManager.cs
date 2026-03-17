@@ -28,14 +28,14 @@ public class UsingN2ApplicationManager {
         return new N2ApplicationManager(factory, config, "IdentityDb", NullLogger<N2ApplicationManager>.Instance);
     }
 
-    private static Application NewApp(Guid tenantId, string name = "My App") => new() {
+    private static ApplicationDefinition NewApp(Guid tenantId, string name = "My App") => new() {
         Id = Guid.NewGuid(),
         Name = name,
         ApplicationTenantId = tenantId,
         IsLocked = false
     };
 
-    private async Task<Application> CreateAppAsync(string name, Guid? tenantId = null) {
+    private async Task<ApplicationDefinition> CreateAppAsync(string name, Guid? tenantId = null) {
         var manager = BuildApplicationManager();
         var app = NewApp(tenantId ?? TestContext.TenantGuid, name);
         var result = await manager.CreateAsync(app.ApplicationTenantId, app, CancellationToken.None);
@@ -328,34 +328,34 @@ public class UsingN2ApplicationManager {
     }
 
     // -------------------------------------------------------------------------
-    // GetApplicationsAsync
+    // GetApplicationGetSelectList
     // -------------------------------------------------------------------------
 
     [TestMethod]
-    public async Task GetApplicationsAsync_SeededTenant_ShouldReturnSeededApp() {
+    public async Task GetApplicationGetSelectList_SeededTenant_ShouldReturnSeededApp() {
         var manager = BuildApplicationManager();
 
-        var list = await manager.GetApplicationsAsync(TestContext.TenantGuid, CancellationToken.None);
+        var list = await manager.GetApplicationGetSelectList(TestContext.TenantGuid, CancellationToken.None);
 
         Assert.IsNotNull(list);
         Assert.IsTrue(list.Any(i => i.Key == TestContext.ApplicationGuid));
     }
 
     [TestMethod]
-    public async Task GetApplicationsAsync_OtherTenant_ShouldNotReturnAppsFromDifferentTenant() {
+    public async Task GetApplicationGetSelectList_OtherTenant_ShouldNotReturnAppsFromDifferentTenant() {
         var manager = BuildApplicationManager();
 
-        var list = await manager.GetApplicationsAsync(TestContext.LockedTenantGuid, CancellationToken.None);
+        var list = await manager.GetApplicationGetSelectList(TestContext.LockedTenantGuid, CancellationToken.None);
 
         Assert.IsFalse(list.Any(i => i.Key == TestContext.ApplicationGuid));
     }
 
     [TestMethod]
-    public async Task GetApplicationsAsync_EmptyTenantId_ShouldThrow() {
+    public async Task GetApplicationGetSelectList_EmptyTenantId_ShouldThrow() {
         var manager = BuildApplicationManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.GetApplicationsAsync(Guid.Empty, CancellationToken.None));
+            () => manager.GetApplicationGetSelectList(Guid.Empty, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
