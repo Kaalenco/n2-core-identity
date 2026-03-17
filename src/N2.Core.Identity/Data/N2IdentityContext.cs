@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -260,18 +261,15 @@ public class N2IdentityContext(
         return result;
     }
 
-    public async Task<SelectItemList<UserSelectItem>> ApplicationGetSelectList(Guid tenantId, CancellationToken token) {
-        SelectItemList<UserSelectItem> result = new();
+    public async Task<SelectItemList<HtmlString>> ApplicationGetSelectList(Guid tenantId, CancellationToken token) {
+        SelectItemList<HtmlString> result = new();
         var items = await
             Application
             .AsNoTracking()
             .Where(m => m.ApplicationTenantId == tenantId)
             .Select(m => new {
                 Key = m.Id,
-                Value = new UserSelectItem {
-                    Key = m.Id,
-                    DisplayName = m.Name + (m.IsLocked ? " (Locked)" : ""),
-                }
+                Value = new HtmlString(m.Name + (m.IsLocked ? " (Locked)" : ""))
             })
             .ToArrayAsync(token);
         if (items == null) {
@@ -282,7 +280,7 @@ public class N2IdentityContext(
             if (item == null) {
                 continue;
             }
-            result.Add(new SelectItem<UserSelectItem> { Key = item.Key, Value = item.Value });
+            result.Add(new SelectItem<HtmlString> { Key = item.Key, Value = item.Value });
         }
         return result;
     }
@@ -488,5 +486,44 @@ public class N2IdentityContext(
             return new DataContextHealthStatus(ResponseStatus.PreconditionFailed, dbName ?? "Failed to connect");
         }
 #pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    public Task<ApplicationSecret?> SecretFindRecord(Guid applicationSecretId, CancellationToken token)  => ApplicationSecrets.Where(a => a.Id == applicationSecretId).FirstOrDefaultAsync(token);
+
+    public Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token) => ApplicationSecrets.Where(a => a.HashedToken == hashedToken).FirstOrDefaultAsync(token);
+
+    public async Task<int> SecretAdd(ApplicationSecret secret, CancellationToken token) {
+        try {
+            await ApplicationSecrets.AddAsync(secret, token);
+            var count = await base.SaveChangesAsync(token);
+            return count;
+        } catch (System.InvalidOperationException e) {
+            N2IdentityContextLoggingExtensions.LogAddApplicationRoleFailed(logger, e.Message, e);
+            return -1;
+        }
+    }
+
+    public void SecretDelete(ApplicationSecret secret) => ApplicationSecrets.Remove(secret);
+
+    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, CancellationToken token) {
+        SelectItemList<HtmlString> result = new();
+        var items = await ApplicationSecrets
+            .Where(r => r.Name != null && r.Expiration>DateTime.UtcNow && r.ReferenceId == ownerId)
+            .Select(m => new {
+                m.Id,
+                m.Name
+            })
+            .ToArrayAsync(token);
+        if (items == null) {
+            return result;
+        }
+
+        foreach (var item in items) {
+            if (item == null || item.Name == null) {
+                continue;
+            }
+            result.Add(new SelectItem<HtmlString> { Key = item.Id, Value = new HtmlString(item.Name) });
+        }
+        return result;
     }
 }

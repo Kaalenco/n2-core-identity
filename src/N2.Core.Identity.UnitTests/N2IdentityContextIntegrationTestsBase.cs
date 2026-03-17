@@ -1052,7 +1052,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             var list = await context.ApplicationGetSelectList(tenantId, CancellationToken.None);
             var item = list.FirstOrDefault(i => i.Key == app.Id);
             Assert.IsNotNull(item, "Locked app should still appear in the list.");
-            Assert.IsTrue(item.Value?.DisplayName?.Contains("(Locked)", StringComparison.OrdinalIgnoreCase));
+            Assert.IsTrue(item.Value?.RawData?.Contains("(Locked)", StringComparison.OrdinalIgnoreCase));
         } finally {
             context.ApplicationDelete(app);
             context.TenantDelete(tenant);
@@ -1087,7 +1087,126 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         }
     }
 
+    // ── Application secrets ───────────────────────────────────────────────────
+
+    [TestMethod]
+    public async Task SecretAdd_NewSecret_ShouldPersistAndBeRetrievable() {
+        using var context = await CreateAndPrepareAsync();
+        var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
+
+        var count = await context.SecretAdd(secret, CancellationToken.None);
+
+        try {
+            Assert.IsTrue(count > 0);
+            var retrieved = await context.SecretFindRecord(secret.Id, CancellationToken.None);
+            Assert.IsNotNull(retrieved);
+            Assert.AreEqual(secret.HashedToken, retrieved.HashedToken);
+        } finally {
+            context.SecretDelete(secret);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task SecretFindRecord_ByHashedToken_ShouldReturn() {
+        using var context = await CreateAndPrepareAsync();
+        var hashedToken = $"hash_{Guid.NewGuid():N}";
+        var secret = NewSecret(Guid.NewGuid(), hashedToken);
+        await context.SecretAdd(secret, CancellationToken.None);
+
+        try {
+            var retrieved = await context.SecretFindRecord(hashedToken, CancellationToken.None);
+            Assert.IsNotNull(retrieved);
+            Assert.AreEqual(secret.Id, retrieved.Id);
+        } finally {
+            context.SecretDelete(secret);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task SecretFindRecord_UnknownId_ShouldReturnNull() {
+        using var context = await CreateAndPrepareAsync();
+
+        var result = await context.SecretFindRecord(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsNull(result);
+    }
+
+    [TestMethod]
+    public async Task SecretFindRecord_UnknownHashedToken_ShouldReturnNull() {
+        using var context = await CreateAndPrepareAsync();
+
+        var result = await context.SecretFindRecord("nonexistent_hash", CancellationToken.None);
+
+        Assert.IsNull(result);
+    }
+
+    [TestMethod]
+    public async Task SecretDelete_ExistingSecret_ShouldNotBeRetrievableAfterComplete() {
+        using var context = await CreateAndPrepareAsync();
+        var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
+        await context.SecretAdd(secret, CancellationToken.None);
+
+        context.SecretDelete(secret);
+        await context.Complete();
+
+        var retrieved = await context.SecretFindRecord(secret.Id, CancellationToken.None);
+        Assert.IsNull(retrieved);
+    }
+
+    [TestMethod]
+    public async Task SecretGetSelectList_WithActiveSecret_ShouldReturnEntry() {
+        using var context = await CreateAndPrepareAsync();
+        var ownerId = Guid.NewGuid();
+        var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "My Token", DateTime.UtcNow.AddDays(30));
+        await context.SecretAdd(secret, CancellationToken.None);
+
+        try {
+            var list = await context.SecretGetSelectList(ownerId, CancellationToken.None);
+            Assert.IsTrue(list.Any(i => i.Key == secret.Id));
+        } finally {
+            context.SecretDelete(secret);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task SecretGetSelectList_ExpiredSecret_ShouldNotReturnEntry() {
+        using var context = await CreateAndPrepareAsync();
+        var ownerId = Guid.NewGuid();
+        var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "Expired Token", DateTime.UtcNow.AddDays(-1));
+        await context.SecretAdd(secret, CancellationToken.None);
+
+        try {
+            var list = await context.SecretGetSelectList(ownerId, CancellationToken.None);
+            Assert.IsFalse(list.Any(i => i.Key == secret.Id));
+        } finally {
+            context.SecretDelete(secret);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task SecretGetSelectList_UnknownOwner_ShouldReturnEmpty() {
+        using var context = await CreateAndPrepareAsync();
+
+        var list = await context.SecretGetSelectList(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsFalse(list.Any());
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    private static ApplicationSecret NewSecret(Guid ownerId, string hashedToken, string? name = null, DateTime? expiration = null) => new() {
+        Id = Guid.NewGuid(),
+        ReferenceId = ownerId,
+        ReferenceType = "test",
+        HashedToken = hashedToken,
+        Name = name,
+        NormalizedName = name?.ToUpperInvariant(),
+        Expiration = expiration ?? DateTime.UtcNow.AddDays(30)
+    };
 
     private static async Task<(ApplicationUser user, string uniqueName)> SeedSingleUserAsync(N2IdentityContext context) {
         var userId = Guid.NewGuid();

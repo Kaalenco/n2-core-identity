@@ -341,7 +341,7 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<SelectItemList<UserSelectItem>> ApplicationGetSelectList(Guid tenantId, CancellationToken token) {
+    public async Task<SelectItemList<HtmlString>> ApplicationGetSelectList(Guid tenantId, CancellationToken token) {
         await semaphore.WaitAsync(token);
         try {
             return await innerContext.ApplicationGetSelectList(tenantId, token);
@@ -390,6 +390,51 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         await semaphore.WaitAsync(token);
         try {
             return await innerContext.ApplicationAdd(application, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<ApplicationSecret?> SecretFindRecord(Guid applicationSecretId, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.SecretFindRecord(applicationSecretId, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.SecretFindRecord(hashedToken, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<int> SecretAdd(ApplicationSecret secret, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.SecretAdd(secret, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public void SecretDelete(ApplicationSecret secret) {
+        semaphore.Wait();
+        try {
+            innerContext.SecretDelete(secret);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.SecretGetSelectList(ownerId, token);
         } finally {
             semaphore.Release();
         }

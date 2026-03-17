@@ -139,7 +139,7 @@ public class N2ApplicationManager : IApplicationManager {
         return await ctx.ApplicationFindRecord(tenantId, name, token);
     }
 
-    public async Task<SelectItemList<UserSelectItem>> GetApplicationGetSelectList(Guid tenantId, CancellationToken token) {
+    public async Task<SelectItemList<HtmlString>> GetApplicationGetSelectList(Guid tenantId, CancellationToken token) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
         using var ctx = await CreateContextAsync();

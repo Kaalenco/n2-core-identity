@@ -39,7 +39,7 @@ public interface IApplicationManager {
     Task<ApplicationDefinition?> FindByNameAsync(Guid tenantId, string name, CancellationToken token);
 
     /// <summary>Returns a select list of all applications belonging to the given tenant, suitable for UI rendering.</summary>
-    Task<SelectItemList<UserSelectItem>> GetApplicationGetSelectList(Guid tenantId, CancellationToken token);
+    Task<SelectItemList<HtmlString>> GetApplicationGetSelectList(Guid tenantId, CancellationToken token);
 
     // -------------------------------------------------------------------------
     // ApplicationDefinition status

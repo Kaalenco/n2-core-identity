@@ -20,8 +20,11 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     IQueryable<ApplicationTenant> Tenant { get; }
 
-    //Task<ApplicationSecret?> SecretFindRecord(Guid applicationSecretId, CancellationToken token);
-    //Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token);
+    Task<ApplicationSecret?> SecretFindRecord(Guid applicationSecretId, CancellationToken token);
+    Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token);
+    Task<int> SecretAdd(ApplicationSecret secret, CancellationToken token);
+    void SecretDelete(ApplicationSecret secret);
+    Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, CancellationToken token);
 
     IQueryable<ApplicationUser> User { get; }
 
@@ -39,7 +42,7 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     Task<string> ApplicationGetName(Guid applicationId, CancellationToken token);
 
-    Task<SelectItemList<UserSelectItem>> ApplicationGetSelectList(Guid tenantId, CancellationToken token);
+    Task<SelectItemList<HtmlString>> ApplicationGetSelectList(Guid tenantId, CancellationToken token);
 
     Task<int> RoleAdd(ApplicationRole role, CancellationToken token);
 

@@ -227,7 +227,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
         var item = list.FirstOrDefault(i => i.Key == app.Id);
 
         Assert.IsNotNull(item, "Locked app should still appear in the list.");
-        Assert.IsTrue(item.Value?.DisplayName?.Contains("(Locked)", StringComparison.OrdinalIgnoreCase),
+        Assert.IsTrue(item.Value?.RawData?.Contains("(Locked)", StringComparison.OrdinalIgnoreCase),
             "Display name should indicate the application is locked.");
     }
 
