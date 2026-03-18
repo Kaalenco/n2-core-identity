@@ -12,4 +12,10 @@ public class CreateSecretDto {
 
     /// <summary>Optional description of the secret's purpose.</summary>
     public string? Description { get; init; }
+
+    /// <summary>
+    /// The secret payload to encrypt and store (e.g. connection string, API key, base secret).
+    /// Stored as AES-256-GCM ciphertext. May be <c>null</c> for token-only secrets.
+    /// </summary>
+    public string? Value { get; init; }
 }

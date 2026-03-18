@@ -64,10 +64,11 @@ public class UsingN2SecretManager {
         return (found, owner);
     }
 
-    private static CreateSecretDto NewCreateDto(string? name = null, DateTime? expiration = null) => new() {
+    private static CreateSecretDto NewCreateDto(string? name = null, DateTime? expiration = null, string? value = null) => new() {
         Name = name ?? $"Secret_{Guid.NewGuid():N}",
         Expiration = expiration ?? DateTime.UtcNow.AddDays(30),
-        Description = "Unit test secret"
+        Description = "Unit test secret",
+        Value = value
     };
 
     // -------------------------------------------------------------------------
@@ -458,6 +459,155 @@ public class UsingN2SecretManager {
         // Validate after revoke → should fail
         var afterRevoke = await manager.ValidateAsync(plainToken, CancellationToken.None);
         Assert.IsFalse(afterRevoke.Status.IsSuccess());
+    }
+
+    // -------------------------------------------------------------------------
+    // Payload storage — CreateAsync with value
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task CreateAsync_WithValue_ValidateAsync_ShouldReturnDecryptedValue() {
+        var (_, owner) = await CreateUserWithKeyMaterialAsync();
+        var manager = BuildSecretManager();
+        const string expectedValue = "Server=prod;Database=mydb;Password=s3cr3t";
+
+        var created = await manager.CreateAsync(owner, NewCreateDto(value: expectedValue), CancellationToken.None);
+        Assert.IsTrue(created.Status.IsSuccess());
+
+        var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+
+        Assert.IsTrue(result.Status.IsSuccess());
+        Assert.AreEqual(expectedValue, result.Value!.Payload);
+    }
+
+    [TestMethod]
+    public async Task CreateAsync_WithoutValue_ValidateAsync_ShouldReturnNullValue() {
+        var (_, owner) = await CreateUserWithKeyMaterialAsync();
+        var manager = BuildSecretManager();
+
+        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+
+        Assert.IsTrue(result.Status.IsSuccess());
+        Assert.IsNull(result.Value!.Payload);
+    }
+
+    // -------------------------------------------------------------------------
+    // Payload storage — SetValueAsync
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task SetValueAsync_ExistingToken_ShouldStoreEncryptedValue() {
+        var (_, owner) = await CreateUserWithKeyMaterialAsync();
+        var manager = BuildSecretManager();
+        const string expectedValue = "my-api-key-abc123";
+
+        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var plainToken = created.Value!.PlainToken;
+
+        var setResult = await manager.SetValueAsync(plainToken, expectedValue, CancellationToken.None);
+        Assert.IsTrue(setResult.Status.IsSuccess());
+
+        var validated = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        Assert.IsTrue(validated.Status.IsSuccess());
+        Assert.AreEqual(expectedValue, validated.Value!.Payload);
+    }
+
+    [TestMethod]
+    public async Task SetValueAsync_CalledTwice_ShouldReturnLatestValue() {
+        var (_, owner) = await CreateUserWithKeyMaterialAsync();
+        var manager = BuildSecretManager();
+
+        var created = await manager.CreateAsync(owner, NewCreateDto(value: "initial-value"), CancellationToken.None);
+        var plainToken = created.Value!.PlainToken;
+
+        await manager.SetValueAsync(plainToken, "updated-value", CancellationToken.None);
+        var validated = await manager.ValidateAsync(plainToken, CancellationToken.None);
+
+        Assert.AreEqual("updated-value", validated.Value!.Payload);
+    }
+
+    [TestMethod]
+    public async Task SetValueAsync_NullValue_ShouldClearStoredValue() {
+        var (_, owner) = await CreateUserWithKeyMaterialAsync();
+        var manager = BuildSecretManager();
+
+        var created = await manager.CreateAsync(owner, NewCreateDto(value: "some-value"), CancellationToken.None);
+        var plainToken = created.Value!.PlainToken;
+
+        var setResult = await manager.SetValueAsync(plainToken, null, CancellationToken.None);
+        Assert.IsTrue(setResult.Status.IsSuccess());
+
+        var validated = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        Assert.IsTrue(validated.Status.IsSuccess());
+        Assert.IsNull(validated.Value!.Payload);
+    }
+
+    [TestMethod]
+    public async Task SetValueAsync_InvalidToken_ShouldReturnNotFound() {
+        var manager = BuildSecretManager();
+
+        var result = await manager.SetValueAsync("not.a.valid.token.at.all", "value", CancellationToken.None);
+
+        Assert.IsFalse(result.Status.IsSuccess());
+    }
+
+    [TestMethod]
+    public async Task SetValueAsync_RevokedToken_ShouldReturnNotFound() {
+        var (_, owner) = await CreateUserWithKeyMaterialAsync();
+        var manager = BuildSecretManager();
+
+        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var plainToken = created.Value!.PlainToken;
+        await manager.RevokeAsync(owner, created.Value.Id, CancellationToken.None);
+
+        var result = await manager.SetValueAsync(plainToken, "new-value", CancellationToken.None);
+
+        Assert.IsFalse(result.Status.IsSuccess());
+    }
+
+    // -------------------------------------------------------------------------
+    // Full lifecycle with value update
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task FullLifecycle_CreateSetValueValidateRevoke_ShouldFollowExpectedStatuses() {
+        var (_, owner) = await CreateUserWithKeyMaterialAsync();
+        var manager = BuildSecretManager();
+        const string initialValue = "Server=db1;Password=initial";
+        const string updatedValue = "Server=db2;Password=updated";
+
+        // Create with an initial value
+        var createResult = await manager.CreateAsync(owner, NewCreateDto(value: initialValue), CancellationToken.None);
+        Assert.IsTrue(createResult.Status.IsSuccess());
+        var plainToken = createResult.Value!.PlainToken;
+        var secretId = createResult.Value.Id;
+
+        // Validate → initial value returned
+        var firstValidate = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        Assert.IsTrue(firstValidate.Status.IsSuccess());
+        Assert.AreEqual(initialValue, firstValidate.Value!.Payload);
+
+        // Update the value
+        var setResult = await manager.SetValueAsync(plainToken, updatedValue, CancellationToken.None);
+        Assert.IsTrue(setResult.Status.IsSuccess());
+
+        // Validate → updated value returned
+        var secondValidate = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        Assert.IsTrue(secondValidate.Status.IsSuccess());
+        Assert.AreEqual(updatedValue, secondValidate.Value!.Payload);
+
+        // Revoke
+        var revokeResult = await manager.RevokeAsync(owner, secretId, CancellationToken.None);
+        Assert.IsTrue(revokeResult.Status.IsSuccess());
+
+        // Validate after revoke → should fail
+        var afterRevoke = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        Assert.IsFalse(afterRevoke.Status.IsSuccess());
+
+        // SetValue after revoke → should also fail
+        var setAfterRevoke = await manager.SetValueAsync(plainToken, "any-value", CancellationToken.None);
+        Assert.IsFalse(setAfterRevoke.Status.IsSuccess());
     }
 
     // -------------------------------------------------------------------------

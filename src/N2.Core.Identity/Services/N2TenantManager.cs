@@ -25,18 +25,23 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
     private readonly AuthenticationConfig configuration;
     private readonly IIdentityContextFactory factory;
     private readonly ILogger<N2TenantManager> logger;
+    private readonly IChangeLogWriter? changeLogWriter;
+    private readonly IVaultCallerContext? callerContext;
 
     public N2TenantManager(
         IIdentityContextFactory identityContextFactory,
         IConfiguration configuration,
         string connectionName,
         ILogger<N2TenantManager> logger,
-        DatabaseProvider provider = DatabaseProvider.SqlServer) {
+        DatabaseProvider provider = DatabaseProvider.SqlServer,
+        IChangeLogWriter? changeLogWriter = null,
+        IVaultCallerContext? callerContext = null) {
         this.factory = identityContextFactory;
         this.connectionName = connectionName;
         this.provider = provider;
         this.logger = logger;
-
+        this.changeLogWriter = changeLogWriter;
+        this.callerContext = callerContext;
 
         this.configuration = configuration.GetAuthenticationConfig();
 
@@ -269,7 +274,7 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
 
     public Task<ISecretManager> GetSecretManager(CancellationToken token) {
         return Task.FromResult<ISecretManager>(
-            new N2SecretManager(factory, provider, connectionName, configuration, logger));
+            new N2SecretManager(factory, provider, connectionName, configuration, logger, changeLogWriter, callerContext));
     }
 }
 

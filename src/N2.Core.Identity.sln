@@ -21,8 +21,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Documentation", "Documentation", "{9CE34FBD-1FFE-4620-B055-6F5FEC3EF515}"
 	ProjectSection(SolutionItems) = preProject
+		..\docs\application-manager.md = ..\docs\application-manager.md
 		..\docs\secret-manager.md = ..\docs\secret-manager.md
 		..\docs\tenant-manager.md = ..\docs\tenant-manager.md
+		..\docs\user-manager.md = ..\docs\user-manager.md
 	EndProjectSection
 EndProject
 Global

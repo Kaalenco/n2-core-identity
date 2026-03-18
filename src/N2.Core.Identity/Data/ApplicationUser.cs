@@ -166,6 +166,13 @@ public class ApplicationSecret {
     /// <remarks>The length of the array must not exceed 4,000 bytes.</remarks>
     [MaxLength(4000)]
     public byte[]? Secret { get; set; }
+
+    /// <summary>
+    /// Gets or sets the version of the encryption key used to encrypt <see cref="Secret"/>.
+    /// Used by key-rotation tooling to identify records that need re-encryption.
+    /// Corresponds to <see cref="AuthenticationConfig.SecretEncryptionKeyVersion"/>.
+    /// </summary>
+    public int KeyVersion { get; set; } = 1;
 }
 
     /// <summary>

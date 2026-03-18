@@ -100,6 +100,22 @@ public interface ISecretManager {
         Guid secretId,
         CancellationToken token);
 
+    /// <summary>
+    /// Stores or replaces the encrypted value of an existing secret, authenticated by its plain token.
+    /// </summary>
+    /// <remarks>
+    /// The plain token is the sole authentication credential — no owner context is required or accepted.
+    /// On each call the value is re-encrypted with a fresh per-record salt, so repeated calls with the
+    /// same value produce distinct ciphertexts.
+    /// Passing <c>null</c> for <paramref name="value"/> clears any previously stored payload.
+    /// Returns <see cref="ResponseStatus.NotFound"/> for unknown, tampered, or expired tokens
+    /// without distinguishing the failure reason.
+    /// </remarks>
+    Task<ICommandResponse> SetValueAsync(
+        string plainToken,
+        string? value,
+        CancellationToken token);
+
     // -------------------------------------------------------------------------
     // Validation
     // -------------------------------------------------------------------------

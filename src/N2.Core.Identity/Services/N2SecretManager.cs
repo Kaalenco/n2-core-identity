@@ -25,6 +25,8 @@ public class N2SecretManager : ISecretManager {
     private readonly string connectionName;
     private readonly AuthenticationConfig configuration;
     private readonly ILogger logger;
+    private readonly IChangeLogWriter? changeLogWriter;
+    private readonly IVaultCallerContext? callerContext;
 
     /// <summary>
     /// Initializes a new instance of <see cref="N2SecretManager"/>.
@@ -34,12 +36,16 @@ public class N2SecretManager : ISecretManager {
         DatabaseProvider provider,
         string connectionName,
         AuthenticationConfig configuration,
-        ILogger logger) {
+        ILogger logger,
+        IChangeLogWriter? changeLogWriter = null,
+        IVaultCallerContext? callerContext = null) {
         this.factory = factory;
         this.provider = provider;
         this.connectionName = connectionName;
         this.configuration = configuration;
         this.logger = logger;
+        this.changeLogWriter = changeLogWriter;
+        this.callerContext = callerContext;
     }
 
     private Task<IIdentityContext> CreateContextAsync() =>
@@ -48,6 +54,18 @@ public class N2SecretManager : ISecretManager {
     // -------------------------------------------------------------------------
     // Token helpers
     // -------------------------------------------------------------------------
+
+    private void Log(Guid referenceId, string message) {
+        changeLogWriter?.Add(new QueueLogEntry {
+            LogRecordId = Guid.NewGuid(),
+            TableName = nameof(ApplicationSecret),
+            ReferenceId = referenceId,
+            Message = message,
+            CreatedBy = callerContext?.CallerId ?? Guid.Empty,
+            CreatedByName = callerContext?.CallerName ?? "system",
+            Created = DateTime.UtcNow
+        });
+    }
 
     private string ComputeHmac(string plainToken) {
         var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
@@ -75,6 +93,18 @@ public class N2SecretManager : ISecretManager {
         var hashedToken = ComputeHmac(plainToken);
         var encryptionSalt = RandomNumberGenerator.GetBytes(32);
 
+        using var ctx = await CreateContextAsync();
+
+        byte[]? encryptedValue = null;
+        if (request.Value != null) {
+            var ownerSecret = await GetOwnerKeyMaterial(owner.Id, owner.Type, ctx, token);
+            if (ownerSecret == null) {
+                Log(owner.Id, "Secret create failed: owner key material not found");
+                return new SecretCreateResponse(ResponseStatus.NotFound, $"Owner '{owner.Id}' key material not found.");
+            }
+            encryptedValue = EncryptSecret(request.Value, ownerSecret, hashedToken, encryptionSalt);
+        }
+
         var secret = new ApplicationSecret {
             Id = Guid.NewGuid(),
             ReferenceId = owner.Id,
@@ -85,17 +115,19 @@ public class N2SecretManager : ISecretManager {
             Expiration = request.Expiration,
             Description = request.Description,
             EncryptionSalt = encryptionSalt,
-            Secret = null
+            Secret = encryptedValue,
+            KeyVersion = configuration.SecretEncryptionKeyVersion
         };
 
-        using var ctx = await CreateContextAsync();
-        await ctx.SecretAdd(secret, token);
+        ctx.SecretAdd(secret);
         (var code, var message) = await ctx.Complete();
 
         if (code != ResponseStatus.Success) {
+            Log(secret.Id, $"Secret create failed: {message}");
             return new SecretCreateResponse(code, message ?? string.Empty);
         }
 
+        Log(secret.Id, $"Secret created: {request.Name}");
         return new SecretCreateResponse(new SecretCreateResultDto {
             Id = secret.Id,
             PlainToken = plainToken,
@@ -119,6 +151,68 @@ public class N2SecretManager : ISecretManager {
 
         ctx.SecretDelete(secret);
         (var code, var message) = await ctx.Complete();
+
+        if (code == ResponseStatus.Success) Log(secretId, "Secret revoked");
+        else Log(secretId, $"Secret revoke failed: {message}");
+
+        return new RequestResult(code, message ?? string.Empty);
+    }
+
+    /// <inheritdoc/>
+    public async Task<ICommandResponse> SetValueAsync(
+            string plainToken,
+            string? value,
+            CancellationToken token) {
+        if (string.IsNullOrEmpty(plainToken)) return new RequestResult(ResponseStatus.NotFound, string.Empty);
+
+        var parts = plainToken.Split('.');
+        if (parts.Length != 3) return new RequestResult(ResponseStatus.NotFound, string.Empty);
+
+        var ownerIdBytes = Base64UrlExtensions.TryDecode(parts[0]);
+        if (ownerIdBytes == null || ownerIdBytes.Length != 16) return new RequestResult(ResponseStatus.NotFound, string.Empty);
+
+        var ownerId = new Guid(ownerIdBytes);
+        var ownerTypeCode = parts[1];
+        var hashedToken = ComputeHmac(plainToken);
+
+        using var ctx = await CreateContextAsync();
+        var secret = await ctx.SecretFindRecord(hashedToken, token);
+        if (secret == null) return new RequestResult(ResponseStatus.NotFound, string.Empty);
+
+        // Constant-time ownership check
+        if (!CryptographicOperations.FixedTimeEquals(
+                secret.ReferenceId.ToByteArray(),
+                ownerId.ToByteArray()) ||
+            secret.ReferenceType != ownerTypeCode) {
+            return new RequestResult(ResponseStatus.NotFound, string.Empty);
+        }
+
+        // Expiration check
+        if (secret.Expiration.HasValue && secret.Expiration.Value < DateTime.UtcNow) {
+            return new RequestResult(ResponseStatus.NotFound, string.Empty);
+        }
+
+        if (value != null) {
+            var ownerSecret = await GetOwnerKeyMaterial(ownerId, ownerTypeCode, ctx, token);
+            if (ownerSecret == null) {
+                Log(secret.Id, "Secret value update failed: owner key material not found");
+                return new RequestResult(ResponseStatus.NotFound, string.Empty);
+            }
+
+            // Fresh salt on every update — distinct ciphertexts for the same value across calls
+            var newSalt = RandomNumberGenerator.GetBytes(32);
+            secret.EncryptionSalt = newSalt;
+            secret.Secret = EncryptSecret(value, ownerSecret, hashedToken, newSalt);
+            secret.KeyVersion = configuration.SecretEncryptionKeyVersion;
+        } else {
+            secret.Secret = null;
+        }
+
+        (var code, var message) = await ctx.Complete();
+
+        if (code == ResponseStatus.Success) Log(secret.Id, "Secret value updated");
+        else Log(secret.Id, $"Secret value update failed: {message}");
+
         return new RequestResult(code, message ?? string.Empty);
     }
 
@@ -152,32 +246,42 @@ public class N2SecretManager : ISecretManager {
                 secret.ReferenceId.ToByteArray(),
                 ownerId.ToByteArray()) ||
             secret.ReferenceType != ownerTypeCode) {
+            Log(secret.Id, "Secret validation failed: ownership mismatch");
             return new SecretResponse();
         }
 
         // Expiration check
         if (secret.Expiration.HasValue && secret.Expiration.Value < DateTime.UtcNow) {
+            Log(secret.Id, "Secret validation failed: expired");
             return new SecretResponse();
         }
 
-        // If an encrypted secret value is stored, validate decryption
+        // Decrypt and return the stored value when present
+        string? secretValue = null;
         if (secret.Secret != null && secret.EncryptionSalt != null) {
             var ownerSecret = await GetOwnerKeyMaterial(ownerId, ownerTypeCode, ctx, token);
-            if (ownerSecret == null) return new SecretResponse();
+            if (ownerSecret == null) {
+                Log(secret.Id, "Secret validation failed: owner key material not found");
+                return new SecretResponse();
+            }
 #pragma warning disable CA1031 // Do not catch general exception types - we want to catch any crypto-related exceptions and treat them as validation failures
             try {
-                DecryptSecret(secret, ownerSecret, hashedToken);
+                var plaintext = DecryptSecret(secret, ownerSecret, hashedToken);
+                secretValue = plaintext != null ? Encoding.UTF8.GetString(plaintext) : null;
             } catch {
+                Log(secret.Id, "Secret validation failed: decryption error");
                 return new SecretResponse();
             }
 #pragma warning restore CA1031
         }
 
+        Log(secret.Id, "Secret validated");
         return new SecretResponse(new ApplicationSecretDto {
             Id = secret.Id,
             Name = secret.Name,
             Expiration = secret.Expiration,
-            Description = secret.Description
+            Description = secret.Description,
+            Payload = secretValue
         });
     }
 
@@ -264,6 +368,27 @@ public class N2SecretManager : ISecretManager {
     // -------------------------------------------------------------------------
     // Private crypto helpers
     // -------------------------------------------------------------------------
+
+    private byte[] EncryptSecret(string value, byte[] ownerSecret, string hashedToken, byte[] encryptionSalt) {
+        if (string.IsNullOrEmpty(configuration.SecretEncryptionKey)) {
+            throw new CryptographicException("SecretEncryptionKey is not configured.");
+        }
+
+        var systemSecret = Convert.FromBase64String(configuration.SecretEncryptionKey);
+        var info = ownerSecret.Concat(Encoding.UTF8.GetBytes(hashedToken)).ToArray();
+        var key = HKDF.DeriveKey(HashAlgorithmName.SHA256, systemSecret, 32, encryptionSalt, info);
+
+        var plaintext = Encoding.UTF8.GetBytes(value);
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[16];
+
+        using var aes = new AesGcm(key, 16);
+        aes.Encrypt(nonce, plaintext, ciphertext, tag);
+
+        // Stored format: nonce (12 bytes) + auth tag (16 bytes) + ciphertext
+        return [.. nonce, .. tag, .. ciphertext];
+    }
 
     private byte[]? DecryptSecret(ApplicationSecret secret, byte[] ownerSecret, string hashedToken) {
         if (string.IsNullOrEmpty(configuration.SecretEncryptionKey)) {

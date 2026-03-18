@@ -1,7 +1,11 @@
+using N2.Core.Identity.Services;
+
 namespace N2.Core.Identity.Models;
 
 /// <summary>
-/// A safe, read-only view of an <c>ApplicationSecret</c> that exposes no sensitive material.
+/// A read-only view of an <c>ApplicationSecret</c>.
+/// The <see cref="Payload"/> property is only populated when retrieved via
+/// <see cref="ISecretManager.ValidateAsync"/>, which authenticates and decrypts in one step.
 /// </summary>
 public class ApplicationSecretDto {
     /// <summary>Unique identifier of the secret record.</summary>
@@ -15,4 +19,11 @@ public class ApplicationSecretDto {
 
     /// <summary>Optional description of the secret's purpose.</summary>
     public string? Description { get; init; }
+
+    /// <summary>
+    /// Decrypted secret payload. Only populated when retrieved via
+    /// <see cref="ISecretManager.ValidateAsync"/>; <c>null</c> for metadata-only lookups
+    /// or when no value was stored.
+    /// </summary>
+    public string? Payload { get; init; }
 }

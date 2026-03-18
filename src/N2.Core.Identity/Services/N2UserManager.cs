@@ -63,6 +63,8 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
     private readonly string connectionName;
     private readonly IIdentityContextFactory factory;
     private readonly ILogger<N2UserManager> logger;
+    private readonly IChangeLogWriter? changeLogWriter;
+    private readonly IVaultCallerContext? callerContext;
 
     // Intentionally not disposed: disposing a kernel-backed Semaphore while another thread
     // is blocked on WaitOne() causes an ObjectDisposedException. The OS reclaims the handle on exit.
@@ -88,13 +90,17 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
         IPasswordHasher<ApplicationUser> passwordHasher,
         string connectionName,
         ILogger<N2UserManager> logger,
-        DatabaseProvider provider = DatabaseProvider.SqlServer) {
+        DatabaseProvider provider = DatabaseProvider.SqlServer,
+        IChangeLogWriter? changeLogWriter = null,
+        IVaultCallerContext? callerContext = null) {
         this.factory = identityContextFactory;
         this.connectionName = connectionName;
         this.provider = provider;
         this.logger = logger;
         this.rateLimiter = rateLimiter;
         this.passwordHasher = passwordHasher;
+        this.changeLogWriter = changeLogWriter;
+        this.callerContext = callerContext;
 
         this.configuration = configuration.GetAuthenticationConfig();
 
@@ -914,7 +920,7 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
 
     public Task<ISecretManager> GetSecretManager(CancellationToken token) {
         return Task.FromResult<ISecretManager>(
-            new N2SecretManager(factory, provider, connectionName, configuration, logger));
+            new N2SecretManager(factory, provider, connectionName, configuration, logger, changeLogWriter, callerContext));
     }
 }
 

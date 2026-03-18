@@ -43,6 +43,14 @@ public sealed class AuthenticationConfig {
     public string SecretEncryptionKey { get; set; } = string.Empty;
 
     /// <summary>
+    /// The active key version written to <see cref="N2.Core.Identity.Data.ApplicationSecret.KeyVersion"/>
+    /// when a secret value is created or updated. Increment this value and re-deploy when rotating
+    /// the <see cref="SecretEncryptionKey"/> so that rotation tooling can identify records that
+    /// need re-encryption (those with a lower version number).
+    /// </summary>
+    public int SecretEncryptionKeyVersion { get; set; } = 1;
+
+    /// <summary>
     /// The settings for the JWT token.
     /// </summary>
     public JwtSettings JwtSettings { get; set; } = new();

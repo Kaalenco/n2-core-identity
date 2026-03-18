@@ -1094,10 +1094,11 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         using var context = await CreateAndPrepareAsync();
         var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
 
-        var count = await context.SecretAdd(secret, CancellationToken.None);
+        context.SecretAdd(secret);
+        var (addCode, _) = await context.Complete();
 
         try {
-            Assert.IsTrue(count > 0);
+            Assert.AreEqual(N2.Core.Commands.ResponseStatus.Success, addCode);
             var retrieved = await context.SecretFindRecord(secret.Id, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual(secret.HashedToken, retrieved.HashedToken);
@@ -1112,7 +1113,8 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         using var context = await CreateAndPrepareAsync();
         var hashedToken = $"hash_{Guid.NewGuid():N}";
         var secret = NewSecret(Guid.NewGuid(), hashedToken);
-        await context.SecretAdd(secret, CancellationToken.None);
+        context.SecretAdd(secret);
+        await context.Complete();
 
         try {
             var retrieved = await context.SecretFindRecord(hashedToken, CancellationToken.None);
@@ -1146,7 +1148,8 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     public async Task SecretDelete_ExistingSecret_ShouldNotBeRetrievableAfterComplete() {
         using var context = await CreateAndPrepareAsync();
         var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
-        await context.SecretAdd(secret, CancellationToken.None);
+        context.SecretAdd(secret);
+        await context.Complete();
 
         context.SecretDelete(secret);
         await context.Complete();
@@ -1160,7 +1163,8 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         using var context = await CreateAndPrepareAsync();
         var ownerId = Guid.NewGuid();
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "My Token", DateTime.UtcNow.AddDays(30));
-        await context.SecretAdd(secret, CancellationToken.None);
+        context.SecretAdd(secret);
+        await context.Complete();
 
         try {
             var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
@@ -1176,7 +1180,8 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         using var context = await CreateAndPrepareAsync();
         var ownerId = Guid.NewGuid();
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "Expired Token", DateTime.UtcNow.AddDays(-1));
-        await context.SecretAdd(secret, CancellationToken.None);
+        context.SecretAdd(secret);
+        await context.Complete();
 
         try {
             var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);

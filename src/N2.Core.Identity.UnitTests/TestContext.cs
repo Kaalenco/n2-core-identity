@@ -28,6 +28,7 @@ internal static class TestContext {
         config
             .AddInMemoryCollection(new Dictionary<string, string?> {
                 ["AuthenticationConfig:TokenSigningSecret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                ["AuthenticationConfig:SecretEncryptionKey"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
                 ["AuthenticationConfig:MfaTokenSecret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
                 ["AuthenticationConfig:JwtSettings:Secret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
                 ["AuthenticationConfig:JwtSettings:Issuer"] = "http://localhost:8080",
@@ -413,10 +414,10 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<int> SecretAdd(ApplicationSecret secret, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public void SecretAdd(ApplicationSecret secret) {
+        semaphore.Wait();
         try {
-            return await innerContext.SecretAdd(secret, token);
+            innerContext.SecretAdd(secret);
         } finally {
             semaphore.Release();
         }

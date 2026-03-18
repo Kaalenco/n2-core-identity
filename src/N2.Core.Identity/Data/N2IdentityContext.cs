@@ -492,15 +492,8 @@ public class N2IdentityContext(
 
     public Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token) => ApplicationSecrets.Where(a => a.HashedToken == hashedToken).FirstOrDefaultAsync(token);
 
-    public async Task<int> SecretAdd(ApplicationSecret secret, CancellationToken token) {
-        try {
-            await ApplicationSecrets.AddAsync(secret, token);
-            var count = await base.SaveChangesAsync(token);
-            return count;
-        } catch (System.InvalidOperationException e) {
-            N2IdentityContextLoggingExtensions.LogAddApplicationRoleFailed(logger, e.Message, e);
-            return -1;
-        }
+    public void SecretAdd(ApplicationSecret secret) {
+        ApplicationSecrets.Add(secret);
     }
 
     public void SecretDelete(ApplicationSecret secret) => ApplicationSecrets.Remove(secret);
