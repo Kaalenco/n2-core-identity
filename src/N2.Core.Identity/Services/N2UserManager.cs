@@ -913,9 +913,8 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
     }
 
     public Task<ISecretManager> GetSecretManager(CancellationToken token) {
-        throw new NotSupportedException(
-            "ISecretManager is not directly constructable from N2UserManager. " +
-            "Register an ISecretManager implementation in the DI container and inject it where needed.");
+        return Task.FromResult<ISecretManager>(
+            new N2SecretManager(factory, provider, connectionName, configuration, logger));
     }
 }
 

@@ -31,9 +31,7 @@ public static class OwnerTypeCode {
     /// <returns>An 8-character base64url string.</returns>
     public static string Compute(string typeName) {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(typeName));
-        // 6 bytes → exactly 8 base64 characters with no padding
-        return Convert.ToBase64String(hash[..6])
-            .Replace('+', '-')
-            .Replace('/', '_');
+        // 6 bytes → exactly 8 base64url characters with no padding
+        return Base64UrlExtensions.Encode(hash[..6]);
     }
 }

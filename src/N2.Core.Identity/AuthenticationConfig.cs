@@ -36,6 +36,13 @@ public sealed class AuthenticationConfig {
     public string MfaTokenSecret2 { get; set; } = string.Empty;
 
     /// <summary>
+    /// System-level key used as IKM for HKDF key derivation when encrypting secret values.
+    /// MUST be at least 32 bytes (256 bits). Keep separate from TokenSigningSecret.
+    /// Generate using: Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+    /// </summary>
+    public string SecretEncryptionKey { get; set; } = string.Empty;
+
+    /// <summary>
     /// The settings for the JWT token.
     /// </summary>
     public JwtSettings JwtSettings { get; set; } = new();

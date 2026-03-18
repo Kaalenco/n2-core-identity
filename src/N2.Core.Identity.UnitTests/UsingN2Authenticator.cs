@@ -78,6 +78,16 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         RandomNumberGenerator.Fill(baseArray);
         var iterations = 1000;
 
+        // Warmup — force JIT compilation and steady-state CPU caches before measuring
+        for (var i = 0; i < 200; i++) {
+            var warm = (byte[])baseArray.Clone();
+            warm[0] ^= 0xFF;
+            await baseArray.ArraysAreEqual(warm);
+            warm = (byte[])baseArray.Clone();
+            warm[31] ^= 0xFF;
+            await baseArray.ArraysAreEqual(warm);
+        }
+
         // Act - Test mismatch at different positions
         var firstByteTimes = new List<long>();
         var lastByteTimes = new List<long>();
