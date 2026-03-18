@@ -31,3 +31,16 @@ public class MySqlTenantManagerIntegrationTests : N2TenantManagerIntegrationTest
     protected override DatabaseProvider Provider => DatabaseProvider.MySql;
     protected override string ConnectionName => "UserDbMySqlTest";
 }
+
+/// <summary>
+/// Runs all <see cref="N2SecretManagerIntegrationTestsBase"/> tests against MySQL.
+/// Requires <c>ConnectionStrings:UserDbMySqlTest</c> in user secrets or
+/// the <c>ConnectionStrings__UserDbMySqlTest</c> environment variable.
+/// </summary>
+[TestClass]
+[TestCategory("Integration")]
+[TestCategory("Integration.MySql")]
+public class MySqlSecretManagerIntegrationTests : N2SecretManagerIntegrationTestsBase {
+    protected override DatabaseProvider Provider => DatabaseProvider.MySql;
+    protected override string ConnectionName => "UserDbMySqlTest";
+}

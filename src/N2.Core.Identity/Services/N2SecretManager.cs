@@ -157,18 +157,18 @@ public class N2SecretManager : ISecretManager {
 
         // Expiration check
         if (secret.Expiration.HasValue && secret.Expiration.Value < DateTime.UtcNow) {
-            return new SecretResponse(null);
+            return new SecretResponse();
         }
 
         // If an encrypted secret value is stored, validate decryption
         if (secret.Secret != null && secret.EncryptionSalt != null) {
             var ownerSecret = await GetOwnerKeyMaterial(ownerId, ownerTypeCode, ctx, token);
-            if (ownerSecret == null) return new SecretResponse(null!, ResponseStatus.Forbidden);
+            if (ownerSecret == null) return new SecretResponse();
 #pragma warning disable CA1031 // Do not catch general exception types - we want to catch any crypto-related exceptions and treat them as validation failures
             try {
                 DecryptSecret(secret, ownerSecret, hashedToken);
             } catch {
-                return new SecretResponse(null!, ResponseStatus.Forbidden);
+                return new SecretResponse();
             }
 #pragma warning restore CA1031
         }

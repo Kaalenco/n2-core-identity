@@ -33,3 +33,16 @@ public class SqlServerTenantManagerIntegrationTests : N2TenantManagerIntegration
     protected override DatabaseProvider Provider => DatabaseProvider.SqlServer;
     protected override string ConnectionName => "UserDbSqlServerTest";
 }
+
+/// <summary>
+/// Runs all <see cref="N2SecretManagerIntegrationTestsBase"/> tests against SQL Server.
+/// Requires <c>ConnectionStrings:UserDbSqlServerTest</c> in user secrets or
+/// the <c>ConnectionStrings__UserDbSqlServerTest</c> environment variable.
+/// </summary>
+[TestClass]
+[TestCategory("Integration")]
+[TestCategory("Integration.SqlServer")]
+public class SqlServerSecretManagerIntegrationTests : N2SecretManagerIntegrationTestsBase {
+    protected override DatabaseProvider Provider => DatabaseProvider.SqlServer;
+    protected override string ConnectionName => "UserDbSqlServerTest";
+}
