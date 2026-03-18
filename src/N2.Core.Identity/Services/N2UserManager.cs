@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using N2.Core.Commands;
 using N2.Core.Identity.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Models;
 
 using OtpNet;
 
@@ -19,7 +20,7 @@ using System.Security.Cryptography;
 
 namespace N2.Core.Identity.Services;
 
-public sealed class N2UserManager : IUserManager<ApplicationUser> {
+public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets {
 
     /// <summary>
     /// A divisor for converting ticks to seconds
@@ -896,6 +897,25 @@ public sealed class N2UserManager : IUserManager<ApplicationUser> {
         }
 
         return (flowControl: verified.Status.IsSuccess(), value: verified, dbUser);
+    }
+
+    public async Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken token) {
+        using var ctx = await CreateContextAsync();
+        var dbUser = await ctx.UserFindRecord(id, token);
+        if (dbUser == null) {
+            return null;
+        }
+        if (dbUser.SecretKeyMaterial == null || dbUser.SecretKeyMaterial.Length == 0) {
+            logger.LogMfaSecretNotSet(dbUser.UserName ?? dbUser.Id.ToString());
+            throw new InvalidOperationException("SecretKeyMaterial is not set for user. Provision key material before creating secrets.");
+        }
+        return new SecretOwner(dbUser.Id, OwnerTypeCode.User, dbUser.SecretKeyMaterial);
+    }
+
+    public Task<ISecretManager> GetSecretManager(CancellationToken token) {
+        throw new NotSupportedException(
+            "ISecretManager is not directly constructable from N2UserManager. " +
+            "Register an ISecretManager implementation in the DI container and inject it where needed.");
     }
 }
 

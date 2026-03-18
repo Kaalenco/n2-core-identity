@@ -43,10 +43,19 @@ public class ApplicationUser : IdentityUser<Guid>, IIdentityUser
 
     /// <summary>
     /// Gets or sets the MFA shared secret used for TOTP code generation or HMAC-based token signing.
-    /// Maximum length: 128 characters.
+    /// Maximum length: 256 characters (accommodates AES-GCM encrypted values with v1: prefix).
     /// </summary>
-    [MaxLength(128)]
+    [MaxLength(256)]
     public string? MfaSecret { get; set; }
+
+    /// <summary>
+    /// Gets or sets the dedicated key material used as HKDF input when deriving encryption keys for
+    /// <see cref="ApplicationSecret"/> records owned by this user.
+    /// Must be exactly 32 bytes (256 bits) when set. Separate from <see cref="MfaSecret"/> so that
+    /// rotating the MFA secret does not invalidate existing application secrets.
+    /// </summary>
+    [MaxLength(32)]
+    public byte[]? SecretKeyMaterial { get; set; }
 }
 
 /// <summary>
@@ -77,10 +86,19 @@ public class ApplicationDefinition {
 
     /// <summary>
     /// Gets or sets the MFA shared secret used for TOTP code generation or HMAC-based token signing.
-    /// Maximum length: 128 characters.
+    /// Maximum length: 256 characters (accommodates AES-GCM encrypted values with v1: prefix).
     /// </summary>
-    [MaxLength(128)]
+    [MaxLength(256)]
     public string? MfaSecret { get; set; }
+
+    /// <summary>
+    /// Gets or sets the dedicated key material used as HKDF input when deriving encryption keys for
+    /// <see cref="ApplicationSecret"/> records owned by this application.
+    /// Must be exactly 32 bytes (256 bits) when set. Separate from <see cref="MfaSecret"/> so that
+    /// rotating the MFA secret does not invalidate existing application secrets.
+    /// </summary>
+    [MaxLength(32)]
+    public byte[]? SecretKeyMaterial { get; set; }
 }
 
 /// <summary>
@@ -136,10 +154,16 @@ public class ApplicationSecret {
     public string? Policies { get; set; }
 
     /// <summary>
-    /// Gets or sets the secret value as a byte array.
+    /// Gets or sets the random salt used in HKDF key derivation for this secret.
+    /// Combined with the system secret and owner secret to derive the AES-256-GCM encryption key.
     /// </summary>
-    /// <remarks>The length of the array must not exceed 4,000 bytes. This property is typically used to store
-    /// sensitive information, such as cryptographic keys, tokens or information, in binary form.</remarks>
+    [MaxLength(64)]
+    public byte[]? EncryptionSalt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the encrypted secret value as AES-256-GCM output (nonce + auth tag + ciphertext).
+    /// </summary>
+    /// <remarks>The length of the array must not exceed 4,000 bytes.</remarks>
     [MaxLength(4000)]
     public byte[]? Secret { get; set; }
 }
@@ -214,10 +238,19 @@ public class ApplicationTenant
 
     /// <summary>
     /// Gets or sets the MFA shared secret used for TOTP code generation or HMAC-based token signing.
-    /// Maximum length: 128 characters.
+    /// Maximum length: 256 characters (accommodates AES-GCM encrypted values with v1: prefix).
     /// </summary>
-    [MaxLength(128)]
+    [MaxLength(256)]
     public string? MfaSecret { get; set; }
+
+    /// <summary>
+    /// Gets or sets the dedicated key material used as HKDF input when deriving encryption keys for
+    /// <see cref="ApplicationSecret"/> records owned by this tenant.
+    /// Must be exactly 32 bytes (256 bits) when set. Separate from <see cref="MfaSecret"/> so that
+    /// rotating the MFA secret does not invalidate existing application secrets.
+    /// </summary>
+    [MaxLength(32)]
+    public byte[]? SecretKeyMaterial { get; set; }
 }
 
 /// <summary>

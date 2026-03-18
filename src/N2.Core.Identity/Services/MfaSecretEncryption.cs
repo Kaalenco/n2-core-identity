@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 using System.Security.Cryptography;
 using System.Text;
 
@@ -64,14 +66,26 @@ internal static class MfaSecretEncryption {
     /// Returns the original value unchanged for legacy plaintext secrets (no <c>v1:</c> prefix).
     /// Returns <see langword="null"/> if both keys fail authentication.
     /// </summary>
-    internal static string? TryDecrypt(string? encrypted, string primaryBase64Key, string? secondaryBase64Key = null) {
+    /// <remarks>
+    /// <b>Warning:</b> the plaintext passthrough path exists only for backward compatibility with rows
+    /// that were stored before encryption was introduced. These rows should be re-encrypted at the
+    /// earliest opportunity. The passthrough will be removed in a future version.
+    /// </remarks>
+    internal static string? TryDecrypt(string? encrypted, string primaryBase64Key, string? secondaryBase64Key = null, ILogger? logger = null) {
         if (string.IsNullOrEmpty(encrypted)) {
             return encrypted;
         }
 
-        // Legacy plaintext passthrough — value was stored before encryption was introduced
+#pragma warning disable CA1848 // improve performance for logging
+        // Legacy plaintext passthrough — value was stored before encryption was introduced.
+        // SECURITY: this path must be removed once all legacy rows have been re-encrypted.
         if (!encrypted.StartsWith(Prefix, StringComparison.Ordinal)) {
+            logger?.LogCritical(
+                "MfaSecretEncryption: plaintext passthrough triggered for a secret that has no v1: prefix. " +
+                "This row was stored before encryption was introduced and must be re-encrypted immediately. " +
+                "The plaintext passthrough will be removed in a future version.");
             return encrypted;
+#pragma warning restore CA1848
         }
 
         var combined = Convert.FromBase64String(encrypted[Prefix.Length..]);

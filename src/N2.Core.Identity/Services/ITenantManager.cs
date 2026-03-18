@@ -11,7 +11,7 @@ namespace N2.Core.Identity.Services;
 /// interface if for creating and managing tenants and for assigning and removing users from tenants.
 /// It is intentionally separate from user management to allow for different implementations and to keep concerns separated.
 /// </summary>
-public interface ITenantManager
+public interface ITenantManager : IHaveSecrets
 {
     // -------------------------------------------------------------------------
     // Tenant lifecycle

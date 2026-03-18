@@ -689,7 +689,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "My Token", DateTime.UtcNow.AddDays(30));
         await context.SecretAdd(secret, CancellationToken.None);
 
-        var list = await context.SecretGetSelectList(ownerId, CancellationToken.None);
+        var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
 
         Assert.IsTrue(list.Any(i => i.Key == secret.Id));
     }
@@ -701,7 +701,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "Expired Token", DateTime.UtcNow.AddDays(-1));
         await context.SecretAdd(secret, CancellationToken.None);
 
-        var list = await context.SecretGetSelectList(ownerId, CancellationToken.None);
+        var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
 
         Assert.IsFalse(list.Any(i => i.Key == secret.Id));
     }
@@ -710,7 +710,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
     public async Task SecretGetSelectList_UnknownOwner_ShouldReturnEmpty() {
         using var context = await GetIdentityContext();
 
-        var list = await context.SecretGetSelectList(Guid.NewGuid(), CancellationToken.None);
+        var list = await context.SecretGetSelectList(Guid.NewGuid(), "test", CancellationToken.None);
 
         Assert.IsFalse(list.Any());
     }

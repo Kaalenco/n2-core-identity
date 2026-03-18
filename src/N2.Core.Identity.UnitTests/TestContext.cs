@@ -431,10 +431,10 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, CancellationToken token) {
+    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, string ownerType, CancellationToken token) {
         await semaphore.WaitAsync(token);
         try {
-            return await innerContext.SecretGetSelectList(ownerId, token);
+            return await innerContext.SecretGetSelectList(ownerId, ownerType, token);
         } finally {
             semaphore.Release();
         }

@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace N2.Core.Identity.Services;
 
-public interface IApplicationManager {
+public interface IApplicationManager : IHaveSecrets {
     // -------------------------------------------------------------------------
     // ApplicationDefinition lifecycle
     // -------------------------------------------------------------------------

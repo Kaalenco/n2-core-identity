@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Models;
 
 using System.Diagnostics.CodeAnalysis;
 
@@ -12,7 +13,7 @@ using static System.Net.Mime.MediaTypeNames;
 
 namespace N2.Core.Identity.Services;
 
-public class N2TenantManager : ITenantManager {
+public class N2TenantManager : ITenantManager, IHaveSecrets {
 
     private readonly DatabaseProvider provider;
 
@@ -251,6 +252,25 @@ public class N2TenantManager : ITenantManager {
 
         using var ctx = await CreateContextAsync();
         return await ctx.UserCanSignInTenant(userId, tenantId, token);
+    }
+
+    public async Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken token) {
+        using var ctx = await CreateContextAsync();
+        var dbTenant = await ctx.TenantFindRecord(id, token);
+        if (dbTenant == null) {
+            return null;
+        }
+        if (dbTenant.SecretKeyMaterial == null || dbTenant.SecretKeyMaterial.Length == 0) {
+            logger.LogMfaSecretNotSet(dbTenant.Name ?? dbTenant.Id.ToString());
+            throw new InvalidOperationException("SecretKeyMaterial is not set for tenant. Provision key material before creating secrets.");
+        }
+        return new SecretOwner(dbTenant.Id, OwnerTypeCode.Tenant, dbTenant.SecretKeyMaterial);
+    }
+
+    public Task<ISecretManager> GetSecretManager(CancellationToken token) {
+        throw new NotSupportedException(
+            "ISecretManager is not directly constructable from N2TenantManager. " +
+            "Register an ISecretManager implementation in the DI container and inject it where needed.");
     }
 }
 

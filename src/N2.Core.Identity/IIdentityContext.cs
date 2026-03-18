@@ -24,7 +24,7 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
     Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token);
     Task<int> SecretAdd(ApplicationSecret secret, CancellationToken token);
     void SecretDelete(ApplicationSecret secret);
-    Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, CancellationToken token);
+    Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, string ownerType, CancellationToken token);
 
     IQueryable<ApplicationUser> User { get; }
 

@@ -4,12 +4,13 @@ using Microsoft.Extensions.Logging;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Models;
 
 using System.Diagnostics.CodeAnalysis;
 
 namespace N2.Core.Identity.Services;
 
-public class N2ApplicationManager : IApplicationManager {
+public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
 
     private readonly DatabaseProvider provider;
 
@@ -182,5 +183,24 @@ public class N2ApplicationManager : IApplicationManager {
         existing.IsLocked = false;
         (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
+    }
+
+    public async Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken token) {
+        using var ctx = await CreateContextAsync();
+        var dbApp = await ctx.ApplicationFindRecord(id, token);
+        if (dbApp == null) {
+            return null;
+        }
+        if (dbApp.SecretKeyMaterial == null || dbApp.SecretKeyMaterial.Length == 0) {
+            logger.LogMfaSecretNotSet(dbApp.Name ?? dbApp.Id.ToString());
+            throw new InvalidOperationException("SecretKeyMaterial is not set for application. Provision key material before creating secrets.");
+        }
+        return new SecretOwner(dbApp.Id, OwnerTypeCode.Application, dbApp.SecretKeyMaterial);
+    }
+
+    public Task<ISecretManager> GetSecretManager(CancellationToken token) {
+        throw new NotSupportedException(
+            "ISecretManager is not directly constructable from N2ApplicationManager. " +
+            "Register an ISecretManager implementation in the DI container and inject it where needed.");
     }
 }

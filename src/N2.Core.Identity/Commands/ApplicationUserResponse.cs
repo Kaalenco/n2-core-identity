@@ -1,9 +1,11 @@
-using System.Runtime.CompilerServices;
-
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Models;
+
+using System.Runtime.CompilerServices;
 
 namespace N2.Core.Identity.Commands;
+
 public class ApplicationUserResponse : CommandResponse<ApplicationUser>
 {
     public ApplicationUserResponse()

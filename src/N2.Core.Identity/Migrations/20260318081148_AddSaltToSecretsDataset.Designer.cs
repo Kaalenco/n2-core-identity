@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using N2.Core.Identity.Data;
 
@@ -11,9 +12,11 @@ using N2.Core.Identity.Data;
 namespace N2.Core.Identity.Migrations
 {
     [DbContext(typeof(N2IdentityContext))]
-    partial class N2IdentityContextModelSnapshot : ModelSnapshot
+    [Migration("20260318081148_AddSaltToSecretsDataset")]
+    partial class AddSaltToSecretsDataset
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -117,16 +120,13 @@ namespace N2.Core.Identity.Migrations
                     b.Property<bool>("IsLocked");
 
                     b.Property<string>("MfaSecret")
-                        .HasMaxLength(256);
+                        .HasMaxLength(128);
 
                     b.Property<string>("Name")
                         .HasMaxLength(100);
 
                     b.Property<string>("NormalizedName")
                         .HasMaxLength(100);
-
-                    b.Property<byte[]>("SecretKeyMaterial")
-                        .HasMaxLength(32);
 
                     b.HasKey("Id");
 
@@ -222,7 +222,7 @@ namespace N2.Core.Identity.Migrations
                     b.Property<bool>("IsRemoved");
 
                     b.Property<string>("MfaSecret")
-                        .HasMaxLength(256);
+                        .HasMaxLength(128);
 
                     b.Property<string>("Name")
                         .HasMaxLength(100);
@@ -232,9 +232,6 @@ namespace N2.Core.Identity.Migrations
 
                     b.Property<string>("NormalizedName")
                         .HasMaxLength(100);
-
-                    b.Property<byte[]>("SecretKeyMaterial")
-                        .HasMaxLength(32);
 
                     b.Property<int>("UserLimit");
 
@@ -277,7 +274,7 @@ namespace N2.Core.Identity.Migrations
                     b.Property<bool>("MfaConfirmed");
 
                     b.Property<string>("MfaSecret")
-                        .HasMaxLength(256);
+                        .HasMaxLength(128);
 
                     b.Property<int>("MfaType");
 
@@ -295,9 +292,6 @@ namespace N2.Core.Identity.Migrations
                     b.Property<string>("PhoneNumber");
 
                     b.Property<bool>("PhoneNumberConfirmed");
-
-                    b.Property<byte[]>("SecretKeyMaterial")
-                        .HasMaxLength(32);
 
                     b.Property<string>("SecurityStamp");
 

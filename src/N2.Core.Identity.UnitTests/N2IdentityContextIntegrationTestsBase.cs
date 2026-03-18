@@ -1163,7 +1163,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.SecretAdd(secret, CancellationToken.None);
 
         try {
-            var list = await context.SecretGetSelectList(ownerId, CancellationToken.None);
+            var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
             Assert.IsTrue(list.Any(i => i.Key == secret.Id));
         } finally {
             context.SecretDelete(secret);
@@ -1179,7 +1179,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.SecretAdd(secret, CancellationToken.None);
 
         try {
-            var list = await context.SecretGetSelectList(ownerId, CancellationToken.None);
+            var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
             Assert.IsFalse(list.Any(i => i.Key == secret.Id));
         } finally {
             context.SecretDelete(secret);
@@ -1191,7 +1191,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     public async Task SecretGetSelectList_UnknownOwner_ShouldReturnEmpty() {
         using var context = await CreateAndPrepareAsync();
 
-        var list = await context.SecretGetSelectList(Guid.NewGuid(), CancellationToken.None);
+        var list = await context.SecretGetSelectList(Guid.NewGuid(), "test", CancellationToken.None);
 
         Assert.IsFalse(list.Any());
     }

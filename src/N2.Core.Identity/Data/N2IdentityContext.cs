@@ -505,10 +505,10 @@ public class N2IdentityContext(
 
     public void SecretDelete(ApplicationSecret secret) => ApplicationSecrets.Remove(secret);
 
-    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, CancellationToken token) {
+    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, string ownerType, CancellationToken token) {
         SelectItemList<HtmlString> result = new();
         var items = await ApplicationSecrets
-            .Where(r => r.Name != null && r.Expiration>DateTime.UtcNow && r.ReferenceId == ownerId)
+            .Where(r => r.Name != null && r.Expiration > DateTime.UtcNow && r.ReferenceId == ownerId && r.ReferenceType == ownerType)
             .Select(m => new {
                 m.Id,
                 m.Name
