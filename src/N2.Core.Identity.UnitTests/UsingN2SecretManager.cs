@@ -216,7 +216,7 @@ public class UsingN2SecretManager {
     }
 
     [TestMethod]
-    public async Task ValidateAsync_ExpiredToken_ShouldReturnNotFound() {
+    public async Task ValidateAsync_ExpiredToken_ShouldReturnForbidden() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
         var expiredDto = NewCreateDto(expiration: DateTime.UtcNow.AddSeconds(-1));
@@ -224,7 +224,7 @@ public class UsingN2SecretManager {
 
         var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
 
-        Assert.AreEqual(ResponseStatus.NotFound, result.Status);
+        Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
 
     [TestMethod]
