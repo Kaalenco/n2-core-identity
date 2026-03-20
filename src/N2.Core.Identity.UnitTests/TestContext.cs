@@ -199,17 +199,19 @@ internal static class TestContext {
             IsLocked = false
         });
 
-        // Link admin user to the active tenant
+        // Link admin user to the active tenant as admin
         context.UserTenants.Add(new ApplicationUserTenant {
             Id = Guid.NewGuid(),
             ApplicationUserId = AdminGuid,
-            ApplicationTenantId = TenantGuid
+            ApplicationTenantId = TenantGuid,
+            IsAdmin = true
         });
-        // Link admin user to the locked tenant
+        // Link admin user to the locked tenant as admin
         context.UserTenants.Add(new ApplicationUserTenant {
             Id = Guid.NewGuid(),
             ApplicationUserId = AdminGuid,
-            ApplicationTenantId = LockedTenantGuid
+            ApplicationTenantId = LockedTenantGuid,
+            IsAdmin = true
         });
 
         context.SaveChanges();
@@ -562,6 +564,24 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         await semaphore.WaitAsync(token);
         try {
             return await innerContext.UserTenantAdd(identityUserTenant, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<bool> UserTenantIsAdmin(Guid userId, Guid tenantId, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.UserTenantIsAdmin(userId, tenantId, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<(ResponseStatus status, string? message)> UserTenantSetAdmin(Guid userId, Guid tenantId, bool isAdmin, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.UserTenantSetAdmin(userId, tenantId, isAdmin, token);
         } finally {
             semaphore.Release();
         }

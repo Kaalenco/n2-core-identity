@@ -433,6 +433,228 @@ public class UsingN2TenantManager {
     }
 
     // -------------------------------------------------------------------------
+    // AddUserAsync — isAdmin overload
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task AddUserAsync_WithIsAdminTrue_ShouldSetAdminFlag() {
+        var user = await CreateUserAsync($"admin.add.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Admin Add Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+
+        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task AddUserAsync_WithIsAdminFalse_ShouldNotSetAdminFlag() {
+        var user = await CreateUserAsync($"member.add.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Member Add Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+
+        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+
+        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task AddUserAsync_WithoutIsAdminParam_ShouldDefaultToNonAdmin() {
+        var user = await CreateUserAsync($"default.add.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Default Add Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+
+        await manager.AddUserAsync(user, tenant, CancellationToken.None);
+
+        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task AddUserAsync_AlreadyAssignedAsRegular_PromoteToAdmin_ShouldUpdateFlag() {
+        var user = await CreateUserAsync($"promote.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Promote Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+
+        var result = await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        Assert.IsTrue(result.Status.IsSuccess());
+        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task AddUserAsync_AlreadyAssigned_SameIsAdmin_ShouldBeIdempotent() {
+        var user = await CreateUserAsync($"idem.admin.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Idem Admin Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        var result = await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        Assert.IsTrue(result.Status.IsSuccess());
+        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    // -------------------------------------------------------------------------
+    // SetAdminAsync
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task SetAdminAsync_GrantAdmin_ShouldSucceed() {
+        var user = await CreateUserAsync($"grant.admin.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Grant Admin Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+
+        var result = await manager.SetAdminAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        Assert.IsTrue(result.Status.IsSuccess());
+        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task SetAdminAsync_RevokeAdmin_ShouldSucceed() {
+        var user = await CreateUserAsync($"revoke.admin.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Revoke Admin Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        var result = await manager.SetAdminAsync(user, tenant, isAdmin: false, CancellationToken.None);
+
+        Assert.IsTrue(result.Status.IsSuccess());
+        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task SetAdminAsync_AlreadySameValue_ShouldBeNoOp() {
+        var user = await CreateUserAsync($"noop.admin.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"NoOp Admin Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        var result = await manager.SetAdminAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        Assert.IsTrue(result.Status.IsSuccess());
+        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task SetAdminAsync_NonMember_ShouldFail() {
+        var user = await CreateUserAsync($"nonmember.admin.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"NonMember Admin Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        // user is never added to tenant
+
+        var result = await manager.SetAdminAsync(user, tenant, isAdmin: true, CancellationToken.None);
+
+        Assert.AreEqual(ResponseStatus.NotFound, result.Status);
+    }
+
+    [TestMethod]
+    public async Task SetAdminAsync_EmptyUserId_ShouldThrow() {
+        var tenant = await CreateTenantAsync($"SetAdmin Throw Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        var ghost = new ApplicationUser { Id = Guid.Empty };
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => manager.SetAdminAsync(ghost, tenant, isAdmin: true, CancellationToken.None));
+    }
+
+    // -------------------------------------------------------------------------
+    // IsAdminAsync
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task IsAdminAsync_AdminUser_ShouldReturnTrue() {
+        var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var manager = BuildTenantManager();
+
+        var isAdmin = await manager.IsAdminAsync(adminId, TestContext.TenantGuid, CancellationToken.None);
+
+        Assert.IsTrue(isAdmin);
+    }
+
+    [TestMethod]
+    public async Task IsAdminAsync_RegularMember_ShouldReturnFalse() {
+        var user = await CreateUserAsync($"regular.check.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Regular Check Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+
+        var isAdmin = await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None);
+
+        Assert.IsFalse(isAdmin);
+    }
+
+    [TestMethod]
+    public async Task IsAdminAsync_NonMember_ShouldReturnFalse() {
+        var user = await CreateUserAsync($"nonmember.check.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"NonMember Check Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        // user is never added to tenant
+
+        var isAdmin = await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None);
+
+        Assert.IsFalse(isAdmin);
+    }
+
+    [TestMethod]
+    public async Task IsAdminAsync_AdminInOneTenant_IsNotAdminInAnother() {
+        var user = await CreateUserAsync($"cross.tenant.{Guid.NewGuid()}");
+        var tenantA = await CreateTenantAsync($"Tenant A {Guid.NewGuid()}");
+        var tenantB = await CreateTenantAsync($"Tenant B {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(user, tenantA, isAdmin: true, CancellationToken.None);
+        await manager.AddUserAsync(user, tenantB, isAdmin: false, CancellationToken.None);
+
+        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenantA.Id, CancellationToken.None));
+        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenantB.Id, CancellationToken.None));
+    }
+
+    // -------------------------------------------------------------------------
+    // GetAdminsForTenantAsync
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task GetAdminsForTenantAsync_ShouldReturnOnlyAdmins() {
+        var admin = await CreateUserAsync($"getadmin.admin.{Guid.NewGuid()}");
+        var member = await CreateUserAsync($"getadmin.member.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"GetAdmins Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(admin, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUserAsync(member, tenant, isAdmin: false, CancellationToken.None);
+
+        var admins = (await manager.GetAdminsForTenantAsync(tenant.Id, CancellationToken.None)).ToList();
+
+        Assert.IsTrue(admins.Contains(admin.Id));
+        Assert.IsFalse(admins.Contains(member.Id));
+    }
+
+    [TestMethod]
+    public async Task GetAdminsForTenantAsync_MultipleAdmins_ShouldReturnAll() {
+        var adminA = await CreateUserAsync($"multi.adminA.{Guid.NewGuid()}");
+        var adminB = await CreateUserAsync($"multi.adminB.{Guid.NewGuid()}");
+        var tenant = await CreateTenantAsync($"Multi Admin Tenant {Guid.NewGuid()}");
+        var manager = BuildTenantManager();
+        await manager.AddUserAsync(adminA, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUserAsync(adminB, tenant, isAdmin: true, CancellationToken.None);
+
+        var admins = (await manager.GetAdminsForTenantAsync(tenant.Id, CancellationToken.None)).ToList();
+
+        Assert.IsTrue(admins.Contains(adminA.Id));
+        Assert.IsTrue(admins.Contains(adminB.Id));
+        Assert.AreEqual(2, admins.Count);
+    }
+
+    [TestMethod]
+    public async Task GetAdminsForTenantAsync_EmptyTenantId_ShouldThrow() {
+        var manager = BuildTenantManager();
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => manager.GetAdminsForTenantAsync(Guid.Empty, CancellationToken.None));
+    }
+
+    // -------------------------------------------------------------------------
     // GetUsersForTenantAsync / GetTenantIdsForUserAsync
     // -------------------------------------------------------------------------
 
