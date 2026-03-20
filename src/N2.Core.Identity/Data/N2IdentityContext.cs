@@ -400,6 +400,25 @@ public class N2IdentityContext(
 
     public void UserTenantDelete(ApplicationUserTenant userTenant) => UserTenants.Remove(userTenant);
 
+    public Task<bool> UserTenantIsAdmin(Guid userId, Guid tenantId, CancellationToken token)
+        => UserTenants
+            .AsNoTracking()
+            .Where(ut => ut.ApplicationUserId == userId && ut.ApplicationTenantId == tenantId)
+            .Select(ut => ut.IsAdmin)
+            .FirstOrDefaultAsync(token);
+
+    public async Task<(ResponseStatus status, string? message)> UserTenantSetAdmin(Guid userId, Guid tenantId, bool isAdmin, CancellationToken token) {
+        var membership = await UserTenants
+            .Where(ut => ut.ApplicationUserId == userId && ut.ApplicationTenantId == tenantId)
+            .FirstOrDefaultAsync(token);
+        if (membership == null)
+            return (ResponseStatus.NotFound, $"User '{userId}' is not a member of tenant '{tenantId}'.");
+        if (membership.IsAdmin == isAdmin)
+            return (ResponseStatus.Success, "No change required.");
+        membership.IsAdmin = isAdmin;
+        return await Complete();
+    }
+
     public async Task<int> ApplicationAdd(ApplicationDefinition application, CancellationToken token) {
         try {
             if (application == null) return -1;

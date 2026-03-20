@@ -179,7 +179,22 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken token) {
+    private void Log(Guid referenceId, string message) {
+        changeLogWriter?.Add(new QueueLogEntry {
+            LogRecordId = Guid.NewGuid(),
+            TableName = nameof(ApplicationUserTenant),
+            ReferenceId = referenceId,
+            Message = message,
+            CreatedBy = callerContext?.CallerId ?? Guid.Empty,
+            CreatedByName = callerContext?.CallerName ?? "system",
+            Created = DateTime.UtcNow
+        });
+    }
+
+    public Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken token)
+        => AddUserAsync(user, tenant, isAdmin: false, token);
+
+    public async Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(user.Id, Guid.Empty);
@@ -196,20 +211,27 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
             return new RequestResult(ResponseStatus.NotFound, $"User '{user.Id}' not found");
         }
 
-        // Idempotent: already assigned is not an error
-        var alreadyAssigned = await ctx.UserTenant
-            .AnyAsync(ut => ut.ApplicationUserId == user.Id && ut.ApplicationTenantId == tenant.Id, token);
-        if (alreadyAssigned) {
-            return RequestResult.Ok();
+        // Idempotent: already assigned — only update IsAdmin if it differs
+        var existing = await ctx.UserTenant
+            .Where(ut => ut.ApplicationUserId == user.Id && ut.ApplicationTenantId == tenant.Id)
+            .FirstOrDefaultAsync(token);
+        if (existing != null) {
+            if (existing.IsAdmin == isAdmin)
+                return RequestResult.Ok();
+            (var updateCode, var updateMsg) = await ctx.UserTenantSetAdmin(user.Id, tenant.Id, isAdmin, token);
+            Log(user.Id, isAdmin ? $"Granted admin in tenant '{tenant.Id}'" : $"Revoked admin in tenant '{tenant.Id}'");
+            return new RequestResult(updateCode, updateMsg ?? string.Empty);
         }
 
         var userTenant = new ApplicationUserTenant {
             Id = Guid.NewGuid(),
             ApplicationUserId = user.Id,
-            ApplicationTenantId = tenant.Id
+            ApplicationTenantId = tenant.Id,
+            IsAdmin = isAdmin
         };
         await ctx.UserTenantAdd(userTenant, token);
         (var code, var message) = await ctx.Complete();
+        Log(user.Id, isAdmin ? $"Added to tenant '{tenant.Id}' as admin" : $"Added to tenant '{tenant.Id}'");
         return new RequestResult(code, message ?? string.Empty);
     }
 
@@ -231,6 +253,38 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
         ctx.UserTenantDelete(userTenant);
         (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
+    }
+
+    public async Task<ICommandResponse> SetAdminAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken token) {
+        ArgumentNullException.ThrowIfNull(user);
+        ArgumentNullException.ThrowIfNull(tenant);
+        ArgumentOutOfRangeException.ThrowIfEqual(user.Id, Guid.Empty);
+        ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
+
+        using var ctx = await CreateContextAsync();
+        (var code, var message) = await ctx.UserTenantSetAdmin(user.Id, tenant.Id, isAdmin, token);
+        if (code == ResponseStatus.Success && message != "No change required.")
+            Log(user.Id, isAdmin ? $"Granted admin in tenant '{tenant.Id}'" : $"Revoked admin in tenant '{tenant.Id}'");
+        return new RequestResult(code, message ?? string.Empty);
+    }
+
+    public async Task<bool> IsAdminAsync(Guid userId, Guid tenantId, CancellationToken token) {
+        ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
+        ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
+
+        using var ctx = await CreateContextAsync();
+        return await ctx.UserTenantIsAdmin(userId, tenantId, token);
+    }
+
+    public async Task<IEnumerable<Guid>> GetAdminsForTenantAsync(Guid tenantId, CancellationToken token) {
+        ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
+
+        using var ctx = await CreateContextAsync();
+        return await ctx.UserTenant
+            .AsNoTracking()
+            .Where(ut => ut.ApplicationTenantId == tenantId && ut.IsAdmin)
+            .Select(ut => ut.ApplicationUserId)
+            .ToListAsync(token);
     }
 
     public async Task<IEnumerable<string>> GetUsersForTenantAsync(Guid tenantId, CancellationToken token) {

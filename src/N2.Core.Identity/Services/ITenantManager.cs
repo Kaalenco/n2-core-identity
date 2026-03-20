@@ -62,11 +62,25 @@ public interface ITenantManager : IHaveSecrets
     // User–tenant membership
     // -------------------------------------------------------------------------
 
-    /// <summary>Assigns a user to a tenant.</summary>
+    /// <summary>
+    /// Assigns a user to a tenant as a regular member.
+    /// The operation is idempotent — assigning an already-assigned user is a no-op.
+    /// </summary>
     /// <param name="user">The user to assign.</param>
     /// <param name="tenant">The target tenant.</param>
     /// <param name="token">Cancellation token.</param>
     Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken token);
+
+    /// <summary>
+    /// Assigns a user to a tenant, optionally granting admin rights within that tenant.
+    /// The operation is idempotent — if the user is already a member the call only updates <paramref name="isAdmin"/>.
+    /// Admin rights are scoped to this tenant only; they have no effect in any other tenant.
+    /// </summary>
+    /// <param name="user">The user to assign.</param>
+    /// <param name="tenant">The target tenant.</param>
+    /// <param name="isAdmin">Whether the user should be an admin of this tenant.</param>
+    /// <param name="token">Cancellation token.</param>
+    Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken token);
 
     /// <summary>Removes a user from a tenant.</summary>
     /// <param name="user">The user to remove.</param>
@@ -85,6 +99,24 @@ public interface ITenantManager : IHaveSecrets
     /// Returns <c>false</c> if either the user or the tenant is locked or removed.
     /// </summary>
     Task<bool> ApplicationUserCanSignIn(Guid userId, Guid tenantId, CancellationToken token);
+
+    // -------------------------------------------------------------------------
+    // Tenant admin management
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Grants or revokes admin rights for a user within a tenant.
+    /// The user must already be a member of the tenant.
+    /// Multiple users may be admin of the same tenant simultaneously.
+    /// Admin rights are scoped to this tenant only.
+    /// </summary>
+    Task<ICommandResponse> SetAdminAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken token);
+
+    /// <summary>Returns <c>true</c> if the user is an admin of the given tenant.</summary>
+    Task<bool> IsAdminAsync(Guid userId, Guid tenantId, CancellationToken token);
+
+    /// <summary>Returns the IDs of all users who are admins of the given tenant.</summary>
+    Task<IEnumerable<Guid>> GetAdminsForTenantAsync(Guid tenantId, CancellationToken token);
 
 }
 

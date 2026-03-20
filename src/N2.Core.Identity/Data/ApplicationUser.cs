@@ -263,6 +263,11 @@ public class ApplicationTenant
 /// <summary>
 /// Join entity that associates an <see cref="ApplicationUser"/> with an <see cref="ApplicationTenant"/>,
 /// representing a user's membership within a specific tenant.
+/// <para>
+/// A user can belong to multiple tenants simultaneously and may hold different roles in each.
+/// <see cref="IsAdmin"/> is scoped to this membership row only — being admin of one tenant
+/// confers no rights in any other tenant.
+/// </para>
 /// </summary>
 public class ApplicationUserTenant {
     /// <summary>Gets or sets the unique identifier for this user-tenant association.</summary>
@@ -274,6 +279,13 @@ public class ApplicationUserTenant {
 
     /// <summary>Gets or sets the foreign key referencing the associated <see cref="ApplicationTenant"/>.</summary>
     public virtual Guid ApplicationTenantId { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this user has admin rights within this tenant.
+    /// Multiple members of the same tenant may be admins simultaneously.
+    /// Admin status in one tenant has no effect on the user's role in any other tenant.
+    /// </summary>
+    public bool IsAdmin { get; set; }
 
     /// <summary>Gets or sets the navigation property to the associated user.</summary>
     public virtual ApplicationUser ApplicationUser { get; set; } = null!;

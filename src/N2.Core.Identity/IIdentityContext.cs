@@ -98,6 +98,12 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
     Task<int> UserTenantAdd(ApplicationUserTenant identityUserTenant, CancellationToken token);
 
     void UserTenantDelete(ApplicationUserTenant userTenant);
+
+    /// <summary>Returns <c>true</c> if the user is an admin of the given tenant.</summary>
+    Task<bool> UserTenantIsAdmin(Guid userId, Guid tenantId, CancellationToken token);
+
+    /// <summary>Sets or clears the admin flag on the user's membership row for the given tenant.</summary>
+    Task<(ResponseStatus status, string? message)> UserTenantSetAdmin(Guid userId, Guid tenantId, bool isAdmin, CancellationToken token);
 }
 
 public interface IIdentityContextFactory : ICoreDataContextFactory<IIdentityContext> {
