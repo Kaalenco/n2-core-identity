@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using N2.Core.Identity.Data;
 
@@ -11,9 +12,11 @@ using N2.Core.Identity.Data;
 namespace N2.Core.Identity.Migrations
 {
     [DbContext(typeof(N2IdentityContext))]
-    partial class N2IdentityContextModelSnapshot : ModelSnapshot
+    [Migration("20260407074623_AlertsForUsers")]
+    partial class AlertsForUsers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

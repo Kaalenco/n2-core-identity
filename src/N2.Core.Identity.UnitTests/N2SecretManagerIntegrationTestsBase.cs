@@ -88,6 +88,10 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     /// Callers are responsible for deleting the user in a finally block.
     /// </summary>
     protected async Task<(ApplicationUser user, ISecretOwner owner)> CreateUserWithKeyMaterialAsync() {
+        // Ensure the schema is up to date before any operation — UserFindRecord includes
+        // ApplicationUserAlert and will fail if the UserAlerts table does not yet exist.
+        using (var migrateCtx = await CreateAndMigrateContextAsync()) { }
+
         using var userManager = BuildUserManager();
         var name = $"sec_int_{Guid.NewGuid():N}";
         var user = new ApplicationUser { UserName = name, Email = $"{name}@test.com" };

@@ -748,4 +748,13 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
             semaphore.Release();
         }
     }
+
+    public async Task<int> UserAlertAdd(ApplicationUserAlert alert, CancellationToken token) {
+        await semaphore.WaitAsync(token);
+        try {
+            return await innerContext.UserAlertAdd(alert, token);
+        } finally {
+            semaphore.Release();
+        }
+    }
 }

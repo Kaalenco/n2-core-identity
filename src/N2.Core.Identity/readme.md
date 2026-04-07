@@ -109,7 +109,7 @@ Connection string resolution order (SQL Server):
 Run from the repository root (change the name for the migration):
 
 ```powershell
-dotnet ef migrations add InitialMigration --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext --framework net8.0
+cd ..
 ```
 
 The generated migration file will contain **no `type:` parameters** and will carry

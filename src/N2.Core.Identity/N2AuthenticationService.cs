@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Services;
 
 namespace N2.Core.Identity;
 
@@ -16,6 +17,7 @@ public sealed class N2AuthenticationService : IAuthenticator {
     // and security requirements of the application. A value of 200 is too short and may not provide sufficient protection,
     // while a value of 1000 may be unnecessarily long for users with valid credentials.
     private const int TimeForAuthenticationMs = 500;
+    private const int AlertStorageTimeoutMs = 500;
 
     public N2AuthenticationService(
         IUserManager<ApplicationUser> userManager,
@@ -52,7 +54,6 @@ public sealed class N2AuthenticationService : IAuthenticator {
             return null;
         }
         if (!result.Status.IsSuccess()) {
-            LoginAttempt(logger, userLogin.Username, loginFailed);
             if (result.Status == ResponseStatus.Locked) {
                 LoginAttempt(logger, userLogin.Username, accountLocked);
             } else {
@@ -69,14 +70,23 @@ public sealed class N2AuthenticationService : IAuthenticator {
             return null;
         }
 
+        var alerts = user.ApplicationUserAlert.Select(a => new UserAlert(a.Message, a.Priority)).ToList();
+
         var roles = await userManager.GetRolesAsync(user, cancellationToken);
         await timer.Wait();
 
         if (roles == null || roles.Value == null || roles.Value.Count == 0) {
-            return new AspNetUserContext(user, []);
+            return new AspNetUserContext(user, [], alerts, (a) => StoreUserAlert(user.Id, a, CancellationToken.None));
         }
 
-        return new AspNetUserContext(user, [.. roles.Value]);
+        return new AspNetUserContext(user, [.. roles.Value], alerts, (a) => StoreUserAlert(user.Id, a, CancellationToken.None));
+    }
+
+    private void StoreUserAlert(Guid userId, UserAlert userAlert, CancellationToken token) {
+        if (userManager is N2UserManager ctx) {
+            var task = ctx.CreateUserAlert(userId, userAlert, token);
+            task.Wait(AlertStorageTimeoutMs, token);
+        }
     }
 
     private static readonly AuthenticationException userNotFoundException = new("Login attempt with invalid username.");

@@ -72,7 +72,7 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
     }
 
     [TestMethod]
-    public async Task ArraysAreEqual_DifferentPositions_ShouldHaveConstantTiming() {
+    public void ArraysAreEqual_DifferentPositions_ShouldHaveConstantTiming() {
         // Arrange
         var baseArray = new byte[32];
         RandomNumberGenerator.Fill(baseArray);
@@ -82,10 +82,10 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         for (var i = 0; i < 200; i++) {
             var warm = (byte[])baseArray.Clone();
             warm[0] ^= 0xFF;
-            await baseArray.ArraysAreEqual(warm);
+            baseArray.ArraysAreEqual(warm);
             warm = (byte[])baseArray.Clone();
             warm[31] ^= 0xFF;
-            await baseArray.ArraysAreEqual(warm);
+            baseArray.ArraysAreEqual(warm);
         }
 
         // Act - Test mismatch at different positions
@@ -97,14 +97,14 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
             testFirst[0] ^= 0xFF; // Flip first byte
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await baseArray.ArraysAreEqual(testFirst);
+            _ = baseArray.ArraysAreEqual(testFirst);
             firstByteTimes.Add(sw.ElapsedTicks);
 
             var testLast = (byte[])baseArray.Clone();
             testLast[31] ^= 0xFF; // Flip last byte
 
             sw.Restart();
-            await baseArray.ArraysAreEqual(testLast);
+            _ = baseArray.ArraysAreEqual(testLast);
             lastByteTimes.Add(sw.ElapsedTicks);
         }
 

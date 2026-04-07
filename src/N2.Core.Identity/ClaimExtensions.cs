@@ -4,11 +4,19 @@ namespace N2.Core.Identity;
 
 public static class ClaimExtensions {
 
-    public static async Task<bool> ArraysAreEqual(this byte[] lValue, byte[] rValue) {
+    /// <summary>
+    /// Time-constant comparison of two byte arrays. This is used to prevent timing attacks when
+    /// comparing secrets such as password hashes or tokens. Do not use this method for general byte
+    /// array comparisons, as it is less efficient than a simple equality check.
+    /// </summary>
+    /// <param name="lValue">The first byte array to compare.</param>
+    /// <param name="rValue">The second byte array to compare.</param>
+    /// <returns>True if the byte arrays are equal, false otherwise.</returns>
+    public static bool ArraysAreEqual(this byte[] lValue, byte[] rValue) {
         if (lValue == null || rValue == null) {
             return false;
         }
-        var timer = new TimeoutTimer(15);
+
         var len = Math.Max(lValue.Length, rValue.Length);
         var a1 = new byte[len];
         var a2 = new byte[len];
@@ -23,7 +31,7 @@ public static class ClaimExtensions {
             }
             count--;
         }
-        await timer.Wait();
+
         return errcount == 0 && count == 0;
     }
 

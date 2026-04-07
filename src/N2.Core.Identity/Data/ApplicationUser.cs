@@ -56,6 +56,8 @@ public class ApplicationUser : IdentityUser<Guid>, IIdentityUser
     /// </summary>
     [MaxLength(32)]
     public byte[]? SecretKeyMaterial { get; set; }
+
+    public virtual ICollection<ApplicationUserAlert> ApplicationUserAlert { get; } = [];
 }
 
 /// <summary>
@@ -99,6 +101,24 @@ public class ApplicationDefinition {
     /// </summary>
     [MaxLength(32)]
     public byte[]? SecretKeyMaterial { get; set; }
+}
+
+/// <summary>
+/// The <see cref="ApplicationUserAlert"/> entity represents a notification or alert associated with an <see cref="ApplicationUser"/>.
+/// Alerts can be used to inform users about important events, system messages, or required actions.
+/// Alerts should be removed at some time to prevent the users list from growing too much.
+/// </summary>
+public class ApplicationUserAlert {
+    [Key()]
+    public Guid Id { get; set; }
+    public virtual Guid ApplicationUserId { get; set; }
+    public virtual ApplicationUser ApplicationUser { get; set; } = null!;
+    [MaxLength(1024)]
+    public string Message { get; set; } = null!;
+    public Priority Priority { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? AcknowledgedAt { get; set; }
+    public bool Acknowledged { get; set; }
 }
 
 /// <summary>

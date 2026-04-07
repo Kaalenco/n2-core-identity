@@ -28,6 +28,8 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     IQueryable<ApplicationUser> User { get; }
 
+    Task<int> UserAlertAdd(ApplicationUserAlert alert, CancellationToken token);
+
     IQueryable<IdentityUserRole<Guid>> UserRole { get; }
 
     IQueryable<ApplicationUserTenant> UserTenant { get; }

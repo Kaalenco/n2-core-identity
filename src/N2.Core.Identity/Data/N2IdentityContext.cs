@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -34,10 +33,12 @@ public class N2IdentityContext(
     public DbSet<ApplicationUserTenant> UserTenants { get; set; } = null!;
     public DbSet<ApplicationDefinition> ApplicationDefinitions { get; set; } = null!;
     public DbSet<ApplicationSecret> ApplicationSecrets { get; set; } = null!;
+    public DbSet<ApplicationUserAlert> UserAlerts { get; set; } = null!;
 
     public IQueryable<ApplicationTenant> Tenant => Tenants;
     public IQueryable<ApplicationDefinition> Application => ApplicationDefinitions;
     public IQueryable<ApplicationUser> User => base.Users;
+    public IQueryable<ApplicationUserAlert> UserAlert => UserAlerts;
     public IQueryable<ApplicationRole> Role => base.Roles;
     public IQueryable<IdentityUserRole<Guid>> UserRole => base.UserRoles;
     public IQueryable<ApplicationUserTenant> UserTenant => UserTenants;
@@ -53,11 +54,17 @@ public class N2IdentityContext(
         return new ApplicationUserResponse(result);
     }
 
-    public Task<ApplicationUser?> UserFindRecord(string normalizedName, CancellationToken token)
-        => Users.Where(u => u.NormalizedUserName == normalizedName).FirstOrDefaultAsync(token);
+    public Task<ApplicationUser?> UserFindRecord(string normalizedName, CancellationToken token) 
+        => Users
+        .Include(u => u.ApplicationUserAlert.Where(a => !a.Acknowledged && a.CreatedAt > DateTime.UtcNow.AddDays(-7)))
+        .Where(u => u.NormalizedUserName == normalizedName)
+        .FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> UserFindRecord(Guid userId, CancellationToken token)
-        => Users.Where(u => u.Id == userId).FirstOrDefaultAsync(token);
+        => Users
+        .Include(u => u.ApplicationUserAlert.Where(a => !a.Acknowledged && a.CreatedAt > DateTime.UtcNow.AddDays(-7)))
+        .Where(u => u.Id == userId)
+        .FirstOrDefaultAsync(token);
 
     public Task<ApplicationTenant?> TenantFindRecord(Guid tenantId, CancellationToken token)
         => Tenants.Where(t => t.Id == tenantId).FirstOrDefaultAsync(token);
@@ -66,7 +73,10 @@ public class N2IdentityContext(
         => Tenants.Where(t => t.NormalizedName == normalizedName).FirstOrDefaultAsync(token);
 
     public Task<ApplicationUser?> UserFindRecordByEmail(string normalizedEmail, CancellationToken token)
-        => Users.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
+        => Users
+        .Include(u => u.ApplicationUserAlert.Where(a => !a.Acknowledged && a.CreatedAt > DateTime.UtcNow.AddDays(-7)))
+        .Where(u => u.NormalizedEmail == normalizedEmail)
+        .FirstOrDefaultAsync(token);
 
     public Task<ApplicationTenant?> TenantFindRecordByEmail(string normalizedEmail, CancellationToken token)
         => Tenants.Where(u => u.NormalizedEmail == normalizedEmail).FirstOrDefaultAsync(token);
@@ -537,5 +547,10 @@ public class N2IdentityContext(
             result.Add(new SelectItem<HtmlString> { Key = item.Id, Value = new HtmlString(item.Name) });
         }
         return result;
+    }
+
+    public Task<int> UserAlertAdd(ApplicationUserAlert alert, CancellationToken token) {
+        UserAlerts.Add(alert);
+        return base.SaveChangesAsync(token);
     }
 }

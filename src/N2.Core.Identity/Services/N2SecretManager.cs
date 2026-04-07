@@ -145,6 +145,8 @@ public class N2SecretManager : ISecretManager {
         using var ctx = await CreateContextAsync();
         var secret = await ctx.SecretFindRecord(secretId, token);
 
+        // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
+        // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
         if (secret == null || secret.ReferenceId != owner.Id || secret.ReferenceType != owner.Type) {
             return new RequestResult(ResponseStatus.NotFound, $"Secret '{secretId}' not found");
         }
@@ -299,6 +301,8 @@ public class N2SecretManager : ISecretManager {
         using var ctx = await CreateContextAsync();
         var secret = await ctx.SecretFindRecord(secretId, token);
 
+        // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
+        // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
         if (secret == null || secret.ReferenceId != owner.Id || secret.ReferenceType != owner.Type) {
             return null;
         }
@@ -335,6 +339,8 @@ public class N2SecretManager : ISecretManager {
         using var ctx = await CreateContextAsync();
         var secret = await ctx.SecretFindRecord(secretId, token);
 
+        // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
+        // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
         if (secret == null || secret.ReferenceId != owner.Id || secret.ReferenceType != owner.Type) {
             return default;
         }
@@ -356,6 +362,8 @@ public class N2SecretManager : ISecretManager {
         using var ctx = await CreateContextAsync();
         var secret = await ctx.SecretFindRecord(secretId, token);
 
+        // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
+        // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
         if (secret == null || secret.ReferenceId != owner.Id || secret.ReferenceType != owner.Type) {
             return new RequestResult(ResponseStatus.NotFound, $"Secret '{secretId}' not found");
         }

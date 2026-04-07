@@ -13,6 +13,9 @@ public class WebTokenGenerator : IWebTokenGenerator {
 
     public WebTokenGenerator(JwtSettings jwtSettings) {
         ArgumentNullException.ThrowIfNull(jwtSettings);
+        if(jwtSettings.Secret.Length < 16) {
+            throw new ArgumentException("JWT secret must be at least 16 characters long.");
+        }
         this.secret = Encoding.UTF8.GetBytes(jwtSettings.Secret);
         this.issuer = jwtSettings.Issuer;
         this.audience = jwtSettings.Audience;

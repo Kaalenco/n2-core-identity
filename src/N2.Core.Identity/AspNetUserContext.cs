@@ -4,10 +4,13 @@ public class AspNetUserContext : IUserContext
 {
     private readonly string[] roles;
     private readonly bool isAuthenticated;
+    private Action<UserAlert>? AlertAction { get; }
 
-    public AspNetUserContext(IIdentityUser user, IList<string> roles)
+    public AspNetUserContext(IIdentityUser user, IList<string> roles, IList<UserAlert> alerts, Action<UserAlert>? alertAction)
     {
         this.roles = [.. roles];
+        this.alerts = [.. alerts];
+        this.AlertAction = alertAction;
         if (user != null)
         {
             isAuthenticated = true;
@@ -28,7 +31,7 @@ public class AspNetUserContext : IUserContext
         }
     }
 
-    private readonly List<UserAlert> alerts = new();
+    private readonly List<UserAlert> alerts = [];
     public Guid PublicId { get; private set; }
     public string UserName { get; private set; }
 
@@ -45,7 +48,11 @@ public class AspNetUserContext : IUserContext
     public string? ProfileBackgroundImagePath { get; }
     public int PrimaryPartitionKey { get; }
 
-    public void Alert(string message, Priority priority) => throw new NotImplementedException();
+    public void Alert(string message, Priority priority) {
+        var alert = new UserAlert(message, priority);
+        AlertAction?.Invoke(alert);
+        alerts.Add(alert);
+    }
 
     public bool CanDesign()
     {

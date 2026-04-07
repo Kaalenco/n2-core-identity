@@ -146,6 +146,146 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         Assert.IsNull(retrieved);
     }
 
+    // ── UserAlert visibility filter ───────────────────────────────────────────
+    // These tests require a real database. The EF filtered Include is evaluated
+    // server-side; the InMemory provider bypasses it via change-tracker fixup,
+    // so these tests live here rather than in the unit test suite.
+
+    private static ApplicationUser MakeUser(string prefix) {
+        var id = Guid.NewGuid();
+        var name = $"{prefix}_{id:N}";
+        return new ApplicationUser {
+            Id = id,
+            UserName = name,
+            NormalizedUserName = name.ToUpperInvariant(),
+            Email = $"{name}@test.com",
+            NormalizedEmail = $"{name}@test.com".ToUpperInvariant(),
+            SecurityStamp = Guid.NewGuid().ToString()
+        };
+    }
+
+    [TestMethod]
+    public async Task UserFindRecord_AcknowledgedAlert_ShouldNotBeIncluded() {
+        using var context = await CreateAndPrepareAsync();
+        var user = MakeUser("ack");
+        await context.UserAdd(user, CancellationToken.None);
+        await context.UserAlertAdd(new ApplicationUserAlert {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = user.Id,
+            Message = "Acknowledged",
+            Priority = Priority.Normal,
+            CreatedAt = DateTime.UtcNow,
+            Acknowledged = true,
+            AcknowledgedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+
+        try {
+            using var verifyCtx = await CreateAndPrepareAsync();
+            var found = await verifyCtx.UserFindRecord(user.Id, CancellationToken.None);
+            Assert.IsNotNull(found);
+            Assert.AreEqual(0, found!.ApplicationUserAlert.Count,
+                "Acknowledged alerts must be excluded by the filtered Include");
+        } finally {
+            context.UserDelete(user);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task UserFindRecord_AlertOlderThan7Days_ShouldNotBeIncluded() {
+        using var context = await CreateAndPrepareAsync();
+        var user = MakeUser("old");
+        await context.UserAdd(user, CancellationToken.None);
+        await context.UserAlertAdd(new ApplicationUserAlert {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = user.Id,
+            Message = "Stale",
+            Priority = Priority.Low,
+            CreatedAt = DateTime.UtcNow.AddDays(-8),
+            Acknowledged = false
+        }, CancellationToken.None);
+
+        try {
+            using var verifyCtx = await CreateAndPrepareAsync();
+            var found = await verifyCtx.UserFindRecord(user.Id, CancellationToken.None);
+            Assert.IsNotNull(found);
+            Assert.AreEqual(0, found!.ApplicationUserAlert.Count,
+                "Alerts older than 7 days must be excluded by the filtered Include");
+        } finally {
+            context.UserDelete(user);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task UserFindRecord_AlertAtExact7DayBoundary_ShouldNotBeIncluded() {
+        using var context = await CreateAndPrepareAsync();
+        var user = MakeUser("boundary");
+        await context.UserAdd(user, CancellationToken.None);
+        await context.UserAlertAdd(new ApplicationUserAlert {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = user.Id,
+            Message = "Boundary",
+            Priority = Priority.Low,
+            CreatedAt = DateTime.UtcNow.AddDays(-7),
+            Acknowledged = false
+        }, CancellationToken.None);
+
+        try {
+            using var verifyCtx = await CreateAndPrepareAsync();
+            var found = await verifyCtx.UserFindRecord(user.Id, CancellationToken.None);
+            Assert.IsNotNull(found);
+            Assert.AreEqual(0, found!.ApplicationUserAlert.Count,
+                "Filter is CreatedAt > UtcNow.AddDays(-7), so an alert exactly 7 days old is excluded");
+        } finally {
+            context.UserDelete(user);
+            await context.Complete();
+        }
+    }
+
+    [TestMethod]
+    public async Task UserFindRecord_MixedAlerts_ShouldReturnOnlyVisible() {
+        using var context = await CreateAndPrepareAsync();
+        var user = MakeUser("mixed");
+        await context.UserAdd(user, CancellationToken.None);
+        await context.UserAlertAdd(new ApplicationUserAlert {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = user.Id,
+            Message = "Old",
+            Priority = Priority.Low,
+            CreatedAt = DateTime.UtcNow.AddDays(-10),
+            Acknowledged = false
+        }, CancellationToken.None);
+        await context.UserAlertAdd(new ApplicationUserAlert {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = user.Id,
+            Message = "Acknowledged",
+            Priority = Priority.Normal,
+            CreatedAt = DateTime.UtcNow,
+            Acknowledged = true,
+            AcknowledgedAt = DateTime.UtcNow
+        }, CancellationToken.None);
+        await context.UserAlertAdd(new ApplicationUserAlert {
+            Id = Guid.NewGuid(),
+            ApplicationUserId = user.Id,
+            Message = "Visible",
+            Priority = Priority.High,
+            CreatedAt = DateTime.UtcNow,
+            Acknowledged = false
+        }, CancellationToken.None);
+
+        try {
+            using var verifyCtx = await CreateAndPrepareAsync();
+            var found = await verifyCtx.UserFindRecord(user.Id, CancellationToken.None);
+            Assert.IsNotNull(found);
+            Assert.AreEqual(1, found!.ApplicationUserAlert.Count);
+            Assert.AreEqual("Visible", found.ApplicationUserAlert.Single().Message);
+        } finally {
+            context.UserDelete(user);
+            await context.Complete();
+        }
+    }
+
     // ── Role persistence ──────────────────────────────────────────────────────
 
     [TestMethod]

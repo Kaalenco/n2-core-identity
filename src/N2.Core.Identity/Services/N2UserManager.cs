@@ -66,10 +66,11 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
     private readonly IChangeLogWriter? changeLogWriter;
     private readonly IVaultCallerContext? callerContext;
 
-    // Intentionally not disposed: disposing a kernel-backed Semaphore while another thread
-    // is blocked on WaitOne() causes an ObjectDisposedException. The OS reclaims the handle on exit.
+    // Intentionally not disposed: Dispose() may be called by the DI container while
+    // ValidateMultifactorAsync is still waiting on WaitAsync(), which would cause an
+    // ObjectDisposedException. SemaphoreSlim has no unmanaged resources; the GC reclaims it.
 #pragma warning disable CA2213
-    private readonly Semaphore lockObject = new(1, 1);
+    private readonly SemaphoreSlim lockObject = new(1, 1);
 #pragma warning restore CA2213
 
     private readonly IPasswordHasher<ApplicationUser> passwordHasher;
@@ -118,6 +119,19 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
                 $"TokenSigningSecret must be at least 32 bytes (256 bits). Current length: {secretBytes.Length} bytes"
             );
         }
+    }
+
+    public async Task CreateUserAlert(Guid userId, UserAlert userAlert, CancellationToken token) {
+        ArgumentNullException.ThrowIfNull(userAlert);
+        using var ctx = await CreateContextAsync();
+        var alert = new ApplicationUserAlert {
+            ApplicationUserId = userId,
+            Message = userAlert.Message,
+            Priority = userAlert.Priority,
+            CreatedAt = DateTime.UtcNow
+        };
+        await ctx.UserAlertAdd(alert, token);
+        await ctx.Complete();
     }
 
     public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token) {
@@ -537,26 +551,24 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
         ArgumentException.ThrowIfNullOrEmpty(password);
         var timer = new TimeoutTimer(TimeForAuthenticationMs);
 
-        // Check lockout status FIRST
-        if (IsLockedOut(user)) {
-            var lockoutEnd = user.LockoutEnd!.Value;
-            var remainingTime = lockoutEnd - DateTimeOffset.UtcNow;
-
-            logger.LogUserLockedOut(user.UserName ?? user.Id.ToString(), lockoutEnd, Math.Ceiling(remainingTime.TotalMinutes));
-
-            await timer.Wait();
-            return new RequestResult(423, $"Account is locked. Try again after {lockoutEnd:u}");
-        }
-
         using var ctx = await CreateContextAsync();
         var normalizedUserName = user.UserName?.ToUpperInvariant() ?? string.Empty;
         var appUser = await ctx.User
-            .Where(m => m.NormalizedUserName == normalizedUserName &&
-                (m.LockoutEnd == null || m.LockoutEnd < DateTime.UtcNow)
-            ).FirstOrDefaultAsync(token);
+            .Where(m => m.NormalizedUserName == normalizedUserName)
+            .FirstOrDefaultAsync(token);
+
         if (appUser == null) {
             await timer.Wait();
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
+        }
+
+        // Lockout check on the DB record — never on the caller-supplied object, which may be stale.
+        if (IsLockedOut(appUser)) {
+            var lockoutEnd = appUser.LockoutEnd!.Value;
+            var remainingTime = lockoutEnd - DateTimeOffset.UtcNow;
+            logger.LogUserLockedOut(appUser.UserName ?? appUser.Id.ToString(), lockoutEnd, Math.Ceiling(remainingTime.TotalMinutes));
+            await timer.Wait();
+            return new RequestResult(423, $"Account is locked. Try again after {lockoutEnd:u}");
         }
 
         var verificationResult = passwordHasher.VerifyHashedPassword(
@@ -584,7 +596,7 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
 
         ArgumentNullException.ThrowIfNull(user);
         var timer = new TimeoutTimer(TimeForAuthenticationMs);
-        lockObject.WaitOne();
+        await lockObject.WaitAsync(token);
         try {
             // Check rate limiting FIRST (before any validation)
             var (rateLimitCheck, remainingTime) = rateLimiter.CheckRateLimit(user.Id, user.NormalizedUserName);
@@ -677,7 +689,7 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
                     var expectedSignature = hmac.ComputeHash(message);
 
                     var verify = Convert.FromBase64String(splitCode[1]);
-                    var arraysEqual = await expectedSignature.ArraysAreEqual(verify);
+                    var arraysEqual = expectedSignature.ArraysAreEqual(verify);
                     await timer.Wait();
 
                     rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, arraysEqual);
@@ -728,12 +740,6 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
         ArgumentException.ThrowIfNullOrEmpty(userName);
         var normalizedName = userName.Trim().ToUpperInvariant();
         return await ctx.UserFindRecord(normalizedName, token);
-    }
-
-    private static long CalculateTimeStepFromTimestamp(DateTime timestamp, long stepSize) {
-        var unixTimestamp = (timestamp.Ticks - UnicEpocTicks) / TicksToSeconds;
-        var window = unixTimestamp / stepSize;
-        return window;
     }
 
     private static byte[] GenerateQrCode(string uri) {
