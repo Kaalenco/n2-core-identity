@@ -49,14 +49,6 @@ public sealed class UsingN2AuthenticationService {
             .Setup(m => m.CanSignInAsync(It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(canSignIn);
 
-    private void SetupRoles(params string[] roles) {
-        var mock = new Mock<IListResponse<string>>();
-        mock.Setup(r => r.Value).Returns(roles.ToList());
-        userManager
-            .Setup(m => m.GetRolesAsync(It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(mock.Object);
-    }
-
     // -------------------------------------------------------------------------
     // Construction
     // -------------------------------------------------------------------------
@@ -176,20 +168,6 @@ public sealed class UsingN2AuthenticationService {
         Assert.IsNull(result);
     }
 
-    [TestMethod]
-    public async Task AuthenticateAsync_CannotSignIn_ShouldNotFetchRoles() {
-        SetupUserFound(MakeUser());
-        SetupValidateSuccess();
-        SetupCanSignIn(false);
-        var service = CreateService();
-
-        await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
-
-        userManager.Verify(
-            m => m.GetRolesAsync(It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
     // -------------------------------------------------------------------------
     // Happy path
     // -------------------------------------------------------------------------
@@ -199,7 +177,7 @@ public sealed class UsingN2AuthenticationService {
         SetupUserFound(MakeUser());
         SetupValidateSuccess();
         SetupCanSignIn(true);
-        SetupRoles();
+
         var service = CreateService();
 
         var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
@@ -212,7 +190,7 @@ public sealed class UsingN2AuthenticationService {
         SetupUserFound(MakeUser());
         SetupValidateSuccess();
         SetupCanSignIn(true);
-        SetupRoles();
+
         var service = CreateService();
 
         var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
@@ -226,7 +204,7 @@ public sealed class UsingN2AuthenticationService {
         SetupUserFound(user);
         SetupValidateSuccess();
         SetupCanSignIn(true);
-        SetupRoles();
+
         var service = CreateService();
 
         var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
@@ -237,11 +215,13 @@ public sealed class UsingN2AuthenticationService {
     }
 
     [TestMethod]
-    public async Task AuthenticateAsync_ValidCredentials_NoRoles_ShouldReturnEmptyRoles() {
+    public async Task AuthenticateAsync_ValidCredentials_NoTenantMemberships_CurrentRolesIsEmpty() {
+        // Roles are now tenant-scoped. The auth service populates them via GetTenantMembershipsAsync
+        // on the concrete N2UserManager. A mock IUserManager never satisfies that guard, so the
+        // returned context has no tenant memberships and therefore no roles.
         SetupUserFound(MakeUser());
         SetupValidateSuccess();
         SetupCanSignIn(true);
-        SetupRoles(); // no roles
         var service = CreateService();
 
         var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
@@ -251,31 +231,16 @@ public sealed class UsingN2AuthenticationService {
     }
 
     [TestMethod]
-    public async Task AuthenticateAsync_ValidCredentials_WithRoles_ShouldReturnRolesInContext() {
+    public async Task AuthenticateAsync_ValidCredentials_NoTenantContext_IsAdminReturnsFalse() {
+        // IsAdmin() is strictly tenant-scoped; it requires SetTenantContext to be called first.
+        // Without a tenant context the result is always false regardless of underlying roles.
         SetupUserFound(MakeUser());
         SetupValidateSuccess();
         SetupCanSignIn(true);
-        SetupRoles(SystemRoles.SysAdmin, SystemRoles.Publisher);
         var service = CreateService();
 
         var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
 
-        Assert.IsNotNull(result);
-        var roles = result!.CurrentRoles().ToList();
-        Assert.IsTrue(roles.Contains(SystemRoles.SysAdmin));
-        Assert.IsTrue(roles.Contains(SystemRoles.Publisher));
-    }
-
-    [TestMethod]
-    public async Task AuthenticateAsync_ValidCredentials_IsAdminRole_ShouldBeAdmin() {
-        SetupUserFound(MakeUser());
-        SetupValidateSuccess();
-        SetupCanSignIn(true);
-        SetupRoles(SystemRoles.Admin);
-        var service = CreateService();
-
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
-
-        Assert.IsTrue(result!.IsAdmin());
+        Assert.IsFalse(result!.IsAdmin());
     }
 }
