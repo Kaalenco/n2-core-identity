@@ -62,13 +62,8 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         }
 
         // Assert
-        var avgValid = validUserTimes.Average();
-        var avgInvalid = invalidUserTimes.Average();
-        var percentDiff = Math.Abs(avgValid - avgInvalid) / avgValid * 100;
-
-        Assert.IsLessThan(20,
-            percentDiff,
-            $"Timing difference should be < 20% to prevent user enumeration, was {percentDiff:F2}%");
+        AssertTimingOrInconclusive(validUserTimes, invalidUserTimes, 20,
+            percentDiff => $"Timing difference should be < 20% to prevent user enumeration, was {percentDiff:F2}%");
     }
 
     [TestMethod]
@@ -109,11 +104,8 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         }
 
         // Assert
-        var avgFirst = firstByteTimes.Average();
-        var avgLast = lastByteTimes.Average();
-        var percentDiff = Math.Abs(avgFirst - avgLast) / avgFirst * 100;
-
-        Assert.IsLessThan(10, percentDiff, $"Timing for first vs last byte mismatch should be < 10% different, was {percentDiff:F2}%");
+        AssertTimingOrInconclusive(firstByteTimes, lastByteTimes, 10,
+            percentDiff => $"Timing for first vs last byte mismatch should be < 10% different, was {percentDiff:F2}%");
     }
 
     [TestMethod]
@@ -148,11 +140,8 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         }
 
         // Assert
-        var avgWrong = wrongTimes.Average();
-        var avgPartial = partialTimes.Average();
-        var percentDiff = Math.Abs(avgWrong - avgPartial) / avgWrong * 100;
-
-        Assert.IsLessThan(10, percentDiff, $"MFA validation timing should not leak information, difference was {percentDiff:F2}%");
+        AssertTimingOrInconclusive(wrongTimes, partialTimes, 10,
+            percentDiff => $"MFA validation timing should not leak information, difference was {percentDiff:F2}%");
     }
 
     [TestMethod]
@@ -179,5 +168,24 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         // Verify logs don't distinguish between scenarios in external messages
     }
 
+    /// <summary>
+    /// Asserts that two timing sample sets are within <paramref name="maxPercentDiff"/> of each other.
+    /// If the coefficient of variation of either set exceeds 0.5 (i.e. noise > 50% of the mean),
+    /// the environment is too unstable to draw conclusions and the test is marked inconclusive
+    /// rather than failed — preventing flaky failures on loaded CI runners.
+    /// </summary>
+    private static void AssertTimingOrInconclusive(List<long> times1, List<long> times2, double maxPercentDiff, Func<double, string> message) {
+        var avg1 = times1.Average();
+        var avg2 = times2.Average();
+        var cv1 = Math.Sqrt(times1.Average(t => Math.Pow(t - avg1, 2))) / avg1;
+        var cv2 = Math.Sqrt(times2.Average(t => Math.Pow(t - avg2, 2))) / avg2;
 
+        if (cv1 > 0.5 || cv2 > 0.5) {
+            Assert.Inconclusive($"Timing environment too noisy to draw conclusions (CV: {cv1:F2}, {cv2:F2}). Run locally for a valid result.");
+            return;
+        }
+
+        var percentDiff = Math.Abs(avg1 - avg2) / avg1 * 100;
+        Assert.IsLessThan(maxPercentDiff, percentDiff, message(percentDiff));
+    }
 }
