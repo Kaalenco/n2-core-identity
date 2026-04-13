@@ -134,6 +134,38 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
         await ctx.Complete();
     }
 
+    /// <summary>
+    /// Returns all tenant memberships for the given user in a single query,
+    /// including the roles the user holds within each tenant.
+    /// Today the only tenant-scoped role is <see cref="SystemRoles.Admin"/>, derived from
+    /// <see cref="ApplicationUserTenant.IsAdmin"/>. The structure supports additional per-tenant
+    /// roles once a dedicated role table is introduced.
+    /// </summary>
+    public async Task<IList<(Guid TenantId, string TenantName, IReadOnlyList<string> Roles)>> GetTenantMembershipsAsync(
+        ApplicationUser user,
+        CancellationToken token) {
+        ArgumentNullException.ThrowIfNull(user);
+
+        using var ctx = await CreateContextAsync();
+
+        var rows = await ctx.UserTenant
+            .AsNoTracking()
+            .Where(ut => ut.ApplicationUserId == user.Id)
+            .Select(ut => new {
+                ut.ApplicationTenantId,
+                TenantName = ut.ApplicationTenant.Name ?? string.Empty,
+                ut.IsAdmin
+            })
+            .ToListAsync(token);
+
+        return rows
+            .Select(r => (
+                r.ApplicationTenantId,
+                r.TenantName,
+                (IReadOnlyList<string>)(r.IsAdmin ? [SystemRoles.Admin] : [])))
+            .ToList();
+    }
+
     public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken token) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);

@@ -72,14 +72,13 @@ public sealed class N2AuthenticationService : IAuthenticator {
 
         var alerts = user.ApplicationUserAlert.Select(a => new UserAlert(a.Message, a.Priority)).ToList();
 
-        var roles = await userManager.GetRolesAsync(user, cancellationToken);
+        IList<(Guid TenantId, string TenantName, IReadOnlyList<string> Roles)> memberships = [];
+        if (userManager is N2UserManager nm) {
+            memberships = await nm.GetTenantMembershipsAsync(user, cancellationToken);
+        }
         await timer.Wait();
 
-        if (roles == null || roles.Value == null || roles.Value.Count == 0) {
-            return new AspNetUserContext(user, [], alerts, (a) => StoreUserAlert(user.Id, a, CancellationToken.None));
-        }
-
-        return new AspNetUserContext(user, [.. roles.Value], alerts, (a) => StoreUserAlert(user.Id, a, CancellationToken.None));
+        return new AspNetUserContext(user, memberships, alerts, (a) => StoreUserAlert(user.Id, a, CancellationToken.None));
     }
 
     private void StoreUserAlert(Guid userId, UserAlert userAlert, CancellationToken token) {

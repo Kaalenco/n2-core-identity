@@ -49,8 +49,13 @@ public class WebTokenGenerator : IWebTokenGenerator {
         if (!string.IsNullOrEmpty(userContext.PhoneNumber)) {
             claims.Add(new(ClaimTypes.MobilePhone, userContext.PhoneNumber));
         }
-        foreach (var role in userContext.CurrentRoles()) {
-            claims.Add(new Claim(ClaimTypes.Role, role));
+        foreach (var membership in userContext.TenantMemberships) {
+            claims.Add(new Claim(N2ClaimTypes.TenantMembership,
+                $"{membership.TenantId}:{membership.TenantName}"));
+            foreach (var role in membership.Roles) {
+                claims.Add(new Claim(N2ClaimTypes.TenantRole,
+                    $"{membership.TenantId}:{role}"));
+            }
         }
 
         if (timeoutInMinutes < 1) {
