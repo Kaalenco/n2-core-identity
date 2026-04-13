@@ -49,7 +49,7 @@ public class WebTokenGenerator : IWebTokenGenerator {
         if (!string.IsNullOrEmpty(userContext.PhoneNumber)) {
             claims.Add(new(ClaimTypes.MobilePhone, userContext.PhoneNumber));
         }
-        foreach (var membership in userContext.TenantMemberships) {
+        foreach (var membership in userContext.TenantMemberships ?? []) {
             claims.Add(new Claim(N2ClaimTypes.TenantMembership,
                 $"{membership.TenantId}:{membership.TenantName}"));
             foreach (var role in membership.Roles) {
