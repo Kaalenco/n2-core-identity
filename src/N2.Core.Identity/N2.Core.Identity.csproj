@@ -14,8 +14,7 @@
     <Authors>gjkaal</Authors>
     <Description>Data context for identity services</Description>
     <IncludeSymbols>False</IncludeSymbols>
-    <PackageVersion>1.6.4</PackageVersion>
-    <AssemblyVersion>1.6.4</AssemblyVersion>
+
     <PackageLicenseExpression>AFL-3.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/kaalenco/n2-core-identity</PackageProjectUrl>
     <PackageId>N2.Core.Identity</PackageId>
@@ -23,7 +22,11 @@
     <PackageType>Dependency</PackageType>
     <Product>N2.Core for NET8.0</Product>
     <ProductName>N2.Core</ProductName>
-    <ProductVersion>1.6.4</ProductVersion>
+
+    <Version>1.7.0</Version>
+    <PackageVersion>1.7.0</PackageVersion>
+    <AssemblyVersion>1.7.0</AssemblyVersion>
+    <ProductVersion>1.7.0</ProductVersion>
 
     <RootNamespace>N2.Core.Identity</RootNamespace>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
@@ -56,7 +59,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="N2.Core.Abstractions" Version="1.6.4" />
+    <PackageReference Include="N2.Core.Abstractions" Version="1.7.0" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
     <PackageReference Include="Otp.NET" Version="1.4.1" />
   </ItemGroup>

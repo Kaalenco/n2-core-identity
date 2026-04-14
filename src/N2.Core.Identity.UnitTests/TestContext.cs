@@ -12,6 +12,8 @@ using N2.Core.Identity.Services;
 
 using System.Security.Cryptography;
 
+using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
+
 namespace N2.Core.Identity.UnitTests;
 
 internal static class TestContext {
@@ -265,7 +267,7 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
     }
 
     // Properties that return queryables - no locking needed as queries are read-only
-    public Task<ICommandResponse<ApplicationUser>> UserFind(string name, CancellationToken token) => innerContext.UserFind(name, token);
+    public Task<ICommandResponse<ApplicationUser>> UserFind(string name, CancellationToken ct) => innerContext.UserFind(name, ct);
     public IQueryable<ApplicationUser> User => innerContext.Users;
     public IQueryable<ApplicationRole> Role => innerContext.Roles;
     public IQueryable<IdentityUserRole<Guid>> UserRole => innerContext.UserRoles;
@@ -273,6 +275,7 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
     public IQueryable<ApplicationTenant> Tenant => innerContext.Tenants;
     public IQueryable<ApplicationDefinition> Application => innerContext.ApplicationDefinitions;
     public IQueryable<ApplicationSecret> ApplicationSecret => innerContext.ApplicationSecrets;
+    public IQueryable<ApplicationRefreshToken> RefreshToken => innerContext.RefreshToken;
 
     public IQueryable<IChangeLog> ChangeLogs => innerContext.ChangeLogs;
 
@@ -317,64 +320,64 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<SelectItemList<HtmlString>> RoleGetSelectList(CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<SelectItemList<HtmlString>> RoleGetSelectList(CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.RoleGetSelectList(token);
+            return await innerContext.RoleGetSelectList(ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<SelectItemList<UserSelectItem>> UserGetSelectList(CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<SelectItemList<UserSelectItem>> UserGetSelectList(CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserGetSelectList(token);
+            return await innerContext.UserGetSelectList(ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<SelectItemList<UserSelectItem>> TenantGetSelectList(CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<SelectItemList<UserSelectItem>> TenantGetSelectList(CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.TenantGetSelectList(token);
+            return await innerContext.TenantGetSelectList(ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<SelectItemList<HtmlString>> ApplicationGetSelectList(Guid tenantId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<SelectItemList<HtmlString>> ApplicationGetSelectList(Guid tenantId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.ApplicationGetSelectList(tenantId, token);
+            return await innerContext.ApplicationGetSelectList(tenantId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationDefinition?> ApplicationFindRecord(Guid applicationId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationDefinition?> ApplicationFindRecord(Guid applicationId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.ApplicationFindRecord(applicationId, token);
+            return await innerContext.ApplicationFindRecord(applicationId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationDefinition?> ApplicationFindRecord(Guid tenantId, string name, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationDefinition?> ApplicationFindRecord(Guid tenantId, string name, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.ApplicationFindRecord(tenantId, name, token);
+            return await innerContext.ApplicationFindRecord(tenantId, name, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<string> ApplicationGetName(Guid applicationId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<string> ApplicationGetName(Guid applicationId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.ApplicationGetName(applicationId, token);
+            return await innerContext.ApplicationGetName(applicationId, ct);
         } finally {
             semaphore.Release();
         }
@@ -389,28 +392,28 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<int> ApplicationAdd(ApplicationDefinition application, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<int> ApplicationAdd(ApplicationDefinition application, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.ApplicationAdd(application, token);
+            return await innerContext.ApplicationAdd(application, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationSecret?> SecretFindRecord(Guid applicationSecretId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationSecret?> SecretFindRecord(Guid applicationSecretId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.SecretFindRecord(applicationSecretId, token);
+            return await innerContext.SecretFindRecord(applicationSecretId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationSecret?> SecretFindRecord(string hashedToken, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.SecretFindRecord(hashedToken, token);
+            return await innerContext.SecretFindRecord(hashedToken, ct);
         } finally {
             semaphore.Release();
         }
@@ -434,46 +437,46 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, string ownerType, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<SelectItemList<HtmlString>> SecretGetSelectList(Guid ownerId, string ownerType, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.SecretGetSelectList(ownerId, ownerType, token);
+            return await innerContext.SecretGetSelectList(ownerId, ownerType, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<string> UserGetName(Guid userId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<string> UserGetName(Guid userId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserGetName(userId, token);
+            return await innerContext.UserGetName(userId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<string> TenantGetName(Guid tenantId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<string> TenantGetName(Guid tenantId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.TenantGetName(tenantId, token);
+            return await innerContext.TenantGetName(tenantId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<bool> UserCanSignIn(Guid userId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<bool> UserCanSignIn(Guid userId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserCanSignIn(userId, token);
+            return await innerContext.UserCanSignIn(userId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<bool> UserCanSignInTenant(Guid userId, Guid tenantId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<bool> UserCanSignInTenant(Guid userId, Guid tenantId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserCanSignInTenant(userId, tenantId, token);
+            return await innerContext.UserCanSignInTenant(userId, tenantId, ct);
         } finally {
             semaphore.Release();
         }
@@ -524,154 +527,154 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<int> TenantAdd(ApplicationTenant tenant, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<int> TenantAdd(ApplicationTenant tenant, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.TenantAdd(tenant, token);
+            return await innerContext.TenantAdd(tenant, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<int> UserAdd(ApplicationUser user, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<int> UserAdd(ApplicationUser user, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserAdd(user, token);
+            return await innerContext.UserAdd(user, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<int> RoleAdd(ApplicationRole role, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<int> RoleAdd(ApplicationRole role, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.RoleAdd(role, token);
+            return await innerContext.RoleAdd(role, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<int> UserRoleAdd(IdentityUserRole<Guid> identityRole, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<int> UserRoleAdd(IdentityUserRole<Guid> identityRole, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserRoleAdd(identityRole, token);
+            return await innerContext.UserRoleAdd(identityRole, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<int> UserTenantAdd(ApplicationUserTenant identityUserTenant, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<int> UserTenantAdd(ApplicationUserTenant identityUserTenant, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserTenantAdd(identityUserTenant, token);
+            return await innerContext.UserTenantAdd(identityUserTenant, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<bool> UserTenantIsAdmin(Guid userId, Guid tenantId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<bool> UserTenantIsAdmin(Guid userId, Guid tenantId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserTenantIsAdmin(userId, tenantId, token);
+            return await innerContext.UserTenantIsAdmin(userId, tenantId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<(ResponseStatus status, string? message)> UserTenantSetAdmin(Guid userId, Guid tenantId, bool isAdmin, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<(ResponseStatus status, string? message)> UserTenantSetAdmin(Guid userId, Guid tenantId, bool isAdmin, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserTenantSetAdmin(userId, tenantId, isAdmin, token);
+            return await innerContext.UserTenantSetAdmin(userId, tenantId, isAdmin, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationUser?> UserFindRecord(string normalizedName, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationUser?> UserFindRecord(string normalizedName, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserFindRecord(normalizedName, token);
+            return await innerContext.UserFindRecord(normalizedName, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationUser?> UserFindRecord(Guid userId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationUser?> UserFindRecord(Guid userId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserFindRecord(userId, token);
+            return await innerContext.UserFindRecord(userId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationUser?> UserFindRecordByEmail(string normalizedEmail, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationUser?> UserFindRecordByEmail(string normalizedEmail, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserFindRecordByEmail(normalizedEmail, token);
+            return await innerContext.UserFindRecordByEmail(normalizedEmail, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationRole?> RoleFindRecord(string normalizedName, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationRole?> RoleFindRecord(string normalizedName, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.RoleFindRecord(normalizedName, token);
+            return await innerContext.RoleFindRecord(normalizedName, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationTenant?> TenantFindRecord(string normalizedName, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationTenant?> TenantFindRecord(string normalizedName, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.TenantFindRecord(normalizedName, token);
+            return await innerContext.TenantFindRecord(normalizedName, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationTenant?> TenantFindRecord(Guid tenantId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationTenant?> TenantFindRecord(Guid tenantId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.TenantFindRecord(tenantId, token);
+            return await innerContext.TenantFindRecord(tenantId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<ApplicationTenant?> TenantFindRecordByEmail(string normalizedEmail, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<ApplicationTenant?> TenantFindRecordByEmail(string normalizedEmail, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.TenantFindRecordByEmail(normalizedEmail, token);
+            return await innerContext.TenantFindRecordByEmail(normalizedEmail, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<IdentityUserRole<Guid>?> UserRoleFindRecord(Guid userId, Guid roleId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<IdentityUserRole<Guid>?> UserRoleFindRecord(Guid userId, Guid roleId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserRoleFindRecord(userId, roleId, token);
+            return await innerContext.UserRoleFindRecord(userId, roleId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<IEnumerable<string>> UserGetRoles(Guid userId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<IEnumerable<string>> UserGetRoles(Guid userId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserGetRoles(userId, token);
+            return await innerContext.UserGetRoles(userId, ct);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<IEnumerable<string>> TenantGetUsers(Guid tenantId, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<IEnumerable<string>> TenantGetUsers(Guid tenantId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.TenantGetUsers(tenantId, token);
+            return await innerContext.TenantGetUsers(tenantId, ct);
         } finally {
             semaphore.Release();
         }
@@ -749,10 +752,41 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<int> UserAlertAdd(ApplicationUserAlert alert, CancellationToken token) {
-        await semaphore.WaitAsync(token);
+    public async Task<int> UserAlertAdd(ApplicationUserAlert alert, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.UserAlertAdd(alert, token);
+            return await innerContext.UserAlertAdd(alert, ct);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<ApplicationRefreshToken?> RefreshTokenFind(string token, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
+        try {
+            return await innerContext.RefreshTokenFind(token, ct);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public void RefreshTokenAdd(ApplicationRefreshToken token) => innerContext.RefreshTokenAdd(token);
+
+    public void RefreshTokenRevoke(ApplicationRefreshToken token) => innerContext.RefreshTokenRevoke(token);
+
+    public async Task<int> RefreshTokenPurgeStale(Guid userId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
+        try {
+            return await innerContext.RefreshTokenPurgeStale(userId, ct);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
+    public async Task<int> RefreshTokenPurgeExpired(CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
+        try {
+            return await innerContext.RefreshTokenPurgeExpired( ct);
         } finally {
             semaphore.Release();
         }

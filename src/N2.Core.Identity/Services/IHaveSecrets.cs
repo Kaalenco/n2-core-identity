@@ -12,7 +12,7 @@ public interface IHaveSecrets {
     /// or <c>null</c> if the entity does not exist.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when the entity exists but has no MFA secret configured.</exception>
-    Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken token);
+    Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken ct);
 
-    Task<ISecretManager> GetSecretManager(CancellationToken token);
+    Task<ISecretManager> GetSecretManager(CancellationToken ct);
 }

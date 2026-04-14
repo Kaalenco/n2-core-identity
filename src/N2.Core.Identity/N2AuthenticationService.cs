@@ -81,10 +81,10 @@ public sealed class N2AuthenticationService : IAuthenticator {
         return new AspNetUserContext(user, memberships, alerts, (a) => StoreUserAlert(user.Id, a, CancellationToken.None));
     }
 
-    private void StoreUserAlert(Guid userId, UserAlert userAlert, CancellationToken token) {
+    private void StoreUserAlert(Guid userId, UserAlert userAlert, CancellationToken ct) {
         if (userManager is N2UserManager ctx) {
-            var task = ctx.CreateUserAlert(userId, userAlert, token);
-            task.Wait(AlertStorageTimeoutMs, token);
+            var task = ctx.CreateUserAlert(userId, userAlert, ct);
+            task.Wait(AlertStorageTimeoutMs, ct);
         }
     }
 

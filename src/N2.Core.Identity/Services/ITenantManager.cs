@@ -1,4 +1,4 @@
-﻿using N2.Core.Commands;
+using N2.Core.Commands;
 using N2.Core.Identity.Data;
 
 using System.Diagnostics.CodeAnalysis;
@@ -19,44 +19,44 @@ public interface ITenantManager : IHaveSecrets
 
     /// <summary>Creates a new tenant.</summary>
     /// <param name="tenant">The tenant to create.</param>
-    /// <param name="token">Cancellation token.</param>
-    Task<ICommandResponse> CreateAsync([NotNull] ApplicationTenant tenant, CancellationToken token);
+    /// <param name="ct">Cancellation token.</param>
+    Task<ICommandResponse> CreateAsync([NotNull] ApplicationTenant tenant, CancellationToken ct);
 
     /// <summary>Deletes a tenant and removes all user-tenant associations.</summary>
     /// <param name="tenant">The tenant to delete.</param>
-    /// <param name="token">Cancellation token.</param>
-    Task<ICommandResponse> DeleteAsync([NotNull] ApplicationTenant tenant, CancellationToken token);
+    /// <param name="ct">Cancellation token.</param>
+    Task<ICommandResponse> DeleteAsync([NotNull] ApplicationTenant tenant, CancellationToken ct);
 
     /// <summary>Updates mutable tenant properties (name, contact info, image path, etc.).</summary>
     /// <param name="tenant">The tenant with updated values.</param>
-    /// <param name="token">Cancellation token.</param>
-    Task<ICommandResponse> UpdateAsync([NotNull] ApplicationTenant tenant, CancellationToken token);
+    /// <param name="ct">Cancellation token.</param>
+    Task<ICommandResponse> UpdateAsync([NotNull] ApplicationTenant tenant, CancellationToken ct);
 
     // -------------------------------------------------------------------------
     // Tenant lookup
     // -------------------------------------------------------------------------
 
     /// <summary>Finds a tenant by its unique identifier.</summary>
-    Task<ApplicationTenant?> FindByIdAsync(Guid tenantId, CancellationToken token);
+    Task<ApplicationTenant?> FindByIdAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>Finds a tenant by name. The value is normalised internally before lookup.</summary>
-    Task<ApplicationTenant?> FindByNameAsync(string name, CancellationToken token);
+    Task<ApplicationTenant?> FindByNameAsync(string name, CancellationToken ct);
 
     /// <summary>Finds a tenant by admin e-mail address. The value is normalised internally before lookup.</summary>
-    Task<ApplicationTenant?> FindByEmailAsync(string email, CancellationToken token);
+    Task<ApplicationTenant?> FindByEmailAsync(string email, CancellationToken ct);
 
     /// <summary>Returns a select list of all active tenants suitable for UI rendering.</summary>
-    Task<SelectItemList<UserSelectItem>> GetTenantsAsync(CancellationToken token);
+    Task<SelectItemList<UserSelectItem>> GetTenantsAsync(CancellationToken ct);
 
     // -------------------------------------------------------------------------
     // Tenant status
     // -------------------------------------------------------------------------
 
     /// <summary>Locks a tenant, preventing all its users from signing in.</summary>
-    Task<ICommandResponse> LockAsync([NotNull] ApplicationTenant tenant, CancellationToken token);
+    Task<ICommandResponse> LockAsync([NotNull] ApplicationTenant tenant, CancellationToken ct);
 
     /// <summary>Unlocks a previously locked tenant.</summary>
-    Task<ICommandResponse> UnlockAsync([NotNull] ApplicationTenant tenant, CancellationToken token);
+    Task<ICommandResponse> UnlockAsync([NotNull] ApplicationTenant tenant, CancellationToken ct);
 
     // -------------------------------------------------------------------------
     // User–tenant membership
@@ -68,8 +68,8 @@ public interface ITenantManager : IHaveSecrets
     /// </summary>
     /// <param name="user">The user to assign.</param>
     /// <param name="tenant">The target tenant.</param>
-    /// <param name="token">Cancellation token.</param>
-    Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken token);
+    /// <param name="ct">Cancellation token.</param>
+    Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken ct);
 
     /// <summary>
     /// Assigns a user to a tenant, optionally granting admin rights within that tenant.
@@ -79,26 +79,26 @@ public interface ITenantManager : IHaveSecrets
     /// <param name="user">The user to assign.</param>
     /// <param name="tenant">The target tenant.</param>
     /// <param name="isAdmin">Whether the user should be an admin of this tenant.</param>
-    /// <param name="token">Cancellation token.</param>
-    Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken token);
+    /// <param name="ct">Cancellation token.</param>
+    Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken ct);
 
     /// <summary>Removes a user from a tenant.</summary>
     /// <param name="user">The user to remove.</param>
     /// <param name="tenant">The tenant to remove the user from.</param>
-    /// <param name="token">Cancellation token.</param>
-    Task<ICommandResponse> RemoveUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken token);
+    /// <param name="ct">Cancellation token.</param>
+    Task<ICommandResponse> RemoveUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken ct);
 
     /// <summary>Returns the normalised usernames of all users belonging to the given tenant.</summary>
-    Task<IEnumerable<string>> GetUsersForTenantAsync(Guid tenantId, CancellationToken token);
+    Task<IEnumerable<string>> GetUsersForTenantAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>Returns the tenant IDs that the given user belongs to.</summary>
-    Task<IEnumerable<Guid>> GetTenantIdsForUserAsync(Guid userId, CancellationToken token);
+    Task<IEnumerable<Guid>> GetTenantIdsForUserAsync(Guid userId, CancellationToken ct);
 
     /// <summary>
     /// Checks whether the given user is allowed to sign in within the context of the given tenant.
     /// Returns <c>false</c> if either the user or the tenant is locked or removed.
     /// </summary>
-    Task<bool> ApplicationUserCanSignIn(Guid userId, Guid tenantId, CancellationToken token);
+    Task<bool> ApplicationUserCanSignIn(Guid userId, Guid tenantId, CancellationToken ct);
 
     // -------------------------------------------------------------------------
     // Tenant admin management
@@ -110,13 +110,13 @@ public interface ITenantManager : IHaveSecrets
     /// Multiple users may be admin of the same tenant simultaneously.
     /// Admin rights are scoped to this tenant only.
     /// </summary>
-    Task<ICommandResponse> SetAdminAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken token);
+    Task<ICommandResponse> SetAdminAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken ct);
 
     /// <summary>Returns <c>true</c> if the user is an admin of the given tenant.</summary>
-    Task<bool> IsAdminAsync(Guid userId, Guid tenantId, CancellationToken token);
+    Task<bool> IsAdminAsync(Guid userId, Guid tenantId, CancellationToken ct);
 
     /// <summary>Returns the IDs of all users who are admins of the given tenant.</summary>
-    Task<IEnumerable<Guid>> GetAdminsForTenantAsync(Guid tenantId, CancellationToken token);
+    Task<IEnumerable<Guid>> GetAdminsForTenantAsync(Guid tenantId, CancellationToken ct);
 
 }
 

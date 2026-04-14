@@ -58,6 +58,7 @@ public class ApplicationUser : IdentityUser<Guid>, IIdentityUser
     public byte[]? SecretKeyMaterial { get; set; }
 
     public virtual ICollection<ApplicationUserAlert> ApplicationUserAlert { get; } = [];
+    public virtual ICollection<ApplicationRefreshToken> ApplicationRefreshToken { get; } = [];
 }
 
 /// <summary>

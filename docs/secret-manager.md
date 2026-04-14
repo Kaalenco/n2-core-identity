@@ -501,8 +501,8 @@ public class AuditingSecretManager : ISecretManager {
     private readonly IHttpContextAccessor httpContext;
 
     public async Task<ICommandResponse<ApplicationSecretDto>> ValidateAsync(
-            string plainToken, CancellationToken token) {
-        var result = await inner.ValidateAsync(plainToken, token);
+            string plainToken, CancellationToken ct) {
+        var result = await inner.ValidateAsync(plainToken, ct);
         logger.LogInformation(
             "SecretValidate status={Status} caller={Caller} tokenPrefix={Prefix}",
             result.Status,

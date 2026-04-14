@@ -1,6 +1,8 @@
 namespace N2.Core.Identity;
 
 public sealed class JwtSettings {
+    public const int DefaultRefreshTokenExpirationInMinutes = 1440; // 24 hours
+
     public string Secret { get; set; } = string.Empty;
     public string Audience { get; set; } = string.Empty;
     public string Issuer { get; set; } = string.Empty;
@@ -17,7 +19,7 @@ public sealed class JwtSettings {
 
     public int TokenExpirationInMinutes { get; set; } = 5;
 
-    public int RefreshTokenExpirationInMinutes { get; set; } = 1440; // 24 hours
+    public int RefreshTokenExpirationInMinutes { get; set; } = DefaultRefreshTokenExpirationInMinutes;
 
     public int PreAuthTokenExpirationInMinutes { get; set; } = 60;
 }

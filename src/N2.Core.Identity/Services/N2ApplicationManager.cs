@@ -60,14 +60,14 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
     private Task<IIdentityContext> CreateContextAsync() =>
         factory.CreateAsync(provider, connectionName);
 
-    public async Task<ICommandResponse> CreateAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken token) {
+    public async Task<ICommandResponse> CreateAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
         ArgumentException.ThrowIfNullOrWhiteSpace(application.Name);
 
         using var ctx = await CreateContextAsync();
 
-        var existingTenant = await ctx.TenantFindRecord(tenantId, token);
+        var existingTenant = await ctx.TenantFindRecord(tenantId, ct);
         if (existingTenant == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenantId}' not found");
         }
@@ -75,24 +75,24 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
         application.ApplicationTenantId = tenantId;
         application.NormalizedName = application.Name.Trim().ToUpperInvariant();
 
-        var existing = await ctx.ApplicationFindRecord(tenantId, application.Name.Trim(), token);
+        var existing = await ctx.ApplicationFindRecord(tenantId, application.Name.Trim(), ct);
         if (existing != null) {
             return new RequestResult(ResponseStatus.NotAcceptable, $"Application '{application.Name}' already exists in tenant '{tenantId}'");
         }
 
-        await ctx.ApplicationAdd(application, token);
+        await ctx.ApplicationAdd(application, ct);
         (var code, var message) = await ctx.Complete();
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> DeleteAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken token) {
+    public async Task<ICommandResponse> DeleteAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(application.Id, Guid.Empty);
 
         using var ctx = await CreateContextAsync();
 
-        var existing = await ctx.ApplicationFindRecord(application.Id, token);
+        var existing = await ctx.ApplicationFindRecord(application.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Application '{application.Id}' not found");
         }
@@ -105,7 +105,7 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> UpdateAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken token) {
+    public async Task<ICommandResponse> UpdateAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(application.Id, Guid.Empty);
@@ -113,7 +113,7 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
 
         using var ctx = await CreateContextAsync();
 
-        var existing = await ctx.ApplicationFindRecord(application.Id, token);
+        var existing = await ctx.ApplicationFindRecord(application.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Application '{application.Id}' not found");
         }
@@ -129,37 +129,37 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ApplicationDefinition?> FindByIdAsync(Guid tenantId, Guid applicationId, CancellationToken token) {
+    public async Task<ApplicationDefinition?> FindByIdAsync(Guid tenantId, Guid applicationId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(applicationId, Guid.Empty);
 
         using var ctx = await CreateContextAsync();
-        var app = await ctx.ApplicationFindRecord(applicationId, token);
+        var app = await ctx.ApplicationFindRecord(applicationId, ct);
         return app?.ApplicationTenantId == tenantId ? app : null;
     }
 
-    public async Task<ApplicationDefinition?> FindByNameAsync(Guid tenantId, string name, CancellationToken token) {
+    public async Task<ApplicationDefinition?> FindByNameAsync(Guid tenantId, string name, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
         ArgumentException.ThrowIfNullOrEmpty(name);
 
         using var ctx = await CreateContextAsync();
-        return await ctx.ApplicationFindRecord(tenantId, name, token);
+        return await ctx.ApplicationFindRecord(tenantId, name, ct);
     }
 
-    public async Task<SelectItemList<HtmlString>> GetApplicationGetSelectList(Guid tenantId, CancellationToken token) {
+    public async Task<SelectItemList<HtmlString>> GetApplicationGetSelectList(Guid tenantId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
         using var ctx = await CreateContextAsync();
-        return await ctx.ApplicationGetSelectList(tenantId, token);
+        return await ctx.ApplicationGetSelectList(tenantId, ct);
     }
 
-    public async Task<ICommandResponse> LockAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken token) {
+    public async Task<ICommandResponse> LockAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(application.Id, Guid.Empty);
 
         using var ctx = await CreateContextAsync();
-        var existing = await ctx.ApplicationFindRecord(application.Id, token);
+        var existing = await ctx.ApplicationFindRecord(application.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Application '{application.Id}' not found");
         }
@@ -172,13 +172,13 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> UnlockAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken token) {
+    public async Task<ICommandResponse> UnlockAsync(Guid tenantId, [NotNull] ApplicationDefinition application, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(application.Id, Guid.Empty);
 
         using var ctx = await CreateContextAsync();
-        var existing = await ctx.ApplicationFindRecord(application.Id, token);
+        var existing = await ctx.ApplicationFindRecord(application.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Application '{application.Id}' not found");
         }
@@ -191,9 +191,9 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken token) {
+    public async Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken ct) {
         using var ctx = await CreateContextAsync();
-        var dbApp = await ctx.ApplicationFindRecord(id, token);
+        var dbApp = await ctx.ApplicationFindRecord(id, ct);
         if (dbApp == null) {
             return null;
         }
@@ -204,7 +204,7 @@ public class N2ApplicationManager : IApplicationManager, IHaveSecrets {
         return new SecretOwner(dbApp.Id, OwnerTypeCode.Application, dbApp.SecretKeyMaterial);
     }
 
-    public Task<ISecretManager> GetSecretManager(CancellationToken token) {
+    public Task<ISecretManager> GetSecretManager(CancellationToken ct) {
         return Task.FromResult<ISecretManager>(
             new N2SecretManager(factory, provider, connectionName, configuration, logger, changeLogWriter, callerContext));
     }

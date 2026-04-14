@@ -82,7 +82,7 @@ public class N2SecretManager : ISecretManager {
     public async Task<ICommandResponse<SecretCreateResultDto>> CreateAsync(
         [NotNull] ISecretOwner owner,
         [NotNull] CreateSecretDto request,
-        CancellationToken token) {
+        CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Name);
@@ -97,7 +97,7 @@ public class N2SecretManager : ISecretManager {
 
         byte[]? encryptedValue = null;
         if (request.Value != null) {
-            var ownerSecret = await GetOwnerKeyMaterial(owner.Id, owner.Type, ctx, token);
+            var ownerSecret = await GetOwnerKeyMaterial(owner.Id, owner.Type, ctx, ct);
             if (ownerSecret == null) {
                 Log(owner.Id, "Secret create failed: owner key material not found");
                 return new SecretCreateResponse(ResponseStatus.NotFound, $"Owner '{owner.Id}' key material not found.");
@@ -139,11 +139,11 @@ public class N2SecretManager : ISecretManager {
     public async Task<ICommandResponse> RevokeAsync(
         [NotNull] ISecretOwner owner,
         Guid secretId,
-        CancellationToken token) {
+        CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(owner);
 
         using var ctx = await CreateContextAsync();
-        var secret = await ctx.SecretFindRecord(secretId, token);
+        var secret = await ctx.SecretFindRecord(secretId, ct);
 
         // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
         // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
@@ -164,7 +164,7 @@ public class N2SecretManager : ISecretManager {
     public async Task<ICommandResponse> SetValueAsync(
             string plainToken,
             string? value,
-            CancellationToken token) {
+            CancellationToken ct) {
         if (string.IsNullOrEmpty(plainToken)) return new RequestResult(ResponseStatus.NotFound, string.Empty);
 
         var parts = plainToken.Split('.');
@@ -178,7 +178,7 @@ public class N2SecretManager : ISecretManager {
         var hashedToken = ComputeHmac(plainToken);
 
         using var ctx = await CreateContextAsync();
-        var secret = await ctx.SecretFindRecord(hashedToken, token);
+        var secret = await ctx.SecretFindRecord(hashedToken, ct);
         if (secret == null) return new RequestResult(ResponseStatus.NotFound, string.Empty);
 
         // Constant-time ownership check
@@ -195,7 +195,7 @@ public class N2SecretManager : ISecretManager {
         }
 
         if (value != null) {
-            var ownerSecret = await GetOwnerKeyMaterial(ownerId, ownerTypeCode, ctx, token);
+            var ownerSecret = await GetOwnerKeyMaterial(ownerId, ownerTypeCode, ctx, ct);
             if (ownerSecret == null) {
                 Log(secret.Id, "Secret value update failed: owner key material not found");
                 return new RequestResult(ResponseStatus.NotFound, string.Empty);
@@ -225,7 +225,7 @@ public class N2SecretManager : ISecretManager {
     /// <inheritdoc/>
     public async Task<ICommandResponse<ApplicationSecretDto>> ValidateAsync(
         string plainToken,
-        CancellationToken token) {
+        CancellationToken ct) {
         if (string.IsNullOrEmpty(plainToken)) return new SecretResponse();
 
         var parts = plainToken.Split('.');
@@ -240,7 +240,7 @@ public class N2SecretManager : ISecretManager {
         var hashedToken = ComputeHmac(plainToken);
 
         using var ctx = await CreateContextAsync();
-        var secret = await ctx.SecretFindRecord(hashedToken, token);
+        var secret = await ctx.SecretFindRecord(hashedToken, ct);
         if (secret == null) return new SecretResponse();
 
         // Constant-time ownership check
@@ -261,7 +261,7 @@ public class N2SecretManager : ISecretManager {
         // Decrypt and return the stored value when present
         string? secretValue = null;
         if (secret.Secret != null && secret.EncryptionSalt != null) {
-            var ownerSecret = await GetOwnerKeyMaterial(ownerId, ownerTypeCode, ctx, token);
+            var ownerSecret = await GetOwnerKeyMaterial(ownerId, ownerTypeCode, ctx, ct);
             if (ownerSecret == null) {
                 Log(secret.Id, "Secret validation failed: owner key material not found");
                 return new SecretResponse();
@@ -295,11 +295,11 @@ public class N2SecretManager : ISecretManager {
     public async Task<ApplicationSecretDto?> FindByIdAsync(
         [NotNull] ISecretOwner owner,
         Guid secretId,
-        CancellationToken token) {
+        CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(owner);
 
         using var ctx = await CreateContextAsync();
-        var secret = await ctx.SecretFindRecord(secretId, token);
+        var secret = await ctx.SecretFindRecord(secretId, ct);
 
         // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
         // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
@@ -318,11 +318,11 @@ public class N2SecretManager : ISecretManager {
     /// <inheritdoc/>
     public async Task<SelectItemList<HtmlString>> GetSelectListAsync(
         [NotNull] ISecretOwner owner,
-        CancellationToken token) {
+        CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(owner);
 
         using var ctx = await CreateContextAsync();
-        return await ctx.SecretGetSelectList(owner.Id, owner.Type, token);
+        return await ctx.SecretGetSelectList(owner.Id, owner.Type, ct);
     }
 
     // -------------------------------------------------------------------------
@@ -333,11 +333,11 @@ public class N2SecretManager : ISecretManager {
     public async Task<T?> GetPolicyAsync<T>(
         [NotNull] ISecretOwner owner,
         Guid secretId,
-        CancellationToken token) {
+        CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(owner);
 
         using var ctx = await CreateContextAsync();
-        var secret = await ctx.SecretFindRecord(secretId, token);
+        var secret = await ctx.SecretFindRecord(secretId, ct);
 
         // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
         // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
@@ -355,12 +355,12 @@ public class N2SecretManager : ISecretManager {
         [NotNull] ISecretOwner owner,
         Guid secretId,
         [NotNull] T policy,
-        CancellationToken token) {
+        CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(policy);
 
         using var ctx = await CreateContextAsync();
-        var secret = await ctx.SecretFindRecord(secretId, token);
+        var secret = await ctx.SecretFindRecord(secretId, ct);
 
         // Guid equality compares 16 bytes with no short-circuit path — no timing side-channel.
         // FixedTimeEquals is not needed here; it is reserved for HMAC/token comparisons (ValidateAsync, SetValueAsync).
@@ -427,17 +427,17 @@ public class N2SecretManager : ISecretManager {
         Guid ownerId,
         string ownerTypeCode,
         IIdentityContext ctx,
-        CancellationToken token) {
+        CancellationToken ct) {
         if (ownerTypeCode == OwnerTypeCode.User) {
-            var user = await ctx.UserFindRecord(ownerId, token);
+            var user = await ctx.UserFindRecord(ownerId, ct);
             return user?.SecretKeyMaterial;
         }
         if (ownerTypeCode == OwnerTypeCode.Application) {
-            var app = await ctx.ApplicationFindRecord(ownerId, token);
+            var app = await ctx.ApplicationFindRecord(ownerId, ct);
             return app?.SecretKeyMaterial;
         }
         if (ownerTypeCode == OwnerTypeCode.Tenant) {
-            var tenant = await ctx.TenantFindRecord(ownerId, token);
+            var tenant = await ctx.TenantFindRecord(ownerId, ct);
             return tenant?.SecretKeyMaterial;
         }
         return null;

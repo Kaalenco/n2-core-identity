@@ -2,29 +2,33 @@ using Microsoft.IdentityModel.Tokens;
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
+using System.Security.Cryptography;
 
 namespace N2.Core.Identity;
+
+#pragma warning disable CA1725
+// Using ct and not token for CancellationToken parameter names in async methods
+// is a common convention in .NET, and it is more concise. The CA1725 warning is not relevant in this context.
 
 public class WebTokenGenerator : IWebTokenGenerator {
     private readonly string audience;
     private readonly string issuer;
     private readonly byte[] secret;
+    private readonly int refreshTokenExpirationInMinutes;
 
     public WebTokenGenerator(JwtSettings jwtSettings) {
         ArgumentNullException.ThrowIfNull(jwtSettings);
-        if(jwtSettings.Secret.Length < 16) {
-            throw new ArgumentException("JWT secret must be at least 16 characters long.");
-        }
-        this.secret = Encoding.UTF8.GetBytes(jwtSettings.Secret);
+        this.secret = Convert.FromBase64String(jwtSettings.Secret);
         this.issuer = jwtSettings.Issuer;
         this.audience = jwtSettings.Audience;
+        this.refreshTokenExpirationInMinutes = jwtSettings.RefreshTokenExpirationInMinutes;
     }
 
     public WebTokenGenerator(string issuer, string audience, string securityKey) {
-        this.secret = Encoding.UTF8.GetBytes(securityKey);
+        this.secret = Convert.FromBase64String(securityKey);
         this.issuer = issuer;
         this.audience = audience;
+        this.refreshTokenExpirationInMinutes = JwtSettings.DefaultRefreshTokenExpirationInMinutes;
     }
 
     public string GenerateWebToken(IUserContext userContext, int timeoutInMinutes) {
@@ -87,5 +91,9 @@ public class WebTokenGenerator : IWebTokenGenerator {
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    public string GenerateRefreshToken()
+        => Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
+    public DateTime RefreshTokenExpiry()
+        => DateTime.UtcNow.AddMinutes(refreshTokenExpirationInMinutes);
 }

@@ -34,7 +34,7 @@ public abstract class N2IdentityTestsBase {
     }
 
     protected async Task<ApplicationUser> CreateTestUser(string userName, string password, MultiFactorType mfaType) {
-        CancellationToken token = new();
+        CancellationToken ct = new();
 
         var userManager = GetUserManager();
 
@@ -45,13 +45,13 @@ public abstract class N2IdentityTestsBase {
             MfaType = mfaType
         };
 
-        var createResult = await userManager.CreateAsync(user, password, token);
+        var createResult = await userManager.CreateAsync(user, password, ct);
         if (!createResult.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to create user: {createResult.Message}");
         }
 
         // Retrieve the created user
-        var userResponse = await userManager.FindByNameAsync(userName, token);
+        var userResponse = await userManager.FindByNameAsync(userName, ct);
         if (userResponse.Value == null) {
             throw new InvalidOperationException("Failed to retrieve created user.");
         }
@@ -62,18 +62,18 @@ public abstract class N2IdentityTestsBase {
             // Generate and confirm email to allow sign-in
             await userManager.SetMultifactorAsync(createdUser, mfaType, "token", CancellationToken.None);
 
-            var tokenResponse = await userManager.GenerateConfirmationTokenAsync(createdUser, token);
+            var tokenResponse = await userManager.GenerateConfirmationTokenAsync(createdUser, ct);
             if (!tokenResponse.Status.IsSuccess() || string.IsNullOrEmpty(tokenResponse.Value)) {
                 throw new InvalidOperationException("Failed to generate confirmation token.");
             }
 
-            var confirmResult = await userManager.ConfirmEmailAsync(createdUser, tokenResponse.Value, token);
+            var confirmResult = await userManager.ConfirmEmailAsync(createdUser, tokenResponse.Value, ct);
             if (!confirmResult.Status.IsSuccess()) {
                 throw new InvalidOperationException($"Failed to confirm email: {confirmResult.Message}");
             }
 
             // Retrieve user again to get updated EmailConfirmed status
-            userResponse = await userManager.FindByNameAsync(userName, token);
+            userResponse = await userManager.FindByNameAsync(userName, ct);
             if (userResponse.Value == null) {
                 throw new InvalidOperationException("Failed to retrieve user after email confirmation.");
             }

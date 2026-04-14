@@ -88,7 +88,7 @@ public interface ISecretManager {
     Task<ICommandResponse<SecretCreateResultDto>> CreateAsync(
         [NotNull] ISecretOwner owner,
         [NotNull] CreateSecretDto request,
-        CancellationToken token);
+        CancellationToken ct);
 
     /// <summary>
     /// Revokes (permanently deletes) a secret belonging to the given owner.
@@ -98,7 +98,7 @@ public interface ISecretManager {
     Task<ICommandResponse> RevokeAsync(
         [NotNull] ISecretOwner owner,
         Guid secretId,
-        CancellationToken token);
+        CancellationToken ct);
 
     /// <summary>
     /// Stores or replaces the encrypted value of an existing secret, authenticated by its plain token.
@@ -114,7 +114,7 @@ public interface ISecretManager {
     Task<ICommandResponse> SetValueAsync(
         string plainToken,
         string? value,
-        CancellationToken token);
+        CancellationToken ct);
 
     // -------------------------------------------------------------------------
     // Validation
@@ -153,7 +153,7 @@ public interface ISecretManager {
     /// </remarks>
     Task<ICommandResponse<ApplicationSecretDto>> ValidateAsync(
         string plainToken,
-        CancellationToken token);
+        CancellationToken ct);
 
     // -------------------------------------------------------------------------
     // Lookup
@@ -165,14 +165,14 @@ public interface ISecretManager {
     Task<ApplicationSecretDto?> FindByIdAsync(
         [NotNull] ISecretOwner owner,
         Guid secretId,
-        CancellationToken token);
+        CancellationToken ct);
 
     /// <summary>
     /// Returns a select list of all active (non-expired, named) secrets for the given owner.
     /// </summary>
     Task<SelectItemList<HtmlString>> GetSelectListAsync(
         [NotNull] ISecretOwner owner,
-        CancellationToken token);
+        CancellationToken ct);
 
     // -------------------------------------------------------------------------
     // Policy management
@@ -185,7 +185,7 @@ public interface ISecretManager {
     Task<T?> GetPolicyAsync<T>(
         [NotNull] ISecretOwner owner,
         Guid secretId,
-        CancellationToken token);
+        CancellationToken ct);
 
     /// <summary>
     /// Serialises <paramref name="policy"/> as JSON and persists it on the secret,
@@ -196,5 +196,5 @@ public interface ISecretManager {
         [NotNull] ISecretOwner owner,
         Guid secretId,
         [NotNull] T policy,
-        CancellationToken token);
+        CancellationToken ct);
 }
