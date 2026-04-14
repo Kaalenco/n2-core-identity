@@ -39,6 +39,9 @@ public class WebTokenGenerator : IWebTokenGenerator {
 
         ArgumentException.ThrowIfNullOrEmpty(issuer);
         ArgumentException.ThrowIfNullOrEmpty(audience);
+        if (timeoutInMinutes > 15) {
+            throw new ArgumentOutOfRangeException(nameof(timeoutInMinutes), "Timeout must be between 1 and 15 minutes.");
+        }
 
         List<Claim> claims =
         [
@@ -64,10 +67,6 @@ public class WebTokenGenerator : IWebTokenGenerator {
 
         if (timeoutInMinutes < 1) {
             timeoutInMinutes = 1;
-        }
-
-        if (timeoutInMinutes > 15) {
-            timeoutInMinutes = 15;
         }
 
         // Use UTC time for all JWT timestamps
