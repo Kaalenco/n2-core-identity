@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -15,6 +17,14 @@ public class ApplicationRefreshToken
 
     /// <summary>Opaque, cryptographically random Base64 string (64 bytes → 88 chars).</summary>
     public string   Token     { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Security stamp of the issuing user at the time this token was created.
+    /// Used during token refresh to detect credential changes (password reset, email change)
+    /// that occurred after the refresh token was issued. A mismatch causes immediate revocation.
+    /// </summary>
+    [MaxLength(36)]
+    public string?  SecurityStamp { get; set; }
 
     public DateTime IssuedAt  { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }

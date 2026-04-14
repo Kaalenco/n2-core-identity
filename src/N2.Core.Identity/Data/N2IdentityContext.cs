@@ -592,4 +592,14 @@ public class N2IdentityContext(
         RefreshTokens.RemoveRange(expired);
         return base.SaveChangesAsync(ct);
     }
+
+    public async Task RefreshTokenRevokeAll(Guid userId, CancellationToken ct) {
+        var active = await RefreshTokens
+            .Where(r => r.ApplicationUserId == userId && r.RevokedAt == null)
+            .ToListAsync(ct);
+        var now = DateTime.UtcNow;
+        foreach (var t in active) {
+            t.RevokedAt = now;
+        }
+    }
 }

@@ -134,6 +134,13 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
     /// <returns>A task that represents the asynchronous operation. The task result contains the number of refresh tokens that
     /// were removed.</returns>
     Task<int> RefreshTokenPurgeExpired(CancellationToken ct);
+
+    /// <summary>
+    /// Marks all active (non-revoked) refresh tokens for <paramref name="userId"/> as revoked.
+    /// Call <see cref="IUnitOfWork.Complete"/> to persist. Typically called when a security stamp
+    /// mismatch is detected to invalidate all outstanding sessions for the user.
+    /// </summary>
+    Task RefreshTokenRevokeAll(Guid userId, CancellationToken ct);
 }
 
 public interface IIdentityContextFactory : ICoreDataContextFactory<IIdentityContext> {

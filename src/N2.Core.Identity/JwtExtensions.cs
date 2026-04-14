@@ -5,6 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 
+using N2.Core.Identity.Data;
+using N2.Core.Identity.Services;
+
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 
@@ -53,6 +56,17 @@ public static class JwtExtensions {
         services.AddSingleton(authConfig);
         services.AddAuthorization();
         services.AddSingleton<IWebTokenGenerator>(new WebTokenGenerator(issuer, audience, key));
+    }
+
+    /// <summary>
+    /// Registers <see cref="N2TokenService"/> as the <see cref="IN2TokenService"/> implementation.
+    /// Requires <see cref="IIdentityContextFactory"/>, <see cref="IUserManager{ApplicationUser}"/>,
+    /// <see cref="IWebTokenGenerator"/>, and <see cref="AuthenticationConfig"/> to already be registered.
+    /// </summary>
+    public static IServiceCollection AddN2TokenService(this IServiceCollection services) {
+        services.AddMemoryCache();
+        services.AddScoped<IN2TokenService, N2TokenService>();
+        return services;
     }
 
     public static IUserContext? HttpCurrentUser(this IHttpContextAccessor httpContext) {

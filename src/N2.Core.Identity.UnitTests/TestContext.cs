@@ -783,10 +783,19 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
+    public async Task RefreshTokenRevokeAll(Guid userId, CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
+        try {
+            await innerContext.RefreshTokenRevokeAll(userId, ct);
+        } finally {
+            semaphore.Release();
+        }
+    }
+
     public async Task<int> RefreshTokenPurgeExpired(CancellationToken ct) {
         await semaphore.WaitAsync(ct);
         try {
-            return await innerContext.RefreshTokenPurgeExpired( ct);
+            return await innerContext.RefreshTokenPurgeExpired(ct);
         } finally {
             semaphore.Release();
         }

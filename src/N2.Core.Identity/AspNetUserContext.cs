@@ -28,6 +28,7 @@ public class AspNetUserContext : IUserContext
             PhoneNumber = user.PhoneNumber ?? string.Empty;
             Email = user.Email ?? string.Empty;
             Name = user.UserName ?? user.Email ?? string.Empty;
+            SecurityStamp = (user as Data.ApplicationUser)?.SecurityStamp;
         }
         else
         {
@@ -48,6 +49,7 @@ public class AspNetUserContext : IUserContext
     public string Email { get; private set; }
     public IEnumerable<UserAlert> Alerts => alerts;
     public string Name { get; private set; }
+    public string? SecurityStamp { get; }
     public string? ProfileImagePath { get; }
     public string? ProfileThumbnailPath { get; }
     public string? ProfileBackgroundImagePath { get; }

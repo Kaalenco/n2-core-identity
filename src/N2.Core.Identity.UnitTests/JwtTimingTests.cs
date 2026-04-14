@@ -49,7 +49,7 @@ public class JwtTimingTests : N2IdentityTestsBase {
         var generator = new WebTokenGenerator(authConfig.JwtSettings);
 
         // Act
-        var tokenString = generator.GenerateWebToken(userContext.Object, 60);
+        var tokenString = generator.GenerateWebToken(userContext.Object, 5);
 
         // Assert
         var handler = new JwtSecurityTokenHandler();
@@ -77,7 +77,7 @@ public class JwtTimingTests : N2IdentityTestsBase {
         var generator = new WebTokenGenerator(authConfig.JwtSettings);
 
         // Act - Generate token
-        var tokenString = generator.GenerateWebToken(userContext.Object, 60);
+        var tokenString = generator.GenerateWebToken(userContext.Object, 5);
         var handler = new JwtSecurityTokenHandler();
         var token = handler.ReadJwtToken(tokenString);
 
