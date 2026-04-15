@@ -132,7 +132,7 @@ namespace N2.Core.Identity.Migrations
 
                     b.HasIndex("ApplicationTenantId");
 
-                    b.ToTable("Applications");
+                    b.ToTable("Applications", (string)null);
                 });
 
             modelBuilder.Entity("N2.Core.Identity.Data.ApplicationRefreshToken", b =>
@@ -161,7 +161,7 @@ namespace N2.Core.Identity.Migrations
 
                     b.HasIndex("ApplicationUserId", "ExpiresAt");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("RefreshTokens", (string)null);
                 });
 
             modelBuilder.Entity("N2.Core.Identity.Data.ApplicationRole", b =>
@@ -226,7 +226,7 @@ namespace N2.Core.Identity.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ApplicationSecrets");
+                    b.ToTable("ApplicationSecrets", (string)null);
                 });
 
             modelBuilder.Entity("N2.Core.Identity.Data.ApplicationTenant", b =>
@@ -271,7 +271,7 @@ namespace N2.Core.Identity.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Tenants");
+                    b.ToTable("Tenants", (string)null);
                 });
 
             modelBuilder.Entity("N2.Core.Identity.Data.ApplicationUser", b =>
@@ -373,7 +373,7 @@ namespace N2.Core.Identity.Migrations
 
                     b.HasIndex("ApplicationUserId");
 
-                    b.ToTable("UserAlerts");
+                    b.ToTable("UserAlerts", (string)null);
                 });
 
             modelBuilder.Entity("N2.Core.Identity.Data.ApplicationUserTenant", b =>
@@ -393,7 +393,7 @@ namespace N2.Core.Identity.Migrations
 
                     b.HasIndex("ApplicationUserId");
 
-                    b.ToTable("UserTenants");
+                    b.ToTable("UserTenants", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
