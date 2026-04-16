@@ -23,10 +23,10 @@
     <Product>N2.Core for NET8.0</Product>
     <ProductName>N2.Core</ProductName>
 
-    <Version>1.7.0</Version>
-    <PackageVersion>1.7.0</PackageVersion>
-    <AssemblyVersion>1.7.0</AssemblyVersion>
-    <ProductVersion>1.7.0</ProductVersion>
+    <Version>1.7.1</Version>
+    <PackageVersion>1.7.1</PackageVersion>
+    <AssemblyVersion>1.7.1</AssemblyVersion>
+    <ProductVersion>1.7.1</ProductVersion>
 
     <RootNamespace>N2.Core.Identity</RootNamespace>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>

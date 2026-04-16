@@ -8,12 +8,34 @@ using System;
 namespace N2.Core.Identity.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialMigration : Migration
+    public partial class InitialSchema : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             ArgumentNullException.ThrowIfNull(migrationBuilder);
+
+            migrationBuilder.CreateTable(
+                name: "ApplicationSecrets",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(nullable: false),
+                    ReferenceId = table.Column<Guid>(nullable: false),
+                    ReferenceType = table.Column<string>(nullable: false),
+                    Name = table.Column<string>(maxLength: 100, nullable: true),
+                    NormalizedName = table.Column<string>(maxLength: 100, nullable: true),
+                    HashedToken = table.Column<string>(maxLength: 256, nullable: false),
+                    Expiration = table.Column<DateTime>(nullable: true),
+                    Description = table.Column<string>(maxLength: 1000, nullable: true),
+                    Policies = table.Column<string>(maxLength: 1000, nullable: true),
+                    EncryptionSalt = table.Column<byte[]>(maxLength: 64, nullable: true),
+                    Secret = table.Column<byte[]>(maxLength: 4000, nullable: true),
+                    KeyVersion = table.Column<int>(nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ApplicationSecrets", x => x.Id);
+                });
 
             migrationBuilder.CreateTable(
                 name: "AspNetRoles",
@@ -41,7 +63,8 @@ namespace N2.Core.Identity.Migrations
                     ImagePath = table.Column<string>(maxLength: 300, nullable: true),
                     MfaType = table.Column<int>(nullable: false),
                     MfaConfirmed = table.Column<bool>(nullable: false),
-                    MfaSecret = table.Column<string>(maxLength: 80, nullable: true),
+                    MfaSecret = table.Column<string>(maxLength: 256, nullable: true),
+                    SecretKeyMaterial = table.Column<byte[]>(maxLength: 32, nullable: true),
                     UserName = table.Column<string>(maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(maxLength: 256, nullable: true),
                     Email = table.Column<string>(maxLength: 256, nullable: true),
@@ -60,6 +83,30 @@ namespace N2.Core.Identity.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Tenants",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(nullable: false),
+                    Name = table.Column<string>(maxLength: 100, nullable: true),
+                    NormalizedName = table.Column<string>(maxLength: 100, nullable: true),
+                    Address = table.Column<string>(maxLength: 1000, nullable: true),
+                    AdminEmail = table.Column<string>(maxLength: 100, nullable: true),
+                    NormalizedEmail = table.Column<string>(maxLength: 100, nullable: true),
+                    ContactInfo = table.Column<string>(maxLength: 1000, nullable: true),
+                    ImagePath = table.Column<string>(maxLength: 100, nullable: true),
+                    IsLocked = table.Column<bool>(nullable: false),
+                    IsRemoved = table.Column<bool>(nullable: false),
+                    IsHidden = table.Column<bool>(nullable: false),
+                    UserLimit = table.Column<int>(nullable: false),
+                    MfaSecret = table.Column<string>(maxLength: 256, nullable: true),
+                    SecretKeyMaterial = table.Column<byte[]>(maxLength: 32, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Tenants", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -170,6 +217,106 @@ namespace N2.Core.Identity.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "RefreshTokens",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(nullable: false),
+                    ApplicationUserId = table.Column<Guid>(nullable: false),
+                    Token = table.Column<string>(nullable: false),
+                    SecurityStamp = table.Column<string>(maxLength: 36, nullable: true),
+                    IssuedAt = table.Column<DateTime>(nullable: false),
+                    ExpiresAt = table.Column<DateTime>(nullable: false),
+                    RevokedAt = table.Column<DateTime>(nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RefreshTokens", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RefreshTokens_AspNetUsers_ApplicationUserId",
+                        column: x => x.ApplicationUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserAlerts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(nullable: false),
+                    ApplicationUserId = table.Column<Guid>(nullable: false),
+                    Message = table.Column<string>(maxLength: 1024, nullable: false),
+                    Priority = table.Column<int>(nullable: false),
+                    CreatedAt = table.Column<DateTime>(nullable: false),
+                    AcknowledgedAt = table.Column<DateTime>(nullable: true),
+                    Acknowledged = table.Column<bool>(nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserAlerts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_UserAlerts_AspNetUsers_ApplicationUserId",
+                        column: x => x.ApplicationUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Applications",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(nullable: false),
+                    Name = table.Column<string>(maxLength: 100, nullable: true),
+                    NormalizedName = table.Column<string>(maxLength: 100, nullable: true),
+                    ApplicationTenantId = table.Column<Guid>(nullable: false),
+                    IsLocked = table.Column<bool>(nullable: false),
+                    MfaSecret = table.Column<string>(maxLength: 256, nullable: true),
+                    SecretKeyMaterial = table.Column<byte[]>(maxLength: 32, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Applications", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Applications_Tenants_ApplicationTenantId",
+                        column: x => x.ApplicationTenantId,
+                        principalTable: "Tenants",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserTenants",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(nullable: false),
+                    ApplicationUserId = table.Column<Guid>(nullable: false),
+                    ApplicationTenantId = table.Column<Guid>(nullable: false),
+                    IsAdmin = table.Column<bool>(nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserTenants", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_UserTenants_AspNetUsers_ApplicationUserId",
+                        column: x => x.ApplicationUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_UserTenants_Tenants_ApplicationTenantId",
+                        column: x => x.ApplicationTenantId,
+                        principalTable: "Tenants",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Applications_ApplicationTenantId",
+                table: "Applications",
+                column: "ApplicationTenantId");
+
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetRoleClaims_RoleId",
                 table: "AspNetRoleClaims",
@@ -206,12 +353,44 @@ namespace N2.Core.Identity.Migrations
                 table: "AspNetUsers",
                 column: "NormalizedUserName",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RefreshTokens_ApplicationUserId_ExpiresAt",
+                table: "RefreshTokens",
+                columns: ["ApplicationUserId", "ExpiresAt"]);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_RefreshTokens_Token",
+                table: "RefreshTokens",
+                column: "Token",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserAlerts_ApplicationUserId",
+                table: "UserAlerts",
+                column: "ApplicationUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTenants_ApplicationTenantId",
+                table: "UserTenants",
+                column: "ApplicationTenantId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserTenants_ApplicationUserId",
+                table: "UserTenants",
+                column: "ApplicationUserId");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             ArgumentNullException.ThrowIfNull(migrationBuilder);
+            migrationBuilder.DropTable(
+                name: "Applications");
+
+            migrationBuilder.DropTable(
+                name: "ApplicationSecrets");
+
             migrationBuilder.DropTable(
                 name: "AspNetRoleClaims");
 
@@ -228,10 +407,22 @@ namespace N2.Core.Identity.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "RefreshTokens");
+
+            migrationBuilder.DropTable(
+                name: "UserAlerts");
+
+            migrationBuilder.DropTable(
+                name: "UserTenants");
+
+            migrationBuilder.DropTable(
                 name: "AspNetRoles");
 
             migrationBuilder.DropTable(
                 name: "AspNetUsers");
+
+            migrationBuilder.DropTable(
+                name: "Tenants");
         }
     }
 }

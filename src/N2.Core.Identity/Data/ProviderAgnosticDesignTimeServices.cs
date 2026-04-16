@@ -92,4 +92,15 @@ internal sealed class AgnosticAnnotationCodeGenerator : SqlServerAnnotationCodeG
         annotations.Remove(RelationalAnnotationNames.ColumnType);
         return base.GenerateFluentApiCalls(property, annotations);
     }
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<MethodCallCodeFragment> GenerateFluentApiCalls(
+        IModel model, IDictionary<string, IAnnotation> annotations) {
+        // Drop the SQL Server model-level value-generation annotation so the snapshot
+        // does not carry UseIdentityColumns(). Without it, EF Core 9's pending-model
+        // check no longer sees a mismatch when the runtime uses MySQL (which sets
+        // MySql:ValueGenerationStrategy via Pomelo conventions instead).
+        annotations.Remove("SqlServer:ValueGenerationStrategy");
+        return base.GenerateFluentApiCalls(model, annotations);
+    }
 }

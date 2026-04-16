@@ -52,6 +52,9 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var pending = (await context.Database.GetPendingMigrationsAsync()).ToList();
         Assert.AreEqual(0, pending.Count,
             $"Unexpected pending migrations: {string.Join(", ", pending)}");
+
+        Assert.IsFalse(context.Database.HasPendingModelChanges(),
+            "The model has changed since the last migration. Run 'dotnet ef migrations add <Name>' to create a migration.");
     }
 
     // ── User persistence ──────────────────────────────────────────────────────
