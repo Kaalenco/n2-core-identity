@@ -532,7 +532,12 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
 
             case MultiFactorType.Totp:
 
-                userUri = GenerateQrCodeUri(user.UserName, rngCode, configuration.TwoFactorTotpName);
+                // The otpauth://totp/ spec requires the secret to be Base32 (RFC 4648).
+                // rngCode is Base64 (kept as-is for encrypted storage and server-side
+                // verification via TryConvertBase64String); the URI gets a separate
+                // Base32 encoding of the same raw bytes so authenticator apps can parse it.
+                var base32Secret = Base32Encoding.ToString(code);
+                userUri = GenerateQrCodeUri(user.UserName, base32Secret, configuration.TwoFactorTotpName);
                 qrCode = GenerateQrCode(userUri);
                 break;
 
@@ -782,8 +787,10 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
         using QRCodeGenerator qrGenerator = new();
         var qrCodeData = qrGenerator.CreateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
 
-        using BitmapByteQRCode qrCode = new(qrCodeData);
-        return qrCode.GetGraphic(20);
+        // PngByteQRCode produces a compressed PNG (~50 KB at 10 px/module) instead of
+        // the ~4 MB uncompressed BMP that BitmapByteQRCode emits at the same scale.
+        using PngByteQRCode qrCode = new(qrCodeData);
+        return qrCode.GetGraphic(10);
     }
 
     private static string GenerateQrCodeUri(string username, string secret, string appName) {
