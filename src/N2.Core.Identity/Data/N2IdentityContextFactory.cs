@@ -10,16 +10,23 @@ namespace N2.Core.Identity.Data;
 
 public class N2IdentityContextFactory : IIdentityContextFactory {
     private readonly IConnectionStringService settingService;
+    private readonly DatabaseProvider defaultProvider;
+    private readonly string defaultConnectionName;
 
-    public N2IdentityContextFactory(IConnectionStringService settingService) {
+    public N2IdentityContextFactory(
+        IConnectionStringService settingService,
+        DatabaseProvider defaultProvider = DatabaseProvider.SqlServer,
+        string defaultConnectionName = "UserDbConnection") {
         this.settingService = settingService;
+        this.defaultProvider = defaultProvider;
+        this.defaultConnectionName = defaultConnectionName;
     }
 
-    public Task<IIdentityContext> CreateAsync() => CreateAsync(DatabaseProvider.SqlServer, "UserDbConnection");
+    public Task<IIdentityContext> CreateAsync() => CreateAsync(defaultProvider, defaultConnectionName);
 
-    public Task<IIdentityContext> CreateAsync(string connectionName) => CreateAsync(DatabaseProvider.SqlServer, connectionName);
+    public Task<IIdentityContext> CreateAsync(string connectionName) => CreateAsync(defaultProvider, connectionName);
 
-    public Task<IIdentityContext> CreateAsync(DatabaseProvider provider) => CreateAsync(provider, "UserDbConnection");
+    public Task<IIdentityContext> CreateAsync(DatabaseProvider provider) => CreateAsync(provider, defaultConnectionName);
 
     public Task<IIdentityContext> CreateAsync(DatabaseProvider provider, string connectionName) {
         var connectionString = settingService.GetConnectionString(connectionName);
