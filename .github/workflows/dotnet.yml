@@ -119,27 +119,7 @@ jobs:
         lizard src/N2.Core.Identity -C 10 --html > reports/complexity/index.html
 
     - name: Write job summary
-      run: |
-        COVERAGE_FILE=$(find src/TestResults/Coverage -name "coverage.cobertura.xml" | head -1)
-        LINE_RATE=$(grep -oP 'line-rate="\K[0-9.]+' "$COVERAGE_FILE" | head -1 | awk '{printf "%.1f", $1 * 100}')
-        BRANCH_RATE=$(grep -oP 'branch-rate="\K[0-9.]+' "$COVERAGE_FILE" | head -1 | awk '{printf "%.1f", $1 * 100}')
-        COMPLEXITY_TEXT=$(lizard src/N2.Core.Identity 2>&1 | tail -6)
-        {
-          echo "## Code Analysis"
-          echo ""
-          echo "### Test Coverage (net8.0)"
-          echo "| Metric | Value |"
-          echo "|--------|-------|"
-          echo "| Line Coverage | ${LINE_RATE}% |"
-          echo "| Branch Coverage | ${BRANCH_RATE}% |"
-          echo ""
-          echo "### Code Complexity"
-          echo '```'
-          echo "${COMPLEXITY_TEXT}"
-          echo '```'
-          echo ""
-          echo "> Full HTML reports are in the **code-analysis** artifact."
-        } >> $GITHUB_STEP_SUMMARY
+      run: python3 scripts/code-analysis-summary.py
 
     - name: Upload code analysis reports
       uses: actions/upload-artifact@v4
