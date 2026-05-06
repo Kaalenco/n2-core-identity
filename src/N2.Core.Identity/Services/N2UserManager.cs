@@ -419,6 +419,44 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
     }
 
     /// <summary>
+    /// Attempts to re-encrypt a single user's MFA secret with the primary key.
+    /// </summary>
+    /// <param name="user">The user whose <c>MfaSecret</c> should be rotated.</param>
+    /// <returns>
+    /// <see langword="true"/> if the secret was re-encrypted with the primary key;
+    /// <see langword="false"/> if it was already current, or decryption failed (warning is logged).
+    /// </returns>
+    private bool TryRotateUserMfaSecret(ApplicationUser user) {
+        // Try the secondary (retiring) key exclusively first. If decryption succeeds here,
+        // the secret was encrypted with the old key and must be rotated.
+        // If it fails, the secret is either already on the primary key or is unreadable.
+        var plaintext = MfaSecretEncryption.TryDecrypt(
+            user.MfaSecret,
+            primaryBase64Key: configuration.MfaTokenSecret2,
+            secondaryBase64Key: null);
+
+        if (plaintext == null) {
+            // Could not decrypt with secondary key — verify it is readable with the primary key.
+            var verify = MfaSecretEncryption.TryDecrypt(
+                user.MfaSecret,
+                primaryBase64Key: configuration.MfaTokenSecret,
+                secondaryBase64Key: null);
+
+            if (verify == null) {
+                // Neither key works — log and skip.
+                _logRotateMfaSecretDecryptionFailed(logger, user.Id, null);
+            }
+
+            // Already encrypted with primary key (or unreadable) — no change needed.
+            return false;
+        }
+
+        // Secret was encrypted with the retiring key — re-encrypt with the primary key.
+        user.MfaSecret = MfaSecretEncryption.Encrypt(plaintext, configuration.MfaTokenSecret);
+        return true;
+    }
+
+    /// <summary>
     /// Re-encrypts all <c>MfaSecret</c> values from <c>MfaTokenSecret2</c> (the retiring key)
     /// to <c>MfaTokenSecret</c> (the new primary key).
     /// </summary>
@@ -440,34 +478,14 @@ public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets 
         }
 
         using var ctx = await CreateContextAsync();
+
+        // Using explicit null / empty check because string.IsNullOrEmpty is not translatable
+        // to SQL and would pull all rows into memory before filtering.
         var users = await ctx.User
             .Where(u => u.MfaSecret != null && u.MfaSecret != string.Empty)
             .ToListAsync(cancellationToken);
 
-        var rotated = 0;
-
-        foreach (var user in users) {
-            var plaintext = MfaSecretEncryption.TryDecrypt(
-                user.MfaSecret,
-                configuration.MfaTokenSecret,
-                configuration.MfaTokenSecret2);
-
-            if (plaintext == null) {
-                _logRotateMfaSecretDecryptionFailed(logger, user.Id, null);
-                continue;
-            }
-
-            // Already encrypted with the primary key — check by re-encrypting only if plaintext
-            // was decrypted via the secondary key (i.e. the stored value used the old key).
-            var reEncrypted = MfaSecretEncryption.Encrypt(plaintext, configuration.MfaTokenSecret);
-            if (reEncrypted == user.MfaSecret) {
-                // Already encrypted with primary key — no change needed
-                continue;
-            }
-
-            user.MfaSecret = reEncrypted;
-            rotated++;
-        }
+        var rotated = users.Count(TryRotateUserMfaSecret);
 
         if (rotated > 0) {
             await ctx.Complete();
