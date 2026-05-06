@@ -4,7 +4,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Models;
 using N2.Core.Identity.Services;
+
+using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
 
@@ -44,6 +47,20 @@ public class UsingN2ApplicationManager {
         }
         var found = await manager.FindByIdAsync(app.ApplicationTenantId, app.Id, CancellationToken.None);
         return found ?? throw new InvalidOperationException("Failed to retrieve created application.");
+    }
+
+    /// <summary>
+    /// Creates an application and injects <paramref name="keyMaterial"/> directly into its
+    /// <c>SecretKeyMaterial</c> column via the identity context.
+    /// </summary>
+    private async Task<ApplicationDefinition> CreateAppWithKeyMaterialAsync(string name, byte[] keyMaterial) {
+        var app = await CreateAppAsync(name);
+        var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
+        using var ctx = await factory.CreateAsync("IdentityDb");
+        var record = await ctx.ApplicationFindRecord(app.Id, CancellationToken.None);
+        record!.SecretKeyMaterial = keyMaterial;
+        await ctx.Complete();
+        return app;
     }
 
     // -------------------------------------------------------------------------
@@ -256,7 +273,6 @@ public class UsingN2ApplicationManager {
     public async Task FindByIdAsync_WrongTenant_ShouldReturnNull() {
         var manager = BuildApplicationManager();
 
-        // ApplicationGuid belongs to TenantGuid, not LockedTenantGuid
         var found = await manager.FindByIdAsync(TestContext.LockedTenantGuid, TestContext.ApplicationGuid, CancellationToken.None);
 
         Assert.IsNull(found);
@@ -424,5 +440,51 @@ public class UsingN2ApplicationManager {
         var result = await manager.UnlockAsync(TestContext.LockedTenantGuid, app, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
+    }
+
+    // -------------------------------------------------------------------------
+    // GetSecretOwner
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task GetSecretOwner_UnknownId_ShouldReturnNull() {
+        var manager = BuildApplicationManager();
+
+        var owner = await manager.GetSecretOwner(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsNull(owner);
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_AppWithoutKeyMaterial_ShouldThrow() {
+        // The seeded application has no SecretKeyMaterial set.
+        var manager = BuildApplicationManager();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => manager.GetSecretOwner(TestContext.ApplicationGuid, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_AppWithKeyMaterial_ShouldReturnOwner() {
+        var keyMaterial = RandomNumberGenerator.GetBytes(32);
+        var app = await CreateAppWithKeyMaterialAsync($"SecretApp {Guid.NewGuid()}", keyMaterial);
+        var manager = BuildApplicationManager();
+
+        var owner = await manager.GetSecretOwner(app.Id, CancellationToken.None);
+
+        Assert.IsNotNull(owner);
+        Assert.AreEqual(app.Id, owner!.Id);
+        Assert.AreEqual(OwnerTypeCode.Application, owner.Type);
+        Assert.IsTrue(owner.OwnerSecret.ArraysAreEqual(keyMaterial));
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_AppWithKeyMaterial_TypeShouldBeApplication() {
+        var app = await CreateAppWithKeyMaterialAsync($"TypeCheck {Guid.NewGuid()}", RandomNumberGenerator.GetBytes(32));
+        var manager = BuildApplicationManager();
+
+        var owner = await manager.GetSecretOwner(app.Id, CancellationToken.None);
+
+        Assert.AreEqual(OwnerTypeCode.Application, owner!.Type);
     }
 }

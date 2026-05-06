@@ -1,4 +1,4 @@
-# n2-core-identity
+    # n2-core-identity
 
 [![.NET Build and test](https://github.com/Kaalenco/n2-core-identity/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Kaalenco/n2-core-identity/actions/workflows/dotnet.yml)
 [![CodeQL Advanced](https://github.com/Kaalenco/n2-core-identity/actions/workflows/codeql.yml/badge.svg)](https://github.com/Kaalenco/n2-core-identity/actions/workflows/codeql.yml)

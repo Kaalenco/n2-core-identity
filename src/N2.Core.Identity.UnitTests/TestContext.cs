@@ -108,6 +108,16 @@ internal static class TestContext {
             return new N2UserManager(factory, config, rateLimiter, hasher, "IdentityDb", logger);
         });
 
+        // Register N2-specific user manager interface (exposes GetSecretOwner)
+        serviceCollection.AddScoped<IN2UserManager>((s) => {
+            var logger = s.GetRequiredService<ILogger<N2UserManager>>();
+            var config = s.GetRequiredService<IConfiguration>();
+            var rateLimiter = s.GetRequiredService<IRateLimiter>();
+            var hasher = s.GetRequiredService<IPasswordHasher<ApplicationUser>>();
+            var factory = s.GetRequiredService<IIdentityContextFactory>();
+            return new N2UserManager(factory, config, rateLimiter, hasher, "IdentityDb", logger);
+        });
+
         // Register tenant manager
         serviceCollection.AddScoped<ITenantManager>((s) => {
             var logger = s.GetRequiredService<ILogger<N2TenantManager>>();

@@ -5,7 +5,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Models;
 using N2.Core.Identity.Services;
+
+using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
 
@@ -747,5 +750,65 @@ public class UsingN2TenantManager {
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => manager.ApplicationUserCanSignIn(adminId, Guid.Empty, CancellationToken.None));
+    }
+
+    // -------------------------------------------------------------------------
+    // GetSecretOwner
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Creates a tenant and directly injects <paramref name="keyMaterial"/> into
+    /// its <c>SecretKeyMaterial</c> column via the identity context.
+    /// </summary>
+    private async Task<ApplicationTenant> CreateTenantWithKeyMaterialAsync(string name, byte[] keyMaterial) {
+        var tenant = await CreateTenantAsync(name);
+        var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
+        using var ctx = await factory.CreateAsync("IdentityDb");
+        var record = await ctx.TenantFindRecord(tenant.Id, CancellationToken.None);
+        record!.SecretKeyMaterial = keyMaterial;
+        await ctx.Complete();
+        return tenant;
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_UnknownId_ShouldReturnNull() {
+        var manager = BuildTenantManager();
+
+        var owner = await manager.GetSecretOwner(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsNull(owner);
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_TenantWithoutKeyMaterial_ShouldThrow() {
+        // The seeded tenant has no SecretKeyMaterial set.
+        var manager = BuildTenantManager();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => manager.GetSecretOwner(TestContext.TenantGuid, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_TenantWithKeyMaterial_ShouldReturnOwner() {
+        var keyMaterial = RandomNumberGenerator.GetBytes(32);
+        var tenant = await CreateTenantWithKeyMaterialAsync($"SecretTenant {Guid.NewGuid()}", keyMaterial);
+        var manager = BuildTenantManager();
+
+        var owner = await manager.GetSecretOwner(tenant.Id, CancellationToken.None);
+
+        Assert.IsNotNull(owner);
+        Assert.AreEqual(tenant.Id, owner!.Id);
+        Assert.AreEqual(OwnerTypeCode.Tenant, owner.Type);
+        Assert.IsTrue(owner.OwnerSecret.ArraysAreEqual(keyMaterial));
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_TenantWithKeyMaterial_TypeShouldBeTenant() {
+        var tenant = await CreateTenantWithKeyMaterialAsync($"TypeCheck {Guid.NewGuid()}", RandomNumberGenerator.GetBytes(32));
+        var manager = BuildTenantManager();
+
+        var owner = await manager.GetSecretOwner(tenant.Id, CancellationToken.None);
+
+        Assert.AreEqual(OwnerTypeCode.Tenant, owner!.Type);
     }
 }

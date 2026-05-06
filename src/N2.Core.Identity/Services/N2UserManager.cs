@@ -24,7 +24,7 @@ namespace N2.Core.Identity.Services;
 // Using ct and not token for CancellationToken parameter names in async methods is
 // a common convention in .NET, and it is more concise. The CA1725 warning is not relevant in this context.
 
-public sealed class N2UserManager : IUserManager<ApplicationUser>, IHaveSecrets {
+public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
 
     /// <summary>
     /// A divisor for converting ticks to seconds

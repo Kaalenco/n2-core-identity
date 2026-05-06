@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 using N2.Core.Commands;
 using N2.Core.Identity.Data;
+using N2.Core.Identity.Models;
+using N2.Core.Identity.Services;
 
 using System.Security.Cryptography;
 
@@ -726,5 +728,75 @@ public class UsingN2UserManager {
         }
 
         return userResponse.Value;
+    }
+
+    // -------------------------------------------------------------------------
+    // GetSecretOwner
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Creates a user and directly injects <paramref name="keyMaterial"/> into
+    /// its <c>SecretKeyMaterial</c> column via the identity context.
+    /// </summary>
+    private async Task<ApplicationUser> CreateUserWithKeyMaterialAsync(string userName, byte[] keyMaterial) {
+        using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
+        ApplicationUser user = new() { UserName = userName, Email = $"{userName}@test.com" };
+        var result = await userManager.CreateAsync(user, "TestPassword1!", CancellationToken.None);
+        if (!result.Status.IsSuccess()) {
+            throw new InvalidOperationException($"Failed to create user: {result.Message}");
+        }
+        var found = (await userManager.FindByNameAsync(userName, CancellationToken.None)).Value
+            ?? throw new InvalidOperationException("Failed to retrieve created user.");
+
+        var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
+        using var ctx = await factory.CreateAsync("IdentityDb");
+        var record = await ctx.UserFindRecord(found.Id, CancellationToken.None);
+        record!.SecretKeyMaterial = keyMaterial;
+        await ctx.Complete();
+
+        return found;
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_UnknownId_ShouldReturnNull() {
+        using var userManager = serviceProvider.GetRequiredService<IN2UserManager>();
+
+        var owner = await userManager.GetSecretOwner(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsNull(owner);
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_UserWithoutKeyMaterial_ShouldThrow() {
+        var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        using var userManager = serviceProvider.GetRequiredService<IN2UserManager>();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => userManager.GetSecretOwner(adminId, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_UserWithKeyMaterial_ShouldReturnOwner() {
+        var keyMaterial = RandomNumberGenerator.GetBytes(32);
+        var user = await CreateUserWithKeyMaterialAsync($"secret.user.{Guid.NewGuid():N}", keyMaterial);
+        using var userManager = serviceProvider.GetRequiredService<IN2UserManager>();
+
+        var owner = await userManager.GetSecretOwner(user.Id, CancellationToken.None);
+
+        Assert.IsNotNull(owner);
+        Assert.AreEqual(user.Id, owner!.Id);
+        Assert.AreEqual(OwnerTypeCode.User, owner.Type);
+        Assert.IsTrue(owner.OwnerSecret.ArraysAreEqual(keyMaterial));
+    }
+
+    [TestMethod]
+    public async Task GetSecretOwner_UserWithKeyMaterial_TypeShouldBeUser() {
+        var user = await CreateUserWithKeyMaterialAsync(
+            $"typecheck.user.{Guid.NewGuid():N}", RandomNumberGenerator.GetBytes(32));
+        using var userManager = serviceProvider.GetRequiredService<IN2UserManager>();
+
+        var owner = await userManager.GetSecretOwner(user.Id, CancellationToken.None);
+
+        Assert.AreEqual(OwnerTypeCode.User, owner!.Type);
     }
 }
