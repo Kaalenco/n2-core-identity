@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 using N2.Core.Commands;
+using N2.Core.Identity.Data;
 using N2.Core.Identity.Services;
 
 using System.Security.Cryptography;
@@ -81,7 +82,7 @@ public class TokenCryptographyTests : N2IdentityTestsBase {
         // Act & Assert
         var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
         var rateLimiter = ServiceProvider.GetRequiredService<IRateLimiter>();
-        var pwdHash = ServiceProvider.GetRequiredService<IPasswordHasher<Data.ApplicationUser>>();
+        var pwdHash = ServiceProvider.GetRequiredService<IPasswordHasher<ApplicationUser>>();
         var logger = ServiceProvider.GetRequiredService<ILogger<N2UserManager>>();
         Assert.Throws<InvalidOperationException>(() => {
             using var mgr = new N2UserManager(factory, config, rateLimiter, pwdHash, "testdb", logger);
@@ -103,7 +104,7 @@ public class TokenCryptographyTests : N2IdentityTestsBase {
         // Act & Assert
         var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
         var rateLimiter = ServiceProvider.GetRequiredService<IRateLimiter>();
-        var pwdHash = ServiceProvider.GetRequiredService<IPasswordHasher<Data.ApplicationUser>>();
+        var pwdHash = ServiceProvider.GetRequiredService<IPasswordHasher<ApplicationUser>>();
         var logger = ServiceProvider.GetRequiredService<ILogger<N2UserManager>>();
         Assert.Throws<InvalidOperationException>(() => {
             using var mgr = new N2UserManager(factory, config, rateLimiter, pwdHash, "testdb", logger);
