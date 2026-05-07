@@ -27,6 +27,15 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Documentation", "Documentat
 		..\docs\user-manager.md = ..\docs\user-manager.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{55F28386-7289-4E42-A900-651A97C8A394}"
+	ProjectSection(SolutionItems) = preProject
+		..\scripts\code-analysis-summary.py = ..\scripts\code-analysis-summary.py
+		..\scripts\delete-workflow-runs.sh = ..\scripts\delete-workflow-runs.sh
+		..\scripts\Generate-Secrets.ps1 = ..\scripts\Generate-Secrets.ps1
+		..\scripts\generate_token_secret.py = ..\scripts\generate_token_secret.py
+		..\scripts\verify-workflow-params.sh = ..\scripts\verify-workflow-params.sh
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
