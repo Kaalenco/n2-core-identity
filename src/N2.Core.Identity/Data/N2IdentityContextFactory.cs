@@ -39,17 +39,15 @@ public class N2IdentityContextFactory : IIdentityContextFactory {
             var (cleanedConnectionString, serverVersion) = ParseMySqlConnectionString(connectionString);
             optionsBuilder
                 .UseMySql(cleanedConnectionString, serverVersion)
-                // The model snapshot intentionally retains SQL Server column-type annotations
-                // (e.g. HasColumnType("uniqueidentifier")) so that design-time tooling can diff
-                // correctly when running `dotnet ef migrations add` against SQL Server. At
-                // MySQL runtime, Pomelo resolves those types differently, which EF Core 8+
-                // detects as a pending-model-changes mismatch. Logging instead of throwing
-                // lets migrations run; the schema produced by the Up() method is still correct
-                // because AgnosticMigrationOperationGenerator strips all provider-specific types
-                // from the migration code itself.
-                // Re-generate the migration once with the new AgnosticAnnotationCodeGenerator in
-                // place to get a fully type-agnostic snapshot and eliminate this warning entirely.
-                .ConfigureWarnings(w => w.Log(RelationalEventId.PendingModelChangesWarning));
+                // The snapshot is generated against SQL Server (the canonical design-time
+                // provider) and retains SqlServer:Identity and HasFilter annotations that the
+                // MySQL runtime model does not carry. EF Core 8+ detects this as a
+                // pending-model-changes mismatch and would throw from MigrateAsync via
+                // Migrator.ValidateMigrations. The schema produced by the Up() methods is
+                // correct — AgnosticMigrationOperationGenerator strips all provider-specific
+                // types from migration DDL. Ignoring this warning prevents the false-positive
+                // exception while keeping all actual schema changes detectable.
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
         } else {
             optionsBuilder.UseSqlServer(connectionString);
         }

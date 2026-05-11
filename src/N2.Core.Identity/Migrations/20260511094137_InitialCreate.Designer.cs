@@ -12,16 +12,14 @@ using N2.Core.Identity.Data;
 namespace N2.Core.Identity.Migrations
 {
     [DbContext(typeof(N2IdentityContext))]
-    [Migration("20260416075837_InitialSchema")]
-    partial class InitialSchema
+    [Migration("20260511094137_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.14")
-                .HasAnnotation("Relational:MaxIdentifierLength", 128);
+            modelBuilder.HasAnnotation("ProductVersion", "9.0.14");
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {

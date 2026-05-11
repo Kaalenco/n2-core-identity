@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -66,17 +67,21 @@ internal sealed class AgnosticMigrationOperationGenerator : CSharpMigrationOpera
 }
 
 /// <summary>
-/// Generates provider-agnostic snapshot and Designer-file code by omitting
-/// <c>HasColumnType()</c> from every property. This lets each provider resolve its
-/// own DDL type at migration-execution time (e.g. <c>uniqueidentifier</c> on SQL Server,
-/// <c>char(36)</c> on MySQL) instead of hard-coding a SQL Server type that MySQL
-/// cannot parse.
+/// Generates provider-agnostic snapshot and Designer-file code. The following
+/// SQL Server-specific metadata is stripped so the snapshot stays neutral:
+/// <list type="bullet">
+///   <item><c>HasColumnType()</c> — each provider resolves its own DDL type at migration time.</item>
+///   <item><c>Relational:MaxIdentifierLength</c> — SQL Server uses 128, MySQL uses 64;
+///         each provider's runtime convention supplies the correct value.</item>
+///   <item><c>HasFilter()</c> on indexes — SQL Server conventions add <c>[col] IS NOT NULL</c>
+///         filters to unique nullable indexes automatically; MySQL does not need them.
+///         The filter is also stripped from migration DDL by <see cref="AgnosticMigrationOperationGenerator"/>.</item>
+/// </list>
 /// <para>
-/// Index filters (<c>HasFilter()</c>) are intentionally kept: they are set
-/// unconditionally by ASP.NET Core Identity's <c>OnModelCreating</c>, so both the
-/// snapshot and the live model carry the annotation — the pending-model-changes check
-/// therefore sees no difference. The filter is stripped from the migration DDL at
-/// generation time by <see cref="AgnosticMigrationOperationGenerator"/>.
+/// <c>SqlServer:Identity</c> / <c>UseIdentityColumn()</c> on properties is intentionally
+/// kept in the snapshot. SQL Server conventions add it during model building and it is
+/// required for <c>HasPendingModelChanges()</c> to pass against SQL Server. MySQL will
+/// always show a false-positive for that check; do not run it for MySQL.
 /// </para>
 /// </summary>
 internal sealed class AgnosticAnnotationCodeGenerator : SqlServerAnnotationCodeGenerator {
@@ -101,6 +106,11 @@ internal sealed class AgnosticAnnotationCodeGenerator : SqlServerAnnotationCodeG
         // check no longer sees a mismatch when the runtime uses MySQL (which sets
         // MySql:ValueGenerationStrategy via Pomelo conventions instead).
         annotations.Remove("SqlServer:ValueGenerationStrategy");
+        // Drop MaxIdentifierLength: SQL Server uses 128, MySQL uses 64. Omitting it
+        // lets each provider's runtime convention supply the correct value so the
+        // pending-model check sees no provider-specific difference.
+        annotations.Remove(RelationalAnnotationNames.MaxIdentifierLength);
         return base.GenerateFluentApiCalls(model, annotations);
     }
+
 }

@@ -8,13 +8,12 @@ using System;
 namespace N2.Core.Identity.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialSchema : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             ArgumentNullException.ThrowIfNull(migrationBuilder);
-
             migrationBuilder.CreateTable(
                 name: "ApplicationSecrets",
                 columns: table => new
@@ -357,7 +356,7 @@ namespace N2.Core.Identity.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_RefreshTokens_ApplicationUserId_ExpiresAt",
                 table: "RefreshTokens",
-                columns: ["ApplicationUserId", "ExpiresAt"]);
+                columns: new[] { "ApplicationUserId", "ExpiresAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_RefreshTokens_Token",

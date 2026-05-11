@@ -34,6 +34,7 @@
     <NoWarn>
       CA2007;
       CA1819;
+      CA1861;
       CS1591;
       CA1812;
       IDE0003;
@@ -105,6 +106,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Migrations\" />
     <Folder Include="Models\" />
   </ItemGroup>
 
