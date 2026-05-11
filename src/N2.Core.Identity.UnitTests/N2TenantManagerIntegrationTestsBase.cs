@@ -11,6 +11,7 @@ using N2.Core.Identity.Data;
 using N2.Core.Identity.Services;
 
 using System.Globalization;
+using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
 
@@ -28,6 +29,13 @@ public abstract class N2TenantManagerIntegrationTestsBase {
 
     private static IConfiguration BuildConfiguration() =>
         new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> {
+                ["AuthenticationConfig:TokenSigningSecret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                ["AuthenticationConfig:MfaTokenSecret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                ["AuthenticationConfig:JwtSettings:Secret"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+                ["AuthenticationConfig:JwtSettings:Issuer"] = "http://localhost:8080",
+                ["AuthenticationConfig:JwtSettings:Audience"] = "http://localhost:8081",
+            })
             .AddUserSecrets<N2IdentityContextIntegrationTestsBase>()
             .AddEnvironmentVariables()
             .Build();

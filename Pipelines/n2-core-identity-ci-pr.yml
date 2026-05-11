@@ -57,7 +57,7 @@ stages:
         arguments: >-
           --no-build
           --configuration $(buildConfiguration)
-          --filter "TestCategory!=Integration"
+          --filter "TestCategory!=Integration&TestCategory!=LongRunning"
         publishTestResults: true
       env:
         Logging__LogLevel__Default: Error
@@ -124,7 +124,7 @@ stages:
           --no-build
           --framework net8.0
           --verbosity normal
-          --filter "TestCategory!=Integration"
+          --filter "TestCategory!=Integration&TestCategory!=LongRunning"
           --collect:"XPlat Code Coverage"
       env:
         Logging__LogLevel__Default: Error

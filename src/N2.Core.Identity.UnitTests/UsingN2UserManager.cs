@@ -58,6 +58,7 @@ public class UsingN2UserManager {
     }
 
     [TestMethod]
+    [TestCategory("LongRunning")]
     public async Task PasswordVerification_TimingAttackResistance_ShouldBeConstantTime() {
         // Arrange
         var user = await CreateUserWithPassword("TestPassword123!");

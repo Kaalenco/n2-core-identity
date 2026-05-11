@@ -1,5 +1,5 @@
 # Trunk pipeline — runs on every push to trunk.
-# Stages: Build and Test → (Code Analysis ∥ Integration Tests) → Publish NuGet
+# Stages: Build and Test → VersionCheck → (Code Analysis ∥ Integration Tests ∥ Long-Running Tests) → Publish NuGet
 #
 # No Library variable groups or pipeline-level secrets required.
 # NuGet packages are pushed to the Azure Artifacts feed named by `artifactsFeedName`.
@@ -14,7 +14,10 @@
 #     (absent or any other value → stage is skipped)
 #
 #   Pipeline setting: enable "Allow scripts to access the OAuth token"
-#   (required for the run-retention steps).
+#   (required for the run-retention steps and VersionCheck).
+#
+# Long-running tests (TestCategory=LongRunning) and NuGet publish are skipped when the
+# current package version already exists in the feed — they only run for a new version.
 
 trigger:
   branches:
@@ -77,7 +80,7 @@ stages:
         arguments: >-
           --no-build
           --configuration $(buildConfiguration)
-          --filter "TestCategory!=Integration"
+          --filter "TestCategory!=Integration&TestCategory!=LongRunning"
         publishTestResults: true
       env:
         Logging__LogLevel__Default: Error
@@ -114,7 +117,111 @@ stages:
       env:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
-# ── Stage 2: Code Analysis ────────────────────────────────────────────────────
+# ── Stage 2: Version Check ────────────────────────────────────────────────────
+# Reads PackageVersion from the csproj and queries Azure Artifacts to decide
+# whether this is a new version. Outputs `isNewVersion` consumed by downstream
+# stages. Runs in parallel with CodeAnalysis; LongRunningTests and Publish wait
+# for both CI and VersionCheck.
+- stage: VersionCheck
+  displayName: Check Package Version
+  dependsOn: CI
+  condition: succeeded('CI')
+  jobs:
+  - job: CheckVersion
+    displayName: Is version new?
+    steps:
+    - script: |
+        set -euo pipefail
+        VERSION=$(grep '<PackageVersion>' src/N2.Core.Identity/N2.Core.Identity.csproj \
+          | sed 's/.*<PackageVersion>\(.*\)<\/PackageVersion>.*/\1/' | tr -d '[:space:]')
+        echo "Package version: $VERSION"
+        echo "##vso[task.setvariable variable=packageVersion]$VERSION"
+
+        ORG=$(echo "$COLLECTION_URI" | sed 's|https://dev.azure.com/||; s|/$||')
+        PROJECT_ENCODED="${TEAM_PROJECT// /%20}"
+        CHECK_URL="https://feeds.dev.azure.com/${ORG}/${PROJECT_ENCODED}/_apis/packaging/feeds/${FEED_NAME}/nuget/packages/N2.Core.Identity/versions/${VERSION}?api-version=7.1"
+        echo "Checking: $CHECK_URL"
+
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          -H "Authorization: Bearer $SYSTEM_ACCESSTOKEN" \
+          "$CHECK_URL")
+        echo "Feed response: $HTTP_STATUS"
+
+        if [ "$HTTP_STATUS" = "200" ]; then
+          echo "Version $VERSION already exists in feed — skipping long-running tests and publish."
+          echo "##vso[task.setvariable variable=isNewVersion;isOutput=true]false"
+        else
+          echo "Version $VERSION is new — long-running tests and publish will run."
+          echo "##vso[task.setvariable variable=isNewVersion;isOutput=true]true"
+        fi
+      name: versionCheck
+      displayName: Detect new package version
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        COLLECTION_URI: $(System.CollectionUri)
+        TEAM_PROJECT: $(System.TeamProject)
+        FEED_NAME: $(artifactsFeedName)
+
+# ── Stage 3: Long-Running Tests ───────────────────────────────────────────────
+# Timing-attack protection tests: each runs ~100 iterations of password hashing
+# and takes ~100 s. Only executed when publishing a new package version.
+- stage: LongRunningTests
+  displayName: Long-Running Tests
+  dependsOn:
+  - CI
+  - VersionCheck
+  condition: |
+    and(
+      succeeded('CI'),
+      eq(dependencies.VersionCheck.outputs['CheckVersion.versionCheck.isNewVersion'], 'true')
+    )
+  jobs:
+  - job: RunLongRunningTests
+    displayName: Timing and security tests
+    steps:
+    - task: UseDotNet@2
+      displayName: Use .NET 8.0
+      inputs:
+        version: 8.0.x
+
+    - task: UseDotNet@2
+      displayName: Use .NET 10.0
+      inputs:
+        version: 10.0.x
+
+    - task: NuGetAuthenticate@1
+      displayName: Authenticate to Azure Artifacts
+
+    - task: DotNetCoreCLI@2
+      displayName: Restore packages
+      inputs:
+        command: restore
+        projects: 'src/**/*.csproj'
+        feedsToUse: config
+        nugetConfigPath: 'src/nuget.config'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build
+      inputs:
+        command: build
+        projects: 'src/**/*.csproj'
+        arguments: '--no-restore --configuration $(buildConfiguration)'
+
+    - task: DotNetCoreCLI@2
+      displayName: Run long-running tests
+      inputs:
+        command: test
+        projects: 'src/**/*.UnitTests.csproj'
+        arguments: >-
+          --no-build
+          --configuration $(buildConfiguration)
+          --filter "TestCategory=LongRunning"
+        publishTestResults: true
+      env:
+        Logging__LogLevel__Default: Error
+      timeoutInMinutes: 30
+
+# ── Stage 4: Code Analysis ────────────────────────────────────────────────────
 - stage: CodeAnalysis
   displayName: Code Analysis
   dependsOn: CI
@@ -162,7 +269,7 @@ stages:
           --no-build
           --framework net8.0
           --verbosity normal
-          --filter "TestCategory!=Integration"
+          --filter "TestCategory!=Integration&TestCategory!=LongRunning"
           --collect:"XPlat Code Coverage"
       env:
         Logging__LogLevel__Default: Error
@@ -210,7 +317,7 @@ stages:
         PathtoPublish: reports/
         ArtifactName: code-analysis
 
-# ── Stage 3: Integration Tests ────────────────────────────────────────────────
+# ── Stage 5: Integration Tests ────────────────────────────────────────────────
 # Enable by setting pipeline variable MYSQL_INTEGRATION_TESTS=true.
 - stage: IntegrationTests
   displayName: Integration Tests
@@ -245,16 +352,21 @@ stages:
       displayName: Tear down MySQL
       condition: always()
 
-# ── Stage 4: Publish NuGet Package ───────────────────────────────────────────
-# Runs only when CI passed and integration tests either passed or were skipped.
+# ── Stage 6: Publish NuGet Package ───────────────────────────────────────────
+# Runs only when CI passed, the version is new, long-running tests passed, and
+# integration tests either passed or were skipped.
 - stage: Publish
   displayName: Publish NuGet Package
   dependsOn:
   - CI
+  - VersionCheck
+  - LongRunningTests
   - IntegrationTests
   condition: |
     and(
       succeeded('CI'),
+      eq(dependencies.VersionCheck.outputs['CheckVersion.versionCheck.isNewVersion'], 'true'),
+      succeeded('LongRunningTests'),
       in(dependencies.IntegrationTests.result, 'Succeeded', 'Skipped')
     )
   jobs:

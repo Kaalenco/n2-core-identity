@@ -36,6 +36,7 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
     }
 
     [TestMethod]
+    [TestCategory("LongRunning")]
     public async Task Authentication_ValidVsInvalidUser_ShouldHaveConstantTiming() {
         // Arrange
         await CreateTestUser("validuser", "P@ssword123", MultiFactorType.None);
@@ -109,6 +110,7 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
     }
 
     [TestMethod]
+    [TestCategory("LongRunning")]
     public async Task MFAValidation_ConstantTimingForInvalidTokens() {
         // Arrange
         var username = $"testuser_{Guid.NewGuid():N}"; // Unique username
