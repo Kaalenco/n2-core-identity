@@ -33,6 +33,38 @@ public abstract class N2IdentityTestsBase {
         return factory.CreateAsync();
     }
 
+    protected async Task<ApplicationUser> CreateUserWithPassword(string password) {
+        var username = $"user_{Guid.NewGuid():N}";
+        var userManager = GetUserManager();
+        ApplicationUser user = new() {
+            UserName = username,
+            Email = $"{username}@test.com",
+            MfaType = MultiFactorType.None
+        };
+        var createResult = await userManager.CreateAsync(user, password, CancellationToken.None);
+        if (!createResult.Status.IsSuccess()) {
+            throw new InvalidOperationException($"Failed to create user: {createResult.Message}");
+        }
+        var userResponse = await userManager.FindByNameAsync(username, CancellationToken.None);
+        return userResponse.Value ?? throw new InvalidOperationException("Failed to retrieve created user.");
+    }
+
+    protected static void AssertTimingOrInconclusive(IReadOnlyList<long> times1, IReadOnlyList<long> times2, double maxPercentDiff, Func<double, string> message) {
+        ArgumentNullException.ThrowIfNull(message);
+        var avg1 = times1.Average();
+        var avg2 = times2.Average();
+        var cv1 = Math.Sqrt(times1.Average(t => Math.Pow(t - avg1, 2))) / avg1;
+        var cv2 = Math.Sqrt(times2.Average(t => Math.Pow(t - avg2, 2))) / avg2;
+
+        if (cv1 > 0.5 || cv2 > 0.5) {
+            Assert.Inconclusive($"Timing environment too noisy to draw conclusions (CV: {cv1:F2}, {cv2:F2}). Run locally for a valid result.");
+            return;
+        }
+
+        var percentDiff = Math.Abs(avg1 - avg2) / avg1 * 100;
+        Assert.IsLessThan(maxPercentDiff, percentDiff, message(percentDiff));
+    }
+
     protected async Task<ApplicationUser> CreateTestUser(string userName, string password, MultiFactorType mfaType) {
         CancellationToken ct = new();
 

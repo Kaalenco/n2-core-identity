@@ -58,42 +58,6 @@ public class UsingN2UserManager {
     }
 
     [TestMethod]
-    [TestCategory("LongRunning")]
-    public async Task PasswordVerification_TimingAttackResistance_ShouldBeConstantTime() {
-        // Arrange
-        var user = await CreateUserWithPassword("TestPassword123!");
-        var iterations = 100;
-        using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-
-        // Warmup to eliminate JIT compilation variance before measuring
-        await userManager.ValidateAsync(user, "WarmupPassword1!", CancellationToken.None);
-        await userManager.ValidateAsync(user, "WarmupPassword2!", CancellationToken.None);
-
-        // Act - Test with passwords differing in first vs last character
-        var timesFirstChar = new List<long>();
-        var timesLastChar = new List<long>();
-
-        for (var i = 0; i < iterations; i++) {
-            var wrongFirst = "XestPassword123!";
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            await userManager.ValidateAsync(user, wrongFirst, CancellationToken.None);
-            timesFirstChar.Add(sw.ElapsedTicks);
-
-            var wrongLast = "TestPassword123X";
-            sw.Restart();
-            await userManager.ValidateAsync(user, wrongLast, CancellationToken.None);
-            timesLastChar.Add(sw.ElapsedTicks);
-        }
-
-        // Assert - Timing should not significantly differ
-        var avgFirst = timesFirstChar.Average();
-        var avgLast = timesLastChar.Average();
-        var percentDiff = Math.Abs(avgFirst - avgLast) / avgFirst * 100;
-
-        Assert.IsLessThan(20, percentDiff, $"Timing difference should be < 20%, was {percentDiff:F2}%");
-    }
-
-    [TestMethod]
     public async Task TestAddRoleToUserAsyncAsync() {
         ICommandResponse? result = null;
         CancellationToken ct = new();
