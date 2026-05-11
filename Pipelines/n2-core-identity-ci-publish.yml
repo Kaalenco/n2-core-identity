@@ -1,12 +1,12 @@
 # Trunk pipeline — runs on every push to trunk.
 # Stages: Build and Test → (Code Analysis ∥ Integration Tests) → Publish NuGet
 #
-# Required Azure DevOps setup:
-#   Library → Variable Groups → n2-core-identity-publish
-#     CSPROJ_PATH  (non-secret)  relative path to the main .csproj
-#                                e.g. src/N2.Core.Identity/N2.Core.Identity.csproj
+# No Library variable groups or pipeline-level secrets required.
+# NuGet packages are pushed to the Azure Artifacts feed named by `artifactsFeedName`.
+# The feed URL is constructed at runtime from System.CollectionUri and System.TeamProject.
 #
-#   Artifacts → vault-packages feed → Feed settings → Permissions:
+# Required Azure DevOps setup:
+#   Artifacts → vault-packages → Feed settings → Permissions:
 #     Add "N2 Vault services Build Service (gjkaal)" with role Contributor
 #
 #   Pipeline variable (Pipelines → Edit → Variables, not in YAML):
@@ -30,6 +30,7 @@ pool:
 
 variables:
   buildConfiguration: 'Release'
+  artifactsFeedName: 'vault-packages'
 
 stages:
 
@@ -49,6 +50,9 @@ stages:
       displayName: Use .NET 10.0
       inputs:
         version: 10.0.x
+
+    - task: NuGetAuthenticate@1
+      displayName: Authenticate to Azure Artifacts
 
     - task: DotNetCoreCLI@2
       displayName: Restore packages
@@ -75,6 +79,19 @@ stages:
         publishTestResults: true
       env:
         Logging__LogLevel__Default: Error
+
+    - task: CopyFiles@2
+      displayName: Stage NuGet packages
+      inputs:
+        SourceFolder: src
+        Contents: '**/*.nupkg'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)/packages'
+
+    - task: PublishPipelineArtifact@1
+      displayName: Upload NuGet packages
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/packages'
+        artifact: nuget-packages
 
     - pwsh: |
         $uri = "$($env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI)$($env:SYSTEM_TEAMPROJECTID)/_apis/build/retention/leases?api-version=7.1"
@@ -115,6 +132,9 @@ stages:
       displayName: Use .NET 10.0
       inputs:
         version: 10.0.x
+
+    - task: NuGetAuthenticate@1
+      displayName: Authenticate to Azure Artifacts
 
     - task: DotNetCoreCLI@2
       displayName: Restore packages
@@ -231,66 +251,39 @@ stages:
       succeeded('CI'),
       in(dependencies.IntegrationTests.result, 'Succeeded', 'Skipped')
     )
-  variables:
-  - group: n2-core-identity-publish
-  - name: AZURE_ARTIFACTS_FEED_URL
-    value: 'https://pkgs.dev.azure.com/gjkaal/N2%20Vault%20services/_packaging/vault-packages/nuget/v3/index.json'
   jobs:
   - job: PublishNuGet
-    displayName: Pack and Push to Azure Artifacts
+    displayName: Push to Azure Artifacts
     steps:
-    - bash: bash scripts/verify-workflow-params.sh CSPROJ_PATH
-      displayName: Verify publish parameters
-      env:
-        CSPROJ_PATH: $(CSPROJ_PATH)
+    - checkout: none
 
-    - task: UseDotNet@2
-      displayName: Use .NET 8.0
+    - task: DownloadPipelineArtifact@2
+      displayName: Download NuGet packages
       inputs:
-        version: 8.0.x
-
-    - task: UseDotNet@2
-      displayName: Use .NET 10.0
-      inputs:
-        version: 10.0.x
-
-    - task: DotNetCoreCLI@2
-      displayName: Restore packages
-      inputs:
-        command: restore
-        projects: 'src/**/*.csproj'
-
-    - task: DotNetCoreCLI@2
-      displayName: Build (Release)
-      inputs:
-        command: build
-        projects: 'src/**/*.csproj'
-        arguments: '--no-restore --configuration Release'
-
-    - task: DotNetCoreCLI@2
-      displayName: Pack NuGet
-      inputs:
-        command: pack
-        packagesToPack: '$(CSPROJ_PATH)'
-        nobuild: true
-        configuration: Release
-        outputDir: '$(Build.ArtifactStagingDirectory)/nupkgs'
+        artifact: nuget-packages
+        targetPath: '$(Pipeline.Workspace)/packages'
 
     - task: NuGetAuthenticate@1
-      displayName: Authenticate NuGet
+      displayName: Authenticate to Azure Artifacts
 
-    - bash: |
+    - script: |
         set -euo pipefail
+        ORG=$(echo "$COLLECTION_URI" | sed 's|https://dev.azure.com/||; s|/$||')
+        PROJECT_ENCODED="${TEAM_PROJECT// /%20}"
+        FEED_URL="https://pkgs.dev.azure.com/${ORG}/${PROJECT_ENCODED}/_packaging/${FEED_NAME}/nuget/v3/index.json"
+        echo "Pushing to: $FEED_URL"
         while IFS= read -r -d '' pkg; do
-          echo "Pushing $pkg"
+          echo "Pushing: $(basename "$pkg")"
           dotnet nuget push "$pkg" \
             --source "$FEED_URL" \
             --api-key AzureArtifacts \
             --skip-duplicate
-        done < <(find "$(Build.ArtifactStagingDirectory)/nupkgs" -name "*.nupkg" -print0)
+        done < <(find "$(Pipeline.Workspace)/packages" -name "*.nupkg" -print0)
       displayName: Push NuGet package
       env:
-        FEED_URL: $(AZURE_ARTIFACTS_FEED_URL)
+        COLLECTION_URI: $(System.CollectionUri)
+        TEAM_PROJECT: $(System.TeamProject)
+        FEED_NAME: $(artifactsFeedName)
 
     - pwsh: |
         $uri = "$($env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI)$($env:SYSTEM_TEAMPROJECTID)/_apis/build/retention/leases?api-version=7.1"
