@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 
+using N2.Core.Identity.Data;
+
 using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
