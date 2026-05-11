@@ -59,6 +59,8 @@ stages:
       inputs:
         command: restore
         projects: 'src/**/*.csproj'
+        feedsToUse: config
+        nugetConfigPath: 'src/nuget.config'
 
     - task: DotNetCoreCLI@2
       displayName: Build
@@ -141,6 +143,8 @@ stages:
       inputs:
         command: restore
         projects: 'src/**/*.csproj'
+        feedsToUse: config
+        nugetConfigPath: 'src/nuget.config'
 
     - task: DotNetCoreCLI@2
       displayName: Build
