@@ -1,0 +1,312 @@
+# Trunk pipeline — runs on every push to trunk.
+# Stages: Build and Test → (Code Analysis ∥ Integration Tests) → Publish NuGet
+#
+# Required Azure DevOps setup:
+#   Library → Variable Groups → n2-core-identity-publish
+#     CSPROJ_PATH  (non-secret)  relative path to the main .csproj
+#                                e.g. src/N2.Core.Identity/N2.Core.Identity.csproj
+#
+#   Artifacts → vault-packages feed → Feed settings → Permissions:
+#     Add "N2 Vault services Build Service (gjkaal)" with role Contributor
+#
+#   Pipeline variable (Pipelines → Edit → Variables, not in YAML):
+#     MYSQL_INTEGRATION_TESTS=true   to enable the Integration Tests stage
+#     (absent or any other value → stage is skipped)
+#
+#   Pipeline setting: enable "Allow scripts to access the OAuth token"
+#   (required for the run-retention steps).
+
+trigger:
+  branches:
+    include: [trunk]
+  paths:
+    include: ['src/N2.*/**']
+    exclude: ['docs/**', '*.md']
+
+pr: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  buildConfiguration: 'Release'
+
+stages:
+
+# ── Stage 1: Build and Unit Tests ─────────────────────────────────────────────
+- stage: CI
+  displayName: Build and Test
+  jobs:
+  - job: Build
+    displayName: Build and Unit Tests
+    steps:
+    - task: UseDotNet@2
+      displayName: Use .NET 8.0
+      inputs:
+        version: 8.0.x
+
+    - task: UseDotNet@2
+      displayName: Use .NET 10.0
+      inputs:
+        version: 10.0.x
+
+    - task: DotNetCoreCLI@2
+      displayName: Restore packages
+      inputs:
+        command: restore
+        projects: 'src/**/*.csproj'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build
+      inputs:
+        command: build
+        projects: 'src/**/*.csproj'
+        arguments: '--no-restore --configuration $(buildConfiguration)'
+
+    - task: DotNetCoreCLI@2
+      displayName: Run unit tests
+      inputs:
+        command: test
+        projects: 'src/**/*.UnitTests.csproj'
+        arguments: >-
+          --no-build
+          --configuration $(buildConfiguration)
+          --filter "TestCategory!=Integration"
+        publishTestResults: true
+      env:
+        Logging__LogLevel__Default: Error
+
+    - pwsh: |
+        $uri = "$($env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI)$($env:SYSTEM_TEAMPROJECTID)/_apis/build/retention/leases?api-version=7.1"
+        $body = ConvertTo-Json -Compress -InputObject @(
+          @{
+            ownerId         = "Pipeline:$($env:SYSTEM_DEFINITIONID)"
+            definitionId    = [int]$env:SYSTEM_DEFINITIONID
+            runId           = [int]$env:BUILD_BUILDID
+            daysValid       = 10
+            protectPipeline = $false
+          }
+        )
+        Invoke-RestMethod -Method Post -Uri $uri `
+          -Headers @{ Authorization = "Bearer $($env:SYSTEM_ACCESSTOKEN)" } `
+          -ContentType 'application/json' -Body $body
+      displayName: Retain run for 10 days
+      condition: succeeded()
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+# ── Stage 2: Code Analysis ────────────────────────────────────────────────────
+- stage: CodeAnalysis
+  displayName: Code Analysis
+  dependsOn: CI
+  condition: succeeded('CI')
+  jobs:
+  - job: Analyse
+    displayName: Coverage and Complexity
+    variables:
+      COVERAGE_DIR: '$(Agent.TempDirectory)'
+    steps:
+    - task: UseDotNet@2
+      displayName: Use .NET 8.0
+      inputs:
+        version: 8.0.x
+
+    - task: UseDotNet@2
+      displayName: Use .NET 10.0
+      inputs:
+        version: 10.0.x
+
+    - task: DotNetCoreCLI@2
+      displayName: Restore packages
+      inputs:
+        command: restore
+        projects: 'src/**/*.csproj'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build
+      inputs:
+        command: build
+        projects: 'src/**/*.csproj'
+        arguments: '--no-restore'
+
+    - task: DotNetCoreCLI@2
+      displayName: Run unit tests with coverage
+      inputs:
+        command: test
+        projects: 'src/**/*.UnitTests.csproj'
+        arguments: >-
+          --no-build
+          --framework net8.0
+          --verbosity normal
+          --filter "TestCategory!=Integration"
+          --collect:"XPlat Code Coverage"
+      env:
+        Logging__LogLevel__Default: Error
+
+    - script: dotnet tool install --global dotnet-reportgenerator-globaltool
+      displayName: Install ReportGenerator
+
+    - script: |
+        reportgenerator \
+          -reports:"$(COVERAGE_DIR)/**/coverage.cobertura.xml" \
+          -targetdir:reports/coverage \
+          -reporttypes:"HtmlInline_AzurePipelines;Cobertura" \
+          -assemblyfilters:"+N2.Core.Identity" \
+          -title:"N2.Core.Identity — Test Coverage"
+      displayName: Generate HTML coverage report
+
+    - task: PublishCodeCoverageResults@2
+      displayName: Publish coverage to pipeline
+      condition: always()
+      inputs:
+        summaryFileLocation: reports/coverage/Cobertura.xml
+        reportDirectory: reports/coverage
+
+    - bash: pip install lizard
+      displayName: Install lizard
+
+    - bash: |
+        mkdir -p reports/complexity
+        lizard src/N2.Core.Identity -C 10 --html > reports/complexity/index.html
+      displayName: Generate complexity report
+
+    - bash: |
+        SUMMARY_FILE="$(Agent.TempDirectory)/code-analysis-summary.md"
+        PIPELINE_SUMMARY_FILE="$SUMMARY_FILE" python3 scripts/az-code-analysis-summary.py \
+          --source src/N2.Core.Identity \
+          --coverage-dir "$(COVERAGE_DIR)"
+        echo "##vso[task.uploadsummary]$SUMMARY_FILE"
+      displayName: Write pipeline summary
+      condition: always()
+
+    - task: PublishBuildArtifacts@1
+      displayName: Upload analysis reports
+      condition: always()
+      inputs:
+        PathtoPublish: reports/
+        ArtifactName: code-analysis
+
+# ── Stage 3: Integration Tests ────────────────────────────────────────────────
+# Enable by setting pipeline variable MYSQL_INTEGRATION_TESTS=true.
+- stage: IntegrationTests
+  displayName: Integration Tests
+  dependsOn: CI
+  condition: and(succeeded('CI'), eq(variables['MYSQL_INTEGRATION_TESTS'], 'true'))
+  jobs:
+  - job: MySqlIntegration
+    displayName: MySQL Integration Tests
+    steps:
+    - script: |
+        docker compose -f src/docker-compose.integration.yml up \
+          --build \
+          --exit-code-from integration-tests \
+          --abort-on-container-exit
+      displayName: Run MySQL integration tests
+
+    - script: docker compose -f src/docker-compose.integration.yml logs integration-tests
+      displayName: Show integration test logs
+      condition: always()
+
+    - task: PublishTestResults@2
+      displayName: Publish integration test results
+      condition: always()
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: 'src/test-results/*.trx'
+        testRunTitle: Integration Tests (MySQL)
+
+    - script: docker compose -f src/docker-compose.integration.yml down --volumes
+      displayName: Tear down MySQL
+      condition: always()
+
+# ── Stage 4: Publish NuGet Package ───────────────────────────────────────────
+# Runs only when CI passed and integration tests either passed or were skipped.
+- stage: Publish
+  displayName: Publish NuGet Package
+  dependsOn:
+  - CI
+  - IntegrationTests
+  condition: |
+    and(
+      succeeded('CI'),
+      in(dependencies.IntegrationTests.result, 'Succeeded', 'Skipped')
+    )
+  variables:
+  - group: n2-core-identity-publish
+  - name: AZURE_ARTIFACTS_FEED_URL
+    value: 'https://pkgs.dev.azure.com/gjkaal/N2%20Vault%20services/_packaging/vault-packages/nuget/v3/index.json'
+  jobs:
+  - job: PublishNuGet
+    displayName: Pack and Push to Azure Artifacts
+    steps:
+    - bash: bash scripts/verify-workflow-params.sh CSPROJ_PATH
+      displayName: Verify publish parameters
+      env:
+        CSPROJ_PATH: $(CSPROJ_PATH)
+
+    - task: UseDotNet@2
+      displayName: Use .NET 8.0
+      inputs:
+        version: 8.0.x
+
+    - task: UseDotNet@2
+      displayName: Use .NET 10.0
+      inputs:
+        version: 10.0.x
+
+    - task: DotNetCoreCLI@2
+      displayName: Restore packages
+      inputs:
+        command: restore
+        projects: 'src/**/*.csproj'
+
+    - task: DotNetCoreCLI@2
+      displayName: Build (Release)
+      inputs:
+        command: build
+        projects: 'src/**/*.csproj'
+        arguments: '--no-restore --configuration Release'
+
+    - task: DotNetCoreCLI@2
+      displayName: Pack NuGet
+      inputs:
+        command: pack
+        packagesToPack: '$(CSPROJ_PATH)'
+        nobuild: true
+        configuration: Release
+        outputDir: '$(Build.ArtifactStagingDirectory)/nupkgs'
+
+    - task: NuGetAuthenticate@1
+      displayName: Authenticate NuGet
+
+    - bash: |
+        set -euo pipefail
+        while IFS= read -r -d '' pkg; do
+          echo "Pushing $pkg"
+          dotnet nuget push "$pkg" \
+            --source "$FEED_URL" \
+            --api-key AzureArtifacts \
+            --skip-duplicate
+        done < <(find "$(Build.ArtifactStagingDirectory)/nupkgs" -name "*.nupkg" -print0)
+      displayName: Push NuGet package
+      env:
+        FEED_URL: $(AZURE_ARTIFACTS_FEED_URL)
+
+    - pwsh: |
+        $uri = "$($env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI)$($env:SYSTEM_TEAMPROJECTID)/_apis/build/retention/leases?api-version=7.1"
+        $body = ConvertTo-Json -Compress -InputObject @(
+          @{
+            ownerId         = "Pipeline:$($env:SYSTEM_DEFINITIONID):published"
+            definitionId    = [int]$env:SYSTEM_DEFINITIONID
+            runId           = [int]$env:BUILD_BUILDID
+            daysValid       = 365
+            protectPipeline = $false
+          }
+        )
+        Invoke-RestMethod -Method Post -Uri $uri `
+          -Headers @{ Authorization = "Bearer $($env:SYSTEM_ACCESSTOKEN)" } `
+          -ContentType 'application/json' -Body $body
+      displayName: Retain published run for 365 days
+      condition: succeeded()
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
