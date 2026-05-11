@@ -1,9 +1,6 @@
-# n2-core-identity
+# N2.Core.Identity
 
-[![.NET Build and test](https://github.com/Kaalenco/n2-core-identity/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Kaalenco/n2-core-identity/actions/workflows/dotnet.yml)
-[![CodeQL Advanced](https://github.com/Kaalenco/n2-core-identity/actions/workflows/codeql.yml/badge.svg)](https://github.com/Kaalenco/n2-core-identity/actions/workflows/codeql.yml)
-[![Maintenance](https://github.com/Kaalenco/n2-core-identity/actions/workflows/maintenance.yml/badge.svg)](https://github.com/Kaalenco/n2-core-identity/actions/workflows/maintenance.yml)
-[![NuGet](https://img.shields.io/nuget/v/N2.Core.Identity.svg)](https://www.nuget.org/packages/N2.Core.Identity/)
+[![Build Status](https://dev.azure.com/gjkaal/N2%20Vault%20services/_apis/build/status%2FN2.Core.Identity%20-%20Publish?branchName=trunk)](https://dev.azure.com/gjkaal/N2%20Vault%20services/_build/latest?definitionId=5&branchName=trunk)
 
 **N2.Core.Identity** is a modular, extensible identity and role management library for .NET, built on top of ASP.NET Core Identity. It provides a strongly-typed database context, a feature-rich user manager, JWT authentication, and multi-factor authentication support — all wired together for production use.
 
