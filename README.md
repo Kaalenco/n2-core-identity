@@ -1,4 +1,4 @@
-    # n2-core-identity
+# n2-core-identity
 
 [![.NET Build and test](https://github.com/Kaalenco/n2-core-identity/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Kaalenco/n2-core-identity/actions/workflows/dotnet.yml)
 [![CodeQL Advanced](https://github.com/Kaalenco/n2-core-identity/actions/workflows/codeql.yml/badge.svg)](https://github.com/Kaalenco/n2-core-identity/actions/workflows/codeql.yml)
@@ -11,7 +11,7 @@ Targets **net8.0** and **net10.0**. Supports SQL Server and MySQL.
 
 ---
 
-## Functional Blocks
+## Functional areas
 
 ### Identity Context (`N2IdentityContext`)
 Extends `IdentityDbContext<ApplicationUser, ApplicationRole, Guid>`. Provides strongly-typed access to users, roles, and user-role mappings. Includes a concurrent change log (capped at 1000 entries) and a built-in health check for database connectivity.
@@ -45,12 +45,26 @@ Incremental SQL scripts (`Scripts/M00`, `M01`, `M02`) are included in the output
 
 ---
 
-## Security Notes
+## Security notes
 
 - Passwords hashed with PBKDF2-HMAC-SHA256, 310,000 iterations (OWASP 2023 recommendation)
 - Confirmation tokens signed with HMAC-SHA256; nonces use cryptographically secure random bytes
 - Constant-time comparisons used for token and MFA validation to prevent timing-based enumeration
 - Account lockout and rate limiting built in
+
+---
+
+## Project documentation
+
+| Document | Description |
+|----------|-------------|
+| [src/DEVELOPER-GUIDE.md](src/DEVELOPER-GUIDE.md) | Developer guide — build commands, CI/CD pipeline, and maintenance notes. |
+| [src/WARNINGS.md](src/WARNINGS.md) | Suppressed analyser warnings — lists every `<NoWarn>` entry with severity rating and guidance. |
+| [CHANGELOG.md](CHANGELOG.md) | Full version history. |
+
+## Change log
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history. Current version: **1.7.3**.
 
 ---
 
