@@ -43,11 +43,11 @@ public abstract class N2SecretManagerIntegrationTestsBase {
             .AddEnvironmentVariables()
             .Build();
 
-    private static IIdentityContextFactory BuildFactory(IConfiguration configuration) {
+    private IIdentityContextFactory BuildFactory(IConfiguration configuration) {
         var mock = new Mock<IConnectionStringService>();
         mock.Setup(s => s.GetConnectionString(It.IsAny<string>()))
             .Returns((string name) => configuration.GetConnectionString(name) ?? string.Empty);
-        return new N2IdentityContextFactory(mock.Object);
+        return new N2IdentityContextFactory(mock.Object, Provider, ConnectionName);
     }
 
     protected N2SecretManager BuildSecretManager() {
@@ -74,7 +74,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var config = BuildConfiguration();
         var factory = (N2IdentityContextFactory)BuildFactory(config);
         var context = (N2IdentityContext)await factory.CreateAsync(Provider, ConnectionName);
-        await context.Database.MigrateAsync();
+        await IntegrationMigrationGate.EnsureMigratedAsync(context.Database);
         return context;
     }
 

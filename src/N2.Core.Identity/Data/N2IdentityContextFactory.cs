@@ -15,8 +15,8 @@ public class N2IdentityContextFactory : IIdentityContextFactory {
 
     public N2IdentityContextFactory(
         IConnectionStringService settingService,
-        DatabaseProvider defaultProvider = DatabaseProvider.SqlServer,
-        string defaultConnectionName = "UserDbConnection") {
+        DatabaseProvider defaultProvider,
+        string defaultConnectionName) {
         this.settingService = settingService;
         this.defaultProvider = defaultProvider;
         this.defaultConnectionName = defaultConnectionName;

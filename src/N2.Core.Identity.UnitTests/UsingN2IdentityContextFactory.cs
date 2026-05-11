@@ -29,7 +29,7 @@ public class UsingN2IdentityContextFactory {
     [TestCategory("Integration")]
     public async Task CreateAsync_SqlServerProvider_ShouldConfigureSqlServerProvider() {
         // Arrange
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object);
+        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
         using var context = await factory.CreateAsync(DatabaseProvider.SqlServer, SqlServerConnectionName);
@@ -43,7 +43,7 @@ public class UsingN2IdentityContextFactory {
     [TestCategory("Integration")]
     public async Task CreateAsync_MySqlProvider_ShouldConfigureMySqlProvider() {
         // Arrange
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object);
+        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.MySql, MySqlConnectionName);
 
         // Act
         using var context = await factory.CreateAsync(DatabaseProvider.MySql, MySqlConnectionName);
@@ -55,9 +55,9 @@ public class UsingN2IdentityContextFactory {
 
     [TestMethod]
     [TestCategory("Integration")]
-    public async Task CreateAsync_DefaultOverload_ShouldDefaultToSqlServer() {
+    public async Task CreateAsync_NoArgsOverload_ShouldUseConfiguredProvider() {
         // Arrange
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object);
+        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
         using var context = await factory.CreateAsync();
@@ -69,9 +69,9 @@ public class UsingN2IdentityContextFactory {
 
     [TestMethod]
     [TestCategory("Integration")]
-    public async Task CreateAsync_ConnectionNameOverload_ShouldDefaultToSqlServer() {
+    public async Task CreateAsync_ConnectionNameOverload_ShouldUseConfiguredProvider() {
         // Arrange
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object);
+        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
         using var context = await factory.CreateAsync(SqlServerConnectionName);
@@ -83,9 +83,9 @@ public class UsingN2IdentityContextFactory {
 
     [TestMethod]
     [TestCategory("Integration")]
-    public async Task CreateAsync_ProviderOnly_ShouldUseDefaultConnectionName() {
+    public async Task CreateAsync_ProviderOnly_ShouldUseConfiguredConnectionName() {
         // Arrange
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object);
+        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
         using var context = await factory.CreateAsync(DatabaseProvider.SqlServer);
@@ -101,7 +101,7 @@ public class UsingN2IdentityContextFactory {
         // Arrange
         var mock = new Mock<IConnectionStringService>();
         mock.Setup(s => s.GetConnectionString(It.IsAny<string>())).Returns(string.Empty);
-        var factory = new N2IdentityContextFactory(mock.Object);
+        var factory = new N2IdentityContextFactory(mock.Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(

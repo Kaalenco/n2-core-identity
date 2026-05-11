@@ -35,16 +35,16 @@ public abstract class N2IdentityContextIntegrationTestsBase {
     }
 
     protected async Task<N2IdentityContext> CreateAndPrepareAsync() {
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object);
+        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, Provider, ConnectionName);
         var context = (N2IdentityContext)await factory.CreateAsync(Provider, ConnectionName);
-        await context.Database.MigrateAsync();
+        await IntegrationMigrationGate.EnsureMigratedAsync(context.Database);
         return context;
     }
 
     // ── Migration verification ────────────────────────────────────────────────
 
     protected async Task MigrateAsync_ShouldHaveNoPendingMigrationsCore() {
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object);
+        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, Provider, ConnectionName);
         using var context = (N2IdentityContext)await factory.CreateAsync(Provider, ConnectionName);
 
         await context.Database.MigrateAsync();

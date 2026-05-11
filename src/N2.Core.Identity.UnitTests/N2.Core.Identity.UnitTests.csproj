@@ -8,14 +8,16 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
 
-    <AssemblyVersion>1.6.5</AssemblyVersion>
+    <AssemblyVersion>1.7.4</AssemblyVersion>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
     <NoWarn>
       CA1859;
       CA1707;
       CA2007;
       CA1819;
+      CA1861;
       CA1515;
+      CA1307;
       CS1591;
       CA1812;
       IDE0011;
