@@ -54,10 +54,9 @@ internal static class TestContext {
         });
 
         serviceCollection.AddScoped<IPasswordHasher<ApplicationUser>>(s => {
-            // Configure PasswordHasherOptions using IOptions<PasswordHasherOptions>
             var options = new PasswordHasherOptions {
                 CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3,
-                IterationCount = 310000 // OWASP 2023 recommendation
+                IterationCount = 1 // Minimal cost for unit tests — production value tested separately
             };
             return new PasswordHasher<ApplicationUser>(Microsoft.Extensions.Options.Options.Create(options));
         });

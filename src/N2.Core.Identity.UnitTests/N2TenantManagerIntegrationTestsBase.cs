@@ -66,12 +66,17 @@ public abstract class N2TenantManagerIntegrationTestsBase {
         return new N2UserManager(factory, config, rateLimiter, hasher, ConnectionName, NullLogger<N2UserManager>.Instance, Provider);
     }
 
-    private async Task<N2IdentityContext> CreateAndPrepareContextAsync() {
+    protected async Task<N2IdentityContext> CreateAndPrepareContextAsync() {
         var config = BuildConfiguration();
         var factory = (N2IdentityContextFactory)BuildFactory(config);
         var context = (N2IdentityContext)await factory.CreateAsync(Provider, ConnectionName);
         await IntegrationMigrationGate.EnsureMigratedAsync(context.Database);
         return context;
+    }
+
+    [TestInitialize]
+    public async Task EnsureDatabaseMigratedAsync() {
+        using var _ = await CreateAndPrepareContextAsync();
     }
 
     // -------------------------------------------------------------------------

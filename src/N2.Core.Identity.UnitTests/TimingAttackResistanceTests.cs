@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Identity;
+
 using System.Security.Cryptography;
 
 namespace N2.Core.Identity.UnitTests;
@@ -104,6 +106,25 @@ public class TimingAttackResistanceTests : N2IdentityTestsBase {
 
         AssertTimingOrInconclusive(wrongTimes, partialTimes, 10,
             percentDiff => $"MFA validation timing should not leak information, difference was {percentDiff:F2}%");
+    }
+
+    [TestMethod]
+    public void PasswordHashing_ComputationalCost_ShouldBeSufficient() {
+        var password = "BenchmarkP@ss789";
+        var user = new ApplicationUser { UserName = "testuser" };
+        var options = new PasswordHasherOptions {
+            CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3,
+            IterationCount = 310000
+        };
+        var productionHasher = new PasswordHasher<ApplicationUser>(
+            Microsoft.Extensions.Options.Options.Create(options));
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        productionHasher.HashPassword(user, password);
+        stopwatch.Stop();
+
+        Assert.IsGreaterThanOrEqualTo(100,
+            stopwatch.ElapsedMilliseconds,
+            $"Password hashing should take >= 100ms (OWASP 2023), took {stopwatch.ElapsedMilliseconds}ms");
     }
 
     [TestMethod]
