@@ -226,6 +226,8 @@ stages:
           --exit-code-from integration-tests \
           --abort-on-container-exit
       displayName: Run MySQL integration tests
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
     - script: docker compose -f src/docker-compose.integration.yml logs integration-tests
       displayName: Show integration test logs

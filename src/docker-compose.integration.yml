@@ -33,6 +33,8 @@ services:
     build:
       context: .                                                    # ./src relative to this file
       dockerfile: Dockerfile.integration
+      secrets:
+        - azure_token
     environment:
       # Double-underscore maps to ':' in .NET configuration, so this populates
       # ConnectionStrings:UserDbMySqlTest which the integration tests read.
@@ -43,3 +45,7 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+
+secrets:
+  azure_token:
+    environment: SYSTEM_ACCESSTOKEN
