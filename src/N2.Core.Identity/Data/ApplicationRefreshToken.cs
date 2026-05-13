@@ -23,7 +23,7 @@ public class ApplicationRefreshToken
     /// Used during token refresh to detect credential changes (password reset, email change)
     /// that occurred after the refresh token was issued. A mismatch causes immediate revocation.
     /// </summary>
-    [MaxLength(36)]
+    [MaxLength(128)]
     public string?  SecurityStamp { get; set; }
 
     public DateTime IssuedAt  { get; set; } = DateTime.UtcNow;

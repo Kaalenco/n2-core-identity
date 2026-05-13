@@ -145,7 +145,7 @@ namespace N2.Core.Identity.Migrations
                     b.Property<DateTime?>("RevokedAt");
 
                     b.Property<string>("SecurityStamp")
-                        .HasMaxLength(36);
+                        .HasMaxLength(128);
 
                     b.Property<string>("Token")
                         .IsRequired();
