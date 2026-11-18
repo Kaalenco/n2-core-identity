@@ -58,6 +58,11 @@ Incremental SQL scripts (`Scripts/M00`, `M01`, `M02`) are included in the output
 | [src/DEVELOPER-GUIDE.md](src/DEVELOPER-GUIDE.md) | Developer guide — build commands, CI/CD pipeline, and maintenance notes. |
 | [src/WARNINGS.md](src/WARNINGS.md) | Suppressed analyser warnings — lists every `<NoWarn>` entry with severity rating and guidance. |
 | [CHANGELOG.md](CHANGELOG.md) | Full version history. |
+| [MIGRATION-2.0.md](MIGRATION-2.0.md) | Code migration guide from 1.x (1.7.5) to 2.0.0. |
+
+## Upgrading to 2.0
+
+2.0.0 is a breaking release: it targets net10.0 and net11.0, moves to N2.Core.Abstractions 2.0.0 and EF Core 10, renames every `...Async` member and makes the `CancellationToken` required, and removes MySQL support (MySQL users stay on 1.7.5). See [MIGRATION-2.0.md](MIGRATION-2.0.md) for the step-by-step checklist, the old -> new member tables and the behaviour changes.
 
 ## Change log
 

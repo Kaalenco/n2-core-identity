@@ -12,6 +12,8 @@ every asynchronous member takes a required `CancellationToken` as its last param
 value, no overload without it) and no member name ends in `Async`. All changes below are
 breaking unless stated otherwise.
 
+Upgrade guide: [MIGRATION-2.0.md](MIGRATION-2.0.md).
+
 ### Targets and packaging
 
 - **Breaking:** target frameworks are now `net10.0` and `net11.0`; `net8.0` is dropped. The
@@ -124,6 +126,10 @@ breaking unless stated otherwise.
   request now ends that delay early with `OperationCanceledException`.
 - `UserContextFactory.Create` stops waiting for the authentication state when the token is
   cancelled.
+- `N2IdentityContext.Complete` no longer throws `DbUpdateException` /
+  `DbUpdateConcurrencyException`: it returns `ServerError` / `Conflict` with the message. Callers
+  that caught those exceptions must check the returned status instead. The message can contain
+  provider error text; do not show it to end users.
 
 ### No bare Task returns
 
