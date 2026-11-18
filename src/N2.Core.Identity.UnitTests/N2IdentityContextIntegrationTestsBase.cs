@@ -220,7 +220,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         }
     }
 
+    // Known flaky: boundary depends on clock resolution and SQL Server datetime precision.
+    // See src/DEVELOPER-GUIDE.md, "Known flaky tests".
     [TestMethod]
+    [TestCategory("Flaky")]
     public async Task UserFindRecord_AlertAtExact7DayBoundary_ShouldNotBeIncluded() {
         using var context = await CreateAndPrepareAsync();
         var user = MakeUser("boundary");

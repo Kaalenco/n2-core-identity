@@ -102,15 +102,21 @@ public sealed class UsingN2AuthenticationService {
     }
 
     [TestMethod]
-    public async Task AuthenticateAsync_UserNotFound_ShouldNotCallValidate() {
+    public async Task AuthenticateAsync_UserNotFound_ShouldCallValidateOnceWithTransientUser() {
+        // Validate is called only for its padded unknown-user path, so the timing matches an
+        // existing user with a wrong password. The user object is not persisted (Id is empty).
         SetupUserNotFound();
         var service = CreateService();
 
-        await service.Authenticate(new UserLogin { Username = "ghost", Password = "secret" }, CancellationToken.None);
+        var result = await service.Authenticate(new UserLogin { Username = "ghost", Password = "secret" }, CancellationToken.None);
 
+        Assert.IsNull(result);
         userManager.Verify(
-            m => m.Validate(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+            m => m.Validate(
+                It.Is<ApplicationUser>(u => u.UserName == "ghost" && u.Id == Guid.Empty),
+                "secret",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     // -------------------------------------------------------------------------

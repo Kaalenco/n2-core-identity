@@ -640,7 +640,11 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         );
 
         if (verificationResult == PasswordVerificationResult.Failed) {
+            // Record the failed attempt before the cancellable padding wait, so cancelling the
+            // request cannot skip the lockout counter. The padding makes this path take the same
+            // time as the unknown-user and locked-out paths (no user enumeration by timing).
             _ = ReportCounterStatus(appUser.Id, await IncrementAccessFailedCount(ctx, appUser, logger));
+            await timer.Wait(ct);
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
         }
 
@@ -747,7 +751,9 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             return await VerifySignedCode(user, dbUser, splitCode, timer, ct);
         }
 
+        // Record before the cancellable padding wait so cancelling cannot skip the record.
         rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+        await timer.Wait(ct);
         return new MultifactorResponse(
             ResponseStatus.NotImplemented,
             $"Multifactor {user.MfaType} is not available for {user.UserName}");

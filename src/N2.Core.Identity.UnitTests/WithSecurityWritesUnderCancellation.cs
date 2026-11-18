@@ -60,14 +60,56 @@ public class WithSecurityWritesUnderCancellation : N2IdentityTestsBase {
             .Returns(PasswordVerificationResult.Failed);
         using var manager = CreateManager(ServiceProvider.GetRequiredService<IRateLimiter>(), hasher.Object);
 
-        // Act
-        var result = await manager.Validate(user, "wrong", cts.Token);
+        // Act - the wrong-password path pads with a cancellable wait after the counter write,
+        // so the cancelled token surfaces as OperationCanceledException from that wait.
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => manager.Validate(user, "wrong", cts.Token));
 
         // Assert
         Assert.IsTrue(cts.IsCancellationRequested);
-        Assert.AreEqual(ResponseStatus.NotAccepted, result.Status);
         Assert.AreEqual(before + 1, await ReadAccessFailedCount(factory, user.Id));
     }
+
+    [TestMethod]
+    public async Task Validate_WrongPassword_ShouldPadToAuthenticationTime() {
+        // Arrange - a hasher that fails instantly, so any elapsed time near the budget comes
+        // from the padding wait and not from PBKDF2.
+        var user = await CreateTestUser($"pad_wrong_{Guid.NewGuid():N}", "P@ssword1!", MultiFactorType.None);
+        var hasher = new Mock<IPasswordHasher<ApplicationUser>>();
+        hasher.Setup(h => h.VerifyHashedPassword(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<string>()))
+            .Returns(PasswordVerificationResult.Failed);
+        using var manager = CreateManager(ServiceProvider.GetRequiredService<IRateLimiter>(), hasher.Object);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        // Act
+        var result = await manager.Validate(user, "wrong", CancellationToken.None);
+        stopwatch.Stop();
+
+        // Assert - lower bound only; no upper bound, to stay robust on slow machines.
+        Assert.AreEqual(ResponseStatus.NotAccepted, result.Status);
+        Assert.IsGreaterThanOrEqualTo(PaddingLowerBoundMs, stopwatch.ElapsedMilliseconds);
+    }
+
+    [TestMethod]
+    public async Task Validate_UnknownUser_ShouldPadToAuthenticationTime() {
+        // Arrange
+        var unknown = new ApplicationUser { UserName = $"pad_unknown_{Guid.NewGuid():N}" };
+        using var manager = CreateManager(
+            ServiceProvider.GetRequiredService<IRateLimiter>(),
+            ServiceProvider.GetRequiredService<IPasswordHasher<ApplicationUser>>());
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        // Act
+        var result = await manager.Validate(unknown, "wrong", CancellationToken.None);
+        stopwatch.Stop();
+
+        // Assert
+        Assert.AreEqual(ResponseStatus.NotAccepted, result.Status);
+        Assert.IsGreaterThanOrEqualTo(PaddingLowerBoundMs, stopwatch.ElapsedMilliseconds);
+    }
+
+    // N2UserManager pads authentication to 500 ms; allow 20 ms for timer resolution.
+    private const long PaddingLowerBoundMs = 480;
 
     private static async Task<int> ReadAccessFailedCount(IIdentityContextFactory factory, Guid userId) {
         using var ctx = await factory.Create(CancellationToken.None);

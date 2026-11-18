@@ -5,6 +5,29 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## 2.0.1 - 2026-11-18
+
+### Security
+
+- `N2UserManager.Validate`: the wrong-password path now takes the same padded time as the
+  unknown-user and locked-out paths (user enumeration by timing, CWE-208); present since 1.x.
+  The failed-attempt counter is still written before the cancellable padding wait.
+- `N2UserManager.ValidateMultifactor`: the "MFA type not available" failure path is now padded
+  like the other MFA failure paths.
+- `N2AuthenticationService.Authenticate`: the unknown-user branch now calls `Validate` with a
+  user object that is not in the database (its own padded unknown-user path; no counter write)
+  instead of waiting on the outer timer. Both branches now cost `FindByName` plus one padded
+  `Validate`, so unknown-user and wrong-password logins stay indistinguishable through
+  `Authenticate`.
+
+### Changed
+
+- `N2UserManager.Validate` with a wrong password and an already cancelled token now throws
+  `OperationCanceledException` during the padding wait instead of returning NotAccepted. The
+  failed-attempt counter is still written first.
+
+---
+
 ## 2.0.0 - 2026-11-18
 
 Major release. Moves to N2.Core.Abstractions 2.0.0 and applies its convention to this library:

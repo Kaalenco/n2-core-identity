@@ -66,7 +66,7 @@ Incremental SQL scripts (`Scripts/M00`, `M01`, `M02`) are included in the output
 
 ## Change log
 
-See [CHANGELOG.md](CHANGELOG.md) for the full history. Current version: **2.0.0**.
+See [CHANGELOG.md](CHANGELOG.md) for the full history. Current version: **2.0.1**.
 
 ---
 

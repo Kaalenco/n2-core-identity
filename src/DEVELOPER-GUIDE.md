@@ -59,6 +59,15 @@ Supply the connection string via user secrets (ID `N2-Core-0c368d89-5cb3-4451-9c
 MySQL support and its Docker-based integration tests were removed in 2.0.0; MySQL is planned to
 return as a separate package (N2.Core.Identity.MySql) once a stable EF Core 10 MySQL provider exists.
 
+### Known flaky tests
+
+Flaky tests carry `[TestCategory("Flaky")]`. A failure of a test listed here is not a regression
+by itself; rerun it. Exclude them with `--filter "TestCategory!=Flaky"`.
+
+| Test | Category | Symptom | Cause |
+|------|----------|---------|-------|
+| `UserFindRecord_AlertAtExact7DayBoundary_ShouldNotBeIncluded` (`N2IdentityContextIntegrationTestsBase`) | Integration.SqlServer | Fails in about 1 of 3 runs, on net10.0 and net11.0 | Known issue. The alert is stored at exactly `UtcNow.AddDays(-7)` and the filter is `CreatedAt > UtcNow.AddDays(-7)`; the result depends on clock resolution and SQL Server datetime precision at the boundary. Fix: test with a margin (for example 1 second) on either side of the boundary. |
+
 ## CI/CD pipeline
 
 Two pipelines are registered in Azure DevOps:
@@ -119,9 +128,9 @@ The library targets `net10.0` and `net11.0`. Both SDK versions are installed in 
 The version is set in `src/N2.Core.Identity/N2.Core.Identity.csproj`:
 
 ```xml
-<Version>2.0.0</Version>
-<PackageVersion>2.0.0</PackageVersion>
-<AssemblyVersion>2.0.0</AssemblyVersion>
+<Version>2.0.1</Version>
+<PackageVersion>2.0.1</PackageVersion>
+<AssemblyVersion>2.0.1</AssemblyVersion>
 ```
 
 Bump all three before tagging a release. The `.nupkg` is produced automatically by `GeneratePackageOnBuild` on Release builds.

@@ -38,7 +38,15 @@ public sealed class N2AuthenticationService : IAuthenticator {
         ICommandResponse? result = null;
         if (user == null) {
             LoginAttempt(logger, userLogin.Username, userNotFoundException);
-            await timer.Wait(cancellationToken);
+            // Validate pads its own failure paths from its own start, so an existing user with a wrong
+            // password costs FindByName + a padded Validate. Do the same here, with a user object that
+            // is not in the database: Validate then takes its unknown-user path (padding only; it
+            // writes no counter and creates nothing). The outer timer alone would make this branch
+            // faster than the wrong-password branch by the FindByName time.
+            _ = await userManager.Validate(
+                new ApplicationUser { UserName = userLogin.Username },
+                userLogin.Password,
+                cancellationToken);
             return null;
         }
 

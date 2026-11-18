@@ -157,9 +157,9 @@ its `<TargetFramework>` entry from `N2.Core.Identity.csproj` and the correspondi
 The package version is set manually in `N2.Core.Identity.csproj`:
 
 ```xml
-<PackageVersion>2.0.0</PackageVersion>
-<AssemblyVersion>2.0.0</AssemblyVersion>
-<ProductVersion>2.0.0</ProductVersion>
+<PackageVersion>2.0.1</PackageVersion>
+<AssemblyVersion>2.0.1</AssemblyVersion>
+<ProductVersion>2.0.1</ProductVersion>
 ```
 
 Bump all three values together before merging a release to `trunk`.
