@@ -220,20 +220,35 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         }
     }
 
-    // Known flaky: boundary depends on clock resolution and SQL Server datetime precision.
-    // See src/DEVELOPER-GUIDE.md, "Known flaky tests".
+    // The filter is CreatedAt > UtcNow.AddDays(-7), evaluated by the database. An alert at the
+    // exact boundary is decided by clock resolution and datetime precision, so the boundary is
+    // tested with a 2-second margin on either side.
+    private static readonly TimeSpan BoundaryMargin = TimeSpan.FromSeconds(2);
+
     [TestMethod]
-    [TestCategory("Flaky")]
-    public async Task UserFindRecord_AlertAtExact7DayBoundary_ShouldNotBeIncluded() {
+    public async Task UserFindRecord_AlertJustOutside7DayWindow_ShouldNotBeIncluded() {
+        var count = await CountVisibleAlertsCreatedAt(DateTime.UtcNow.AddDays(-7) - BoundaryMargin, "outside");
+        Assert.AreEqual(0, count,
+            "An alert created just over 7 days ago is outside the CreatedAt > UtcNow.AddDays(-7) window");
+    }
+
+    [TestMethod]
+    public async Task UserFindRecord_AlertJustInside7DayWindow_ShouldBeIncluded() {
+        var count = await CountVisibleAlertsCreatedAt(DateTime.UtcNow.AddDays(-7) + BoundaryMargin, "inside");
+        Assert.AreEqual(1, count,
+            "An alert created just under 7 days ago is inside the CreatedAt > UtcNow.AddDays(-7) window");
+    }
+
+    private async Task<int> CountVisibleAlertsCreatedAt(DateTime createdAt, string userSuffix) {
         using var context = await CreateAndPrepareAsync();
-        var user = MakeUser("boundary");
+        var user = MakeUser($"boundary-{userSuffix}");
         await context.UserAdd(user, CancellationToken.None);
         await context.UserAlertAdd(new ApplicationUserAlert {
             Id = Guid.NewGuid(),
             ApplicationUserId = user.Id,
             Message = "Boundary",
             Priority = Priority.Low,
-            CreatedAt = DateTime.UtcNow.AddDays(-7),
+            CreatedAt = createdAt,
             Acknowledged = false
         }, CancellationToken.None);
 
@@ -241,8 +256,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             using var verifyCtx = await CreateAndPrepareAsync();
             var found = await verifyCtx.UserFindRecord(user.Id, CancellationToken.None);
             Assert.IsNotNull(found);
-            Assert.AreEqual(0, found!.ApplicationUserAlert.Count,
-                "Filter is CreatedAt > UtcNow.AddDays(-7), so an alert exactly 7 days old is excluded");
+            return found!.ApplicationUserAlert.Count;
         } finally {
             context.UserDelete(user);
             await context.Complete(CancellationToken.None);

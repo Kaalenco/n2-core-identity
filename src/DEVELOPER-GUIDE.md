@@ -64,9 +64,13 @@ return as a separate package (N2.Core.Identity.MySql) once a stable EF Core 10 M
 Flaky tests carry `[TestCategory("Flaky")]`. A failure of a test listed here is not a regression
 by itself; rerun it. Exclude them with `--filter "TestCategory!=Flaky"`.
 
-| Test | Category | Symptom | Cause |
-|------|----------|---------|-------|
-| `UserFindRecord_AlertAtExact7DayBoundary_ShouldNotBeIncluded` (`N2IdentityContextIntegrationTestsBase`) | Integration.SqlServer | Fails in about 1 of 3 runs, on net10.0 and net11.0 | Known issue. The alert is stored at exactly `UtcNow.AddDays(-7)` and the filter is `CreatedAt > UtcNow.AddDays(-7)`; the result depends on clock resolution and SQL Server datetime precision at the boundary. Fix: test with a margin (for example 1 second) on either side of the boundary. |
+There are no known flaky tests at the moment.
+
+Fixed: the 7-day alert window test (`UserFindRecord_AlertAtExact7DayBoundary_ShouldNotBeIncluded`)
+failed in about 1 of 3 runs because an alert at exactly `UtcNow.AddDays(-7)` is decided by clock
+resolution and datetime precision. It is replaced by two tests with a 2-second margin on either
+side of the boundary (`UserFindRecord_AlertJustOutside7DayWindow_ShouldNotBeIncluded`,
+`UserFindRecord_AlertJustInside7DayWindow_ShouldBeIncluded`).
 
 ## CI/CD pipeline
 
