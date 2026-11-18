@@ -4,7 +4,7 @@
 
 **N2.Core.Identity** is a modular, extensible identity and role management library for .NET, built on top of ASP.NET Core Identity. It provides a strongly-typed database context, a feature-rich user manager, JWT authentication, and multi-factor authentication support — all wired together for production use.
 
-Targets **net8.0** and **net10.0**. Supports SQL Server and MySQL.
+Targets **net10.0** and **net11.0**. Supports SQL Server. MySQL support was removed in 2.0.0 (no stable EF Core 10 MySQL provider yet); it is planned as a separate package, N2.Core.Identity.MySql.
 
 ---
 
@@ -61,7 +61,7 @@ Incremental SQL scripts (`Scripts/M00`, `M01`, `M02`) are included in the output
 
 ## Change log
 
-See [CHANGELOG.md](CHANGELOG.md) for the full history. Current version: **1.7.3**.
+See [CHANGELOG.md](CHANGELOG.md) for the full history. Current version: **2.0.0**.
 
 ---
 

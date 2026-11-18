@@ -30,7 +30,7 @@ public abstract class N2IdentityTestsBase {
     }
     protected Task<IIdentityContext> GetIdentityContext() {
         var factory = ServiceProvider.GetRequiredService<IIdentityContextFactory>();
-        return factory.CreateAsync();
+        return factory.Create(CancellationToken.None);
     }
 
     protected async Task<ApplicationUser> CreateUserWithPassword(string password) {
@@ -41,11 +41,11 @@ public abstract class N2IdentityTestsBase {
             Email = $"{username}@test.com",
             MfaType = MultiFactorType.None
         };
-        var createResult = await userManager.CreateAsync(user, password, CancellationToken.None);
+        var createResult = await userManager.Create(user, password, CancellationToken.None);
         if (!createResult.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to create user: {createResult.Message}");
         }
-        var userResponse = await userManager.FindByNameAsync(username, CancellationToken.None);
+        var userResponse = await userManager.FindByName(username, CancellationToken.None);
         return userResponse.Value ?? throw new InvalidOperationException("Failed to retrieve created user.");
     }
 
@@ -77,13 +77,13 @@ public abstract class N2IdentityTestsBase {
             MfaType = mfaType
         };
 
-        var createResult = await userManager.CreateAsync(user, password, ct);
+        var createResult = await userManager.Create(user, password, ct);
         if (!createResult.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to create user: {createResult.Message}");
         }
 
         // Retrieve the created user
-        var userResponse = await userManager.FindByNameAsync(userName, ct);
+        var userResponse = await userManager.FindByName(userName, ct);
         if (userResponse.Value == null) {
             throw new InvalidOperationException("Failed to retrieve created user.");
         }
@@ -92,20 +92,20 @@ public abstract class N2IdentityTestsBase {
 
         if (mfaType != MultiFactorType.None) {
             // Generate and confirm email to allow sign-in
-            await userManager.SetMultifactorAsync(createdUser, mfaType, "token", CancellationToken.None);
+            await userManager.SetMultifactor(createdUser, mfaType, "token", CancellationToken.None);
 
-            var tokenResponse = await userManager.GenerateConfirmationTokenAsync(createdUser, ct);
+            var tokenResponse = await userManager.GenerateConfirmationToken(createdUser, ct);
             if (!tokenResponse.Status.IsSuccess() || string.IsNullOrEmpty(tokenResponse.Value)) {
                 throw new InvalidOperationException("Failed to generate confirmation token.");
             }
 
-            var confirmResult = await userManager.ConfirmEmailAsync(createdUser, tokenResponse.Value, ct);
+            var confirmResult = await userManager.ConfirmEmail(createdUser, tokenResponse.Value, ct);
             if (!confirmResult.Status.IsSuccess()) {
                 throw new InvalidOperationException($"Failed to confirm email: {confirmResult.Message}");
             }
 
             // Retrieve user again to get updated EmailConfirmed status
-            userResponse = await userManager.FindByNameAsync(userName, ct);
+            userResponse = await userManager.FindByName(userName, ct);
             if (userResponse.Value == null) {
                 throw new InvalidOperationException("Failed to retrieve user after email confirmation.");
             }

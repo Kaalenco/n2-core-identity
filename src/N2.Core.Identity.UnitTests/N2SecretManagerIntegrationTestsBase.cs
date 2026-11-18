@@ -73,7 +73,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     private async Task<N2IdentityContext> CreateAndMigrateContextAsync() {
         var config = BuildConfiguration();
         var factory = (N2IdentityContextFactory)BuildFactory(config);
-        var context = (N2IdentityContext)await factory.CreateAsync(Provider, ConnectionName);
+        var context = (N2IdentityContext)await factory.Create(Provider, ConnectionName, CancellationToken.None);
         await IntegrationMigrationGate.EnsureMigratedAsync(context.Database);
         return context;
     }
@@ -95,7 +95,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         using var userManager = BuildUserManager();
         var name = $"sec_int_{Guid.NewGuid():N}";
         var user = new ApplicationUser { UserName = name, Email = $"{name}@test.com" };
-        var result = await userManager.CreateAsync(user, "TestPassword1!", CancellationToken.None);
+        var result = await userManager.Create(user, "TestPassword1!", CancellationToken.None);
         if (!result.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to create user: {result.Message}");
         }
@@ -104,7 +104,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         using var ctx = await CreateAndMigrateContextAsync();
         var found = await ctx.UserFindRecord(user.Id, CancellationToken.None);
         found!.SecretKeyMaterial = keyMaterial;
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
 
         var owner = new SecretOwner(found.Id, OwnerTypeCode.User, keyMaterial);
         return (found, owner);
@@ -116,7 +116,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var existing = await ctx.UserFindRecord(user.Id, CancellationToken.None);
         if (existing != null) {
             ctx.UserDelete(existing);
-            await ctx.Complete();
+            await ctx.Complete(CancellationToken.None);
         }
     }
 
@@ -125,7 +125,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var existing = await ctx.SecretFindRecord(secretId, CancellationToken.None);
         if (existing != null) {
             ctx.SecretDelete(existing);
-            await ctx.Complete();
+            await ctx.Complete(CancellationToken.None);
         }
     }
 
@@ -136,7 +136,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     };
 
     // -------------------------------------------------------------------------
-    // CreateAsync
+    // Create
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -144,7 +144,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var result = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         try {
             Assert.IsTrue(result.Status.IsSuccess());
@@ -162,7 +162,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var result = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         try {
             Assert.IsTrue(result.Status.IsSuccess());
@@ -179,10 +179,10 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.CreateAsync(owner, NewCreateDto("Persisted"), CancellationToken.None);
+        var result = await manager.Create(owner, NewCreateDto("Persisted"), CancellationToken.None);
 
         try {
-            var found = await manager.FindByIdAsync(owner, result.Value!.Id, CancellationToken.None);
+            var found = await manager.FindById(owner, result.Value!.Id, CancellationToken.None);
             Assert.IsNotNull(found);
             Assert.AreEqual("Persisted", found!.Name);
         } finally {
@@ -192,17 +192,17 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     }
 
     // -------------------------------------------------------------------------
-    // ValidateAsync
+    // Validate
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task ValidateAsync_ValidToken_ShouldReturnSuccess() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         try {
-            var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+            var result = await manager.Validate(created.Value!.PlainToken, CancellationToken.None);
             Assert.IsTrue(result.Status.IsSuccess());
             Assert.AreEqual(created.Value.Id, result.Value!.Id);
         } finally {
@@ -215,12 +215,12 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     public async Task ValidateAsync_TamperedToken_ShouldReturnForbidden() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var parts = created.Value!.PlainToken.Split('.');
         var tampered = $"{parts[0]}.{parts[1]}.{Base64UrlExtensions.Encode(RandomNumberGenerator.GetBytes(32))}";
 
         try {
-            var result = await manager.ValidateAsync(tampered, CancellationToken.None);
+            var result = await manager.Validate(tampered, CancellationToken.None);
             Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
         } finally {
             await DeleteSecretAsync(created.Value.Id);
@@ -232,10 +232,10 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     public async Task ValidateAsync_ExpiredToken_ShouldReturnForbidden() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(expiration: DateTime.UtcNow.AddSeconds(-1)), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(expiration: DateTime.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
         try {
-            var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+            var result = await manager.Validate(created.Value!.PlainToken, CancellationToken.None);
             Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
         } finally {
             await DeleteSecretAsync(created.Value?.Id ?? Guid.Empty);
@@ -250,26 +250,26 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var fakeOwner = new SecretOwner(Guid.NewGuid(), OwnerTypeCode.User, RandomNumberGenerator.GetBytes(32));
         var fakeToken = $"{Base64UrlExtensions.Encode(fakeOwner.Id.ToByteArray())}.{OwnerTypeCode.User}.{Base64UrlExtensions.Encode(RandomNumberGenerator.GetBytes(32))}";
 
-        var result = await manager.ValidateAsync(fakeToken, CancellationToken.None);
+        var result = await manager.Validate(fakeToken, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
 
     // -------------------------------------------------------------------------
-    // RevokeAsync
+    // Revoke
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task RevokeAsync_ExistingSecret_ShouldSucceedAndMakeTokenInvalid() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         try {
-            var revokeResult = await manager.RevokeAsync(owner, created.Value!.Id, CancellationToken.None);
+            var revokeResult = await manager.Revoke(owner, created.Value!.Id, CancellationToken.None);
             Assert.IsTrue(revokeResult.Status.IsSuccess());
 
-            var validateResult = await manager.ValidateAsync(created.Value.PlainToken, CancellationToken.None);
+            var validateResult = await manager.Validate(created.Value.PlainToken, CancellationToken.None);
             Assert.IsFalse(validateResult.Status.IsSuccess());
         } finally {
             // Secret already deleted by revoke, but cleanup user
@@ -283,7 +283,7 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var manager = BuildSecretManager();
 
         try {
-            var result = await manager.RevokeAsync(owner, Guid.NewGuid(), CancellationToken.None);
+            var result = await manager.Revoke(owner, Guid.NewGuid(), CancellationToken.None);
             Assert.AreEqual(ResponseStatus.NotFound, result.Status);
         } finally {
             await DeleteUserAsync(user);
@@ -295,14 +295,14 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var (user1, owner1) = await CreateUserWithKeyMaterialAsync();
         var (user2, owner2) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner1, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner1, NewCreateDto(), CancellationToken.None);
 
         try {
-            var result = await manager.RevokeAsync(owner2, created.Value!.Id, CancellationToken.None);
+            var result = await manager.Revoke(owner2, created.Value!.Id, CancellationToken.None);
             Assert.AreEqual(ResponseStatus.NotFound, result.Status);
 
             // Secret should still be valid for the correct owner
-            var validateResult = await manager.ValidateAsync(created.Value.PlainToken, CancellationToken.None);
+            var validateResult = await manager.Validate(created.Value.PlainToken, CancellationToken.None);
             Assert.IsTrue(validateResult.Status.IsSuccess());
         } finally {
             await DeleteSecretAsync(created.Value?.Id ?? Guid.Empty);
@@ -312,17 +312,17 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     }
 
     // -------------------------------------------------------------------------
-    // FindByIdAsync
+    // FindById
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task FindByIdAsync_ExistingSecret_ShouldReturnDto() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto("FindMe"), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto("FindMe"), CancellationToken.None);
 
         try {
-            var found = await manager.FindByIdAsync(owner, created.Value!.Id, CancellationToken.None);
+            var found = await manager.FindById(owner, created.Value!.Id, CancellationToken.None);
             Assert.IsNotNull(found);
             Assert.AreEqual(created.Value.Id, found!.Id);
             Assert.AreEqual("FindMe", found.Name);
@@ -337,10 +337,10 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var (user1, owner1) = await CreateUserWithKeyMaterialAsync();
         var (user2, owner2) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner1, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner1, NewCreateDto(), CancellationToken.None);
 
         try {
-            var found = await manager.FindByIdAsync(owner2, created.Value!.Id, CancellationToken.None);
+            var found = await manager.FindById(owner2, created.Value!.Id, CancellationToken.None);
             Assert.IsNull(found);
         } finally {
             await DeleteSecretAsync(created.Value?.Id ?? Guid.Empty);
@@ -350,17 +350,17 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     }
 
     // -------------------------------------------------------------------------
-    // GetSelectListAsync
+    // GetSelectList
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task GetSelectListAsync_ActiveSecret_ShouldAppearInList() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         try {
-            var list = await manager.GetSelectListAsync(owner, CancellationToken.None);
+            var list = await manager.GetSelectList(owner, CancellationToken.None);
             Assert.IsTrue(list.Any(item => item.Key == created.Value!.Id));
         } finally {
             await DeleteSecretAsync(created.Value?.Id ?? Guid.Empty);
@@ -369,21 +369,21 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     }
 
     // -------------------------------------------------------------------------
-    // GetPolicyAsync / SetPolicyAsync
+    // GetPolicy / SetPolicy
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task SetAndGetPolicyAsync_RoundTrip_ShouldReturnCorrectValues() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var policy = new IntTestPolicy { Scope = "read:write", MaxRequests = 250 };
 
         try {
-            var setResult = await manager.SetPolicyAsync(owner, created.Value!.Id, policy, CancellationToken.None);
+            var setResult = await manager.SetPolicy(owner, created.Value!.Id, policy, CancellationToken.None);
             Assert.IsTrue(setResult.Status.IsSuccess());
 
-            var retrieved = await manager.GetPolicyAsync<IntTestPolicy>(owner, created.Value.Id, CancellationToken.None);
+            var retrieved = await manager.GetPolicy<IntTestPolicy>(owner, created.Value.Id, CancellationToken.None);
             Assert.IsNotNull(retrieved);
             Assert.AreEqual("read:write", retrieved!.Scope);
             Assert.AreEqual(250, retrieved.MaxRequests);
@@ -397,10 +397,10 @@ public abstract class N2SecretManagerIntegrationTestsBase {
     public async Task GetPolicyAsync_NoPolicy_ShouldReturnNull() {
         var (user, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         try {
-            var result = await manager.GetPolicyAsync<IntTestPolicy>(owner, created.Value!.Id, CancellationToken.None);
+            var result = await manager.GetPolicy<IntTestPolicy>(owner, created.Value!.Id, CancellationToken.None);
             Assert.IsNull(result);
         } finally {
             await DeleteSecretAsync(created.Value?.Id ?? Guid.Empty);
@@ -418,27 +418,27 @@ public abstract class N2SecretManagerIntegrationTestsBase {
         var manager = BuildSecretManager();
 
         // Create
-        var createResult = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var createResult = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         Assert.IsTrue(createResult.Status.IsSuccess());
         var plainToken = createResult.Value!.PlainToken;
         var secretId = createResult.Value.Id;
 
         try {
             // Validate → success
-            var valid1 = await manager.ValidateAsync(plainToken, CancellationToken.None);
+            var valid1 = await manager.Validate(plainToken, CancellationToken.None);
             Assert.IsTrue(valid1.Status.IsSuccess());
 
             // Set a policy
-            await manager.SetPolicyAsync(owner, secretId, new IntTestPolicy { Scope = "admin" }, CancellationToken.None);
-            var policy = await manager.GetPolicyAsync<IntTestPolicy>(owner, secretId, CancellationToken.None);
+            await manager.SetPolicy(owner, secretId, new IntTestPolicy { Scope = "admin" }, CancellationToken.None);
+            var policy = await manager.GetPolicy<IntTestPolicy>(owner, secretId, CancellationToken.None);
             Assert.AreEqual("admin", policy!.Scope);
 
             // Revoke
-            var revokeResult = await manager.RevokeAsync(owner, secretId, CancellationToken.None);
+            var revokeResult = await manager.Revoke(owner, secretId, CancellationToken.None);
             Assert.IsTrue(revokeResult.Status.IsSuccess());
 
             // Validate after revoke → forbidden
-            var valid2 = await manager.ValidateAsync(plainToken, CancellationToken.None);
+            var valid2 = await manager.Validate(plainToken, CancellationToken.None);
             Assert.IsFalse(valid2.Status.IsSuccess());
         } finally {
             // Secret already revoked; only clean up user

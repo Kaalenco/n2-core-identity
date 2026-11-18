@@ -1,5 +1,5 @@
 # Trunk pipeline — runs on every push to trunk.
-# Stages: Build and Test → VersionCheck → (Code Analysis ∥ Integration Tests ∥ Long-Running Tests) → Publish NuGet
+# Stages: Build and Test → VersionCheck → (Code Analysis ∥ Long-Running Tests) → Publish NuGet
 #
 # No Library variable groups or pipeline-level secrets required.
 # NuGet packages are pushed to the Azure Artifacts feed named by `artifactsFeedName`.
@@ -8,10 +8,6 @@
 # Required Azure DevOps setup:
 #   Artifacts → vault-packages → Feed settings → Permissions:
 #     Add "N2 Vault services Build Service (gjkaal)" with role Contributor
-#
-#   Pipeline variable (Pipelines → Edit → Variables, not in YAML):
-#     MYSQL_INTEGRATION_TESTS=true   to enable the Integration Tests stage
-#     (absent or any other value → stage is skipped)
 #
 #   Pipeline setting: enable "Allow scripts to access the OAuth token"
 #   (required for the run-retention steps and VersionCheck).
@@ -45,9 +41,9 @@ stages:
     displayName: Build and Unit Tests
     steps:
     - task: UseDotNet@2
-      displayName: Use .NET 8.0
+      displayName: Use .NET 11.0
       inputs:
-        version: 8.0.x
+        version: 11.0.x
 
     - task: UseDotNet@2
       displayName: Use .NET 10.0
@@ -180,9 +176,9 @@ stages:
     displayName: Timing and security tests
     steps:
     - task: UseDotNet@2
-      displayName: Use .NET 8.0
+      displayName: Use .NET 11.0
       inputs:
-        version: 8.0.x
+        version: 11.0.x
 
     - task: UseDotNet@2
       displayName: Use .NET 10.0
@@ -233,9 +229,9 @@ stages:
       COVERAGE_DIR: '$(Agent.TempDirectory)'
     steps:
     - task: UseDotNet@2
-      displayName: Use .NET 8.0
+      displayName: Use .NET 11.0
       inputs:
-        version: 8.0.x
+        version: 11.0.x
 
     - task: UseDotNet@2
       displayName: Use .NET 10.0
@@ -267,14 +263,14 @@ stages:
         projects: 'src/**/*.UnitTests.csproj'
         arguments: >-
           --no-build
-          --framework net8.0
+          --framework net10.0
           --verbosity normal
           --filter "TestCategory!=Integration&TestCategory!=LongRunning"
           --collect:"XPlat Code Coverage"
       env:
         Logging__LogLevel__Default: Error
 
-    - script: dotnet tool install --global dotnet-reportgenerator-globaltool
+    - script: dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.6.0
       displayName: Install ReportGenerator
 
     - script: |
@@ -293,7 +289,7 @@ stages:
         summaryFileLocation: reports/coverage/Cobertura.xml
         reportDirectory: reports/coverage
 
-    - bash: pip install lizard
+    - bash: pip install lizard==1.25.0
       displayName: Install lizard
 
     - bash: |
@@ -317,57 +313,19 @@ stages:
         PathtoPublish: reports/
         ArtifactName: code-analysis
 
-# ── Stage 5: Integration Tests ────────────────────────────────────────────────
-# Enable by setting pipeline variable MYSQL_INTEGRATION_TESTS=true.
-- stage: IntegrationTests
-  displayName: Integration Tests
-  dependsOn: CI
-  condition: and(succeeded('CI'), eq(variables['MYSQL_INTEGRATION_TESTS'], 'true'))
-  jobs:
-  - job: MySqlIntegration
-    displayName: MySQL Integration Tests
-    steps:
-    - script: |
-        docker compose -f src/docker-compose.integration.yml up \
-          --build \
-          --exit-code-from integration-tests \
-          --abort-on-container-exit
-      displayName: Run MySQL integration tests
-      env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-
-    - script: docker compose -f src/docker-compose.integration.yml logs integration-tests
-      displayName: Show integration test logs
-      condition: always()
-
-    - task: PublishTestResults@2
-      displayName: Publish integration test results
-      condition: always()
-      inputs:
-        testResultsFormat: VSTest
-        testResultsFiles: 'src/test-results/*.trx'
-        testRunTitle: Integration Tests (MySQL)
-
-    - script: docker compose -f src/docker-compose.integration.yml down --volumes
-      displayName: Tear down MySQL
-      condition: always()
-
-# ── Stage 6: Publish NuGet Package ───────────────────────────────────────────
-# Runs only when CI passed, the version is new, long-running tests passed, and
-# integration tests either passed or were skipped.
+# ── Stage 5: Publish NuGet Package ───────────────────────────────────────────
+# Runs only when CI passed, the version is new and long-running tests passed.
 - stage: Publish
   displayName: Publish NuGet Package
   dependsOn:
   - CI
   - VersionCheck
   - LongRunningTests
-  - IntegrationTests
   condition: |
     and(
       succeeded('CI'),
       eq(dependencies.VersionCheck.outputs['CheckVersion.versionCheck.isNewVersion'], 'true'),
-      succeeded('LongRunningTests'),
-      in(dependencies.IntegrationTests.result, 'Succeeded', 'Skipped')
+      succeeded('LongRunningTests')
     )
   jobs:
   - job: PublishNuGet

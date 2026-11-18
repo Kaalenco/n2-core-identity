@@ -240,19 +240,19 @@ internal sealed class InMemoryIdentityContextFactory : IIdentityContextFactory {
         this.context = context;
     }
 
-    public Task<IIdentityContext> CreateAsync(string catalog) {
+    public Task<IIdentityContext> Create(string catalog, CancellationToken cancellationToken) {
         // Return a non-disposing wrapper to prevent premature disposal
         return Task.FromResult<IIdentityContext>(new NonDisposingIdentityContextWrapper(context));
     }
 
-    public Task<IIdentityContext> CreateAsync() {
+    public Task<IIdentityContext> Create(CancellationToken cancellationToken) {
         // Return a non-disposing wrapper to prevent premature disposal
         return Task.FromResult<IIdentityContext>(new NonDisposingIdentityContextWrapper(context));
     }
 
-    public Task<IIdentityContext> CreateAsync(DatabaseProvider provider) => CreateAsync();
+    public Task<IIdentityContext> Create(DatabaseProvider provider, CancellationToken cancellationToken) => Create(cancellationToken);
 
-    public Task<IIdentityContext> CreateAsync(DatabaseProvider provider, string connectionName) => CreateAsync(connectionName);
+    public Task<IIdentityContext> Create(DatabaseProvider provider, string connectionName, CancellationToken cancellationToken) => Create(connectionName, cancellationToken);
 }
 
 /// <summary>
@@ -689,10 +689,10 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<List<KeyValuePair<string, string>>> GetSelectListAsync(string tableName) {
-        await semaphore.WaitAsync(CancellationToken.None);
+    public async Task<List<KeyValuePair<string, string>>> GetSelectList(string tableName, CancellationToken cancellationToken) {
+        await semaphore.WaitAsync(cancellationToken);
         try {
-            return await innerContext.GetSelectListAsync(tableName);
+            return await innerContext.GetSelectList(tableName, cancellationToken);
         } finally {
             semaphore.Release();
         }
@@ -725,28 +725,28 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task<T?> FindRecordAsync<T>(Guid publicId) where T : class {
-        await semaphore.WaitAsync(CancellationToken.None);
+    public async Task<T?> FindRecord<T>(Guid publicId, CancellationToken cancellationToken) where T : class {
+        await semaphore.WaitAsync(cancellationToken);
         try {
-            return await innerContext.FindRecordAsync<T>(publicId);
+            return await innerContext.FindRecord<T>(publicId, cancellationToken);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<(ResponseStatus status, string message)> DeleteAsync<T>(Guid publicId) where T : class {
-        await semaphore.WaitAsync(CancellationToken.None);
+    public async Task<(ResponseStatus status, string message)> Delete<T>(Guid publicId, CancellationToken cancellationToken) where T : class {
+        await semaphore.WaitAsync(cancellationToken);
         try {
-            return await innerContext.DeleteAsync<T>(publicId);
+            return await innerContext.Delete<T>(publicId, cancellationToken);
         } finally {
             semaphore.Release();
         }
     }
 
-    public async Task<(ResponseStatus status, string? message)> Complete() {
-        await semaphore.WaitAsync(CancellationToken.None);
+    public async Task<(ResponseStatus status, string? message)> Complete(CancellationToken cancellationToken) {
+        await semaphore.WaitAsync(cancellationToken);
         try {
-            return await innerContext.Complete();
+            return await innerContext.Complete(cancellationToken);
         } finally {
             semaphore.Release();
         }
@@ -792,10 +792,10 @@ internal sealed class NonDisposingIdentityContextWrapper : IIdentityContext {
         }
     }
 
-    public async Task RefreshTokenRevokeAll(Guid userId, CancellationToken ct) {
+    public async Task<int> RefreshTokenRevokeAll(Guid userId, CancellationToken ct) {
         await semaphore.WaitAsync(ct);
         try {
-            await innerContext.RefreshTokenRevokeAll(userId, ct);
+            return await innerContext.RefreshTokenRevokeAll(userId, ct);
         } finally {
             semaphore.Release();
         }

@@ -19,7 +19,7 @@ public class SecretCreateResultDto {
     /// secret value's size, so an observer cannot infer the secret value from the token length.
     /// </para>
     /// <para>
-    /// The owner identity embedded in the token allows <c>ISecretManager.ValidateAsync</c>
+    /// The owner identity embedded in the token allows <c>ISecretManager.Validate</c>
     /// to resolve the correct owner and its key material without any additional context from the caller.
     /// </para>
     /// </remarks>

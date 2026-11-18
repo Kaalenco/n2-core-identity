@@ -59,16 +59,16 @@ public class UsingN2UserManager {
         CancellationToken ct = new();
         UserLogin userInfo = new() { Password = "secret", Username = "admin@email.com" };
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var userMessage = await userManager.FindByEmailAsync(userInfo.Username, ct);
+        var userMessage = await userManager.FindByEmail(userInfo.Username, ct);
         var user = userMessage.Value;
         if (user != null) {
-            var isAdminResponse = await userManager.IsInRoleAsync(user, SystemRoles.Publisher, ct);
+            var isAdminResponse = await userManager.IsInRole(user, SystemRoles.Publisher, ct);
             var isAdmin = isAdminResponse.Status == ResponseStatus.Success;
             if (isAdmin) {
-                _ = await userManager.RemoveFromRoleAsync(user, SystemRoles.Publisher, ct);
+                _ = await userManager.RemoveFromRole(user, SystemRoles.Publisher, ct);
             }
 
-            result = await userManager.AddToRoleAsync(user, SystemRoles.Publisher, ct);
+            result = await userManager.AddToRole(user, SystemRoles.Publisher, ct);
         }
         Assert.IsNotNull(result);
         Assert.IsTrue(result.Status.IsSuccess());
@@ -77,7 +77,7 @@ public class UsingN2UserManager {
     [TestMethod]
     public async Task TestChangeLogging_ConcurrentWrites_ShouldBeThreadSafe() {
         var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
-        using var context = await factory.CreateAsync("IdentityDb");
+        using var context = await factory.Create("IdentityDb", CancellationToken.None);
 
         // Clear existing logs by reading count
         var initialCount = context.ChangeLogs.Count();
@@ -113,7 +113,7 @@ public class UsingN2UserManager {
     [TestMethod]
     public async Task TestChangeLogging_ShouldManageQueueSize() {
         var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
-        using var context = await factory.CreateAsync("IdentityDb");
+        using var context = await factory.Create("IdentityDb", CancellationToken.None);
 
         // Verify initial state
         var initialCount = context.ChangeLogs.Count();
@@ -147,17 +147,17 @@ public class UsingN2UserManager {
         using var setupManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
 
         // Create role
-        await setupManager.CreateRoleAsync(roleName, ct);
+        await setupManager.CreateRole(roleName, ct);
 
         // Create test user
         ApplicationUser user = new() {
             UserName = username,
             Email = username
         };
-        var createResult = await setupManager.CreateAsync(user, password, ct);
+        var createResult = await setupManager.Create(user, password, ct);
         Assert.IsTrue(createResult.Status.IsSuccess());
 
-        var userResponse = await setupManager.FindByNameAsync(username, ct);
+        var userResponse = await setupManager.FindByName(username, ct);
         Assert.IsNotNull(userResponse.Value);
         var testUser = userResponse.Value!;
 
@@ -168,9 +168,9 @@ public class UsingN2UserManager {
         for (var i = 0; i < concurrentAssignments; i++) {
             tasks.Add(Task.Run(async () => {
                 using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-                var usr = await userManager.FindByIdAsync(testUser.Id, ct);
+                var usr = await userManager.FindById(testUser.Id, ct);
                 if (usr.Value != null) {
-                    return await userManager.AddToRoleAsync(usr.Value, roleName, ct);
+                    return await userManager.AddToRole(usr.Value, roleName, ct);
                 }
                 return RequestResult.NotFound();
             }));
@@ -183,7 +183,7 @@ public class UsingN2UserManager {
             "All concurrent role assignments should complete successfully");
 
         // Verify user has the role
-        var isInRole = await setupManager.IsInRoleAsync(testUser, roleName, ct);
+        var isInRole = await setupManager.IsInRole(testUser, roleName, ct);
         Assert.AreEqual(ResponseStatus.Success, isInRole.Status);
 
         // No cleanup needed - each test class gets a fresh in-memory database
@@ -206,7 +206,7 @@ public class UsingN2UserManager {
                     UserName = username,
                     Email = username
                 };
-                return await userManager.CreateAsync(user, password, ct);
+                return await userManager.Create(user, password, ct);
             }));
         }
 
@@ -238,11 +238,11 @@ public class UsingN2UserManager {
             UserName = username,
             Email = username
         };
-        var createResult = await setupManager.CreateAsync(user, password, ct);
+        var createResult = await setupManager.Create(user, password, ct);
         Assert.IsTrue(createResult.Status.IsSuccess());
 
         // Get the created user
-        var userResponse = await setupManager.FindByNameAsync(username, ct);
+        var userResponse = await setupManager.FindByName(username, ct);
         Assert.IsNotNull(userResponse.Value);
         var userId = userResponse.Value!.Id;
 
@@ -254,7 +254,7 @@ public class UsingN2UserManager {
             var index = i;
             tasks.Add(Task.Run(async () => {
                 using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-                var usr = await userManager.FindByIdAsync(userId, ct);
+                var usr = await userManager.FindById(userId, ct);
                 if (usr.Value != null) {
                     usr.Value.FirstName = $"FirstName{index}";
                     usr.Value.LastName = $"LastName{index}";
@@ -311,7 +311,7 @@ public class UsingN2UserManager {
                 UserName = username1,
                 Email = username1
             };
-            return await userManager.CreateAsync(user, password, ct);
+            return await userManager.Create(user, password, ct);
         });
 
         var task2 = Task.Run(async () => {
@@ -320,7 +320,7 @@ public class UsingN2UserManager {
                 UserName = username2,
                 Email = username2
             };
-            return await userManager.CreateAsync(user, password, ct);
+            return await userManager.Create(user, password, ct);
         });
 
         var results = await Task.WhenAll(task1, task2);
@@ -349,21 +349,21 @@ public class UsingN2UserManager {
                 UserName = username,
                 Email = username
             };
-            var result = await userManager.CreateAsync(user, "TestPassword1!", ct);
+            var result = await userManager.Create(user, "TestPassword1!", ct);
             Assert.IsTrue(result.Status.IsSuccess(), $"User {i} creation should succeed");
         }
 
         // Verify all users exist
         foreach (var username in usernames) {
-            var userResponse = await userManager.FindByNameAsync(username, ct);
+            var userResponse = await userManager.FindByName(username, ct);
             Assert.IsNotNull(userResponse.Value, $"User {username} should exist");
         }
 
         // Delete all users
         foreach (var username in usernames) {
-            var userResponse = await userManager.FindByNameAsync(username, ct);
+            var userResponse = await userManager.FindByName(username, ct);
             if (userResponse.Value != null) {
-                var deleteResult = await userManager.DeleteAsync(userResponse.Value, ct);
+                var deleteResult = await userManager.Delete(userResponse.Value, ct);
                 Assert.IsTrue(deleteResult.Status.IsSuccess() || deleteResult.Status == ResponseStatus.NoContent,
                     $"User {username} deletion should succeed");
             }
@@ -371,7 +371,7 @@ public class UsingN2UserManager {
 
         // Verify all users are deleted
         foreach (var username in usernames) {
-            var userResponse = await userManager.FindByNameAsync(username, ct);
+            var userResponse = await userManager.FindByName(username, ct);
             Assert.IsNull(userResponse.Value, $"User {username} should be deleted");
         }
     }
@@ -381,7 +381,7 @@ public class UsingN2UserManager {
         CancellationToken ct = new();
         UserLogin userInfo = new() { Password = "secret", Username = "admin@email.com" };
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var user = await userManager.FindByEmailAsync(userInfo.Username, ct);
+        var user = await userManager.FindByEmail(userInfo.Username, ct);
         Assert.IsNotNull(user);
     }
 
@@ -391,10 +391,10 @@ public class UsingN2UserManager {
         CancellationToken ct = new();
         UserLogin userInfo = new() { Password = "secret", Username = "admin" };
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var userResponse = await userManager.FindByNameAsync(userInfo.Username, ct);
+        var userResponse = await userManager.FindByName(userInfo.Username, ct);
         var user = userResponse.Value;
         if (user != null) {
-            tokenResult = await userManager.GenerateConfirmationTokenAsync(user, ct);
+            tokenResult = await userManager.GenerateConfirmationToken(user, ct);
         }
         Assert.IsNotNull(tokenResult);
         Console.WriteLine(tokenResult);
@@ -414,11 +414,11 @@ public class UsingN2UserManager {
         CancellationToken ct = new();
         var role = "TestRole";
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var roleExists = await userManager.RoleExistsAsync(role, ct);
+        var roleExists = await userManager.RoleExists(role, ct);
         if (roleExists) {
-            await userManager.RemoveRoleAsync(role, ct);
+            await userManager.RemoveRole(role, ct);
         }
-        var roleResult = await userManager.CreateRoleAsync(role, ct);
+        var roleResult = await userManager.CreateRole(role, ct);
         Assert.IsNotNull(roleResult);
         Assert.IsTrue(roleResult.Status.IsSuccess());
     }
@@ -428,7 +428,7 @@ public class UsingN2UserManager {
         CancellationToken ct = new();
         var role = SystemRoles.SysAdmin;
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var roleExists = await userManager.RoleExistsAsync(role, ct);
+        var roleExists = await userManager.RoleExists(role, ct);
         Assert.IsTrue(roleExists);
     }
 
@@ -437,10 +437,10 @@ public class UsingN2UserManager {
         CancellationToken ct = new();
         UserLogin userInfo = new() { Password = "secret", Username = "admin@email.com" };
         var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var userResponse = await userManager.FindByEmailAsync(userInfo.Username, ct);
+        var userResponse = await userManager.FindByEmail(userInfo.Username, ct);
         var user = userResponse.Value;
         if (user != null) {
-            var isAdminResponse = await userManager.IsInRoleAsync(user, SystemRoles.SysAdmin, ct);
+            var isAdminResponse = await userManager.IsInRole(user, SystemRoles.SysAdmin, ct);
             Assert.AreEqual(ResponseStatus.Success, isAdminResponse.Status);
         }
     }
@@ -453,15 +453,15 @@ public class UsingN2UserManager {
             Password = "TestPassword1!"
         };
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var userResponse = await userManager.FindByNameAsync(userInfo.Username, ct);
+        var userResponse = await userManager.FindByName(userInfo.Username, ct);
         var user = userResponse.Value;
         if (user != null) {
-            await userManager.DeleteAsync(user, ct);
+            await userManager.Delete(user, ct);
         }
         user = new ApplicationUser();
-        var setUserNameResult = await userManager.SetUserNameAsync(user, userInfo.Username, ct);
-        var setEmailNameResult = await userManager.SetEmailAsync(user, userInfo.Username, ct);
-        var createUserResult = await userManager.CreateAsync(user, userInfo.Password, ct);
+        var setUserNameResult = await userManager.SetUserName(user, userInfo.Username, ct);
+        var setEmailNameResult = await userManager.SetEmail(user, userInfo.Username, ct);
+        var createUserResult = await userManager.Create(user, userInfo.Password, ct);
 
         Assert.IsNotNull(setUserNameResult);
         Assert.IsNotNull(setEmailNameResult);
@@ -478,18 +478,18 @@ public class UsingN2UserManager {
         CancellationToken ct = new();
         UserLogin userInfo = new() { Password = "secret", Username = "admin", };
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var userResponse = await userManager.FindByNameAsync(userInfo.Username, ct);
+        var userResponse = await userManager.FindByName(userInfo.Username, ct);
         var user = userResponse.Value;
 
         Assert.IsNotNull(user);
         user.MfaType = MultiFactorType.Email;
 
         if (user != null) {
-            var tokenResponse = await userManager.GenerateConfirmationTokenAsync(user, ct);
+            var tokenResponse = await userManager.GenerateConfirmationToken(user, ct);
             Assert.IsNotNull(tokenResponse);
             var tokenResult = tokenResponse.Value;
             if (!string.IsNullOrEmpty(tokenResult)) {
-                result = await userManager.ConfirmEmailAsync(user, tokenResult, ct);
+                result = await userManager.ConfirmEmail(user, tokenResult, ct);
             }
         }
         Assert.IsNotNull(result);
@@ -506,7 +506,7 @@ public class UsingN2UserManager {
         var expiredToken = GenerateExpiredToken(user.Email, user.SecurityStamp, daysOld: 1);
 
         // Act
-        var result = await userManager.ValidateMultifactorAsync(user, expiredToken, CancellationToken.None);
+        var result = await userManager.ValidateMultifactor(user, expiredToken, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Unauthorized, result.Status);
@@ -521,7 +521,7 @@ public class UsingN2UserManager {
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
 
         // Act
-        var result = await userManager.ValidateMultifactorAsync(user, invalidToken, CancellationToken.None);
+        var result = await userManager.ValidateMultifactor(user, invalidToken, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Unauthorized, result.Status);
@@ -537,7 +537,7 @@ public class UsingN2UserManager {
         var user = await CreateUserWithEmailMFA();
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         // Act
-        var result = await userManager.ValidateMultifactorAsync(user, token, CancellationToken.None);
+        var result = await userManager.ValidateMultifactor(user, token, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Unauthorized, result.Status, $"Failed for token: {token}");
@@ -548,11 +548,11 @@ public class UsingN2UserManager {
         // Arrange
         var user = await CreateUserWithEmailMFA();
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var validToken = await userManager.GenerateConfirmationTokenAsync(user, CancellationToken.None);
+        var validToken = await userManager.GenerateConfirmationToken(user, CancellationToken.None);
         var tamperedToken = TamperTokenHash(validToken); // Change one character in hash
 
         // Act
-        var result = await userManager.ValidateMultifactorAsync(user, tamperedToken, CancellationToken.None);
+        var result = await userManager.ValidateMultifactor(user, tamperedToken, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Unauthorized, result.Status);
@@ -563,10 +563,10 @@ public class UsingN2UserManager {
         // Arrange
         var user = await CreateUserWithEmailMFA();
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
-        var validToken = await userManager.GenerateConfirmationTokenAsync(user, CancellationToken.None);
+        var validToken = await userManager.GenerateConfirmationToken(user, CancellationToken.None);
 
         // Act
-        var result = await userManager.ValidateMultifactorAsync(user, validToken.Value!, CancellationToken.None);
+        var result = await userManager.ValidateMultifactor(user, validToken.Value!, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Success, result.Status);
@@ -580,7 +580,7 @@ public class UsingN2UserManager {
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
 
         // Act
-        var result = await userManager.ValidateAsync(user, password, CancellationToken.None);
+        var result = await userManager.Validate(user, password, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Success, result.Status);
@@ -594,7 +594,7 @@ public class UsingN2UserManager {
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
 
         // Act
-        var result = await userManager.ValidateAsync(user, wrongPassword, CancellationToken.None);
+        var result = await userManager.Validate(user, wrongPassword, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.NotAccepted, result.Status);
@@ -646,13 +646,13 @@ public class UsingN2UserManager {
             MfaConfirmed = true
         };
 
-        var createResult = await userManager.CreateAsync(user, password, ct);
+        var createResult = await userManager.Create(user, password, ct);
         if (!createResult.Status.IsSuccess()) {
             throw new InvalidOperationException("Failed to create MFA user for test.");
         }
 
         // Retrieve the user to ensure it is tracked by the context
-        var userResponse = await userManager.FindByNameAsync(username, ct);
+        var userResponse = await userManager.FindByName(username, ct);
         if (userResponse.Value == null) {
             throw new InvalidOperationException("Failed to retrieve created MFA user.");
         }
@@ -677,13 +677,13 @@ public class UsingN2UserManager {
             MfaConfirmed = true
         };
 
-        var createResult = await userManager.CreateAsync(user, password, ct);
+        var createResult = await userManager.Create(user, password, ct);
         if (!createResult.Status.IsSuccess()) {
             throw new InvalidOperationException("Failed to create MFA user for test.");
         }
 
         // Retrieve the user to ensure it is tracked by the context
-        var userResponse = await userManager.FindByNameAsync(username, ct);
+        var userResponse = await userManager.FindByName(username, ct);
         if (userResponse.Value == null) {
             throw new InvalidOperationException("Failed to retrieve created MFA user.");
         }
@@ -702,18 +702,18 @@ public class UsingN2UserManager {
     private async Task<ApplicationUser> CreateUserWithKeyMaterialAsync(string userName, byte[] keyMaterial) {
         using var userManager = serviceProvider.GetRequiredService<IUserManager<ApplicationUser>>();
         ApplicationUser user = new() { UserName = userName, Email = $"{userName}@test.com" };
-        var result = await userManager.CreateAsync(user, "TestPassword1!", CancellationToken.None);
+        var result = await userManager.Create(user, "TestPassword1!", CancellationToken.None);
         if (!result.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to create user: {result.Message}");
         }
-        var found = (await userManager.FindByNameAsync(userName, CancellationToken.None)).Value
+        var found = (await userManager.FindByName(userName, CancellationToken.None)).Value
             ?? throw new InvalidOperationException("Failed to retrieve created user.");
 
         var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
-        using var ctx = await factory.CreateAsync("IdentityDb");
+        using var ctx = await factory.Create("IdentityDb", CancellationToken.None);
         var record = await ctx.UserFindRecord(found.Id, CancellationToken.None);
         record!.SecretKeyMaterial = keyMaterial;
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
 
         return found;
     }

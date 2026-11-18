@@ -30,7 +30,7 @@ sequenceDiagram
     participant DB as N2IdentityContext
 
     C->>A: POST /auth/login<br/>{username, password}
-    A->>Auth: AuthenticateAsync(username, password)
+    A->>Auth: Authenticate(username, password)
     Auth->>DB: find user, validate password,<br/>load tenant memberships
     DB-->>Auth: ApplicationUser + memberships
     Auth-->>A: IUserContext
@@ -63,7 +63,7 @@ sequenceDiagram
     participant DB as N2IdentityContext
 
     C->>A: POST /auth/login<br/>{username, password}
-    A->>Auth: AuthenticateAsync(username, password)
+    A->>Auth: Authenticate(username, password)
     Auth->>DB: find user, validate password
     DB-->>Auth: ApplicationUser (MFA configured)
     Auth-->>A: IUserContext (MFA required)
@@ -131,7 +131,7 @@ sequenceDiagram
             Note over Token,DB: atomic operation
             Token->>DB: RefreshTokenRevoke(old)<br/>RefreshTokenAdd(new)
             DB-->>Token: saved
-            Token->>UM: GetTenantMembershipsAsync(user)
+            Token->>UM: GetTenantMemberships(user)
             UM-->>Token: memberships
             Token->>Token: GenerateWebToken(userContext)
             Token->>Cache: store result (2 s TTL)

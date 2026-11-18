@@ -49,7 +49,7 @@ public class UsingN2TenantManager {
     private async Task<ApplicationTenant> CreateTenantAsync(string name, string email = "admin@acme.com") {
         var tenant = NewTenant(name, email);
         var manager = BuildTenantManager();
-        var result = await manager.CreateAsync(tenant, CancellationToken.None);
+        var result = await manager.Create(tenant, CancellationToken.None);
         if (!result.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to seed tenant: {result.Message}");
         }
@@ -65,16 +65,16 @@ public class UsingN2TenantManager {
             UserName = userName,
             Email = $"{userName}@test.com"
         };
-        var result = await userManager.CreateAsync(user, "TestPassword1!", CancellationToken.None);
+        var result = await userManager.Create(user, "TestPassword1!", CancellationToken.None);
         if (!result.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to seed user: {result.Message}");
         }
-        var found = await userManager.FindByNameAsync(userName, CancellationToken.None);
+        var found = await userManager.FindByName(userName, CancellationToken.None);
         return found.Value ?? throw new InvalidOperationException("Failed to retrieve created user.");
     }
 
     // -------------------------------------------------------------------------
-    // CreateAsync
+    // Create
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -82,7 +82,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         var tenant = NewTenant($"New Tenant {Guid.NewGuid()}");
 
-        var result = await manager.CreateAsync(tenant, CancellationToken.None);
+        var result = await manager.Create(tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
     }
@@ -94,10 +94,10 @@ public class UsingN2TenantManager {
         var tenant = NewTenant(uniqueName, "  Admin@NormTest.com  ");
         tenant.Name = $"  {uniqueName}  "; // add whitespace to test trimming
 
-        var result = await manager.CreateAsync(tenant, CancellationToken.None);
+        var result = await manager.Create(tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByNameAsync(uniqueName, CancellationToken.None);
+        var found = await manager.FindByName(uniqueName, CancellationToken.None);
         Assert.IsNotNull(found);
         Assert.AreEqual(uniqueName.ToUpperInvariant(), found!.NormalizedName);
         Assert.AreEqual("ADMIN@NORMTEST.COM", found.NormalizedEmail);
@@ -111,13 +111,13 @@ public class UsingN2TenantManager {
         // Use the same normalized name
         var duplicate = NewTenant(tenant.Name!);
         duplicate.NormalizedName = tenant.NormalizedName;
-        var result = await manager.CreateAsync(duplicate, CancellationToken.None);
+        var result = await manager.Create(duplicate, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotAcceptable, result.Status);
     }
 
     // -------------------------------------------------------------------------
-    // DeleteAsync
+    // Delete
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -125,10 +125,10 @@ public class UsingN2TenantManager {
         var tenant = await CreateTenantAsync($"Delete Me {Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        var result = await manager.DeleteAsync(tenant, CancellationToken.None);
+        var result = await manager.Delete(tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(tenant.Id, CancellationToken.None);
+        var found = await manager.FindById(tenant.Id, CancellationToken.None);
         Assert.IsNull(found);
     }
 
@@ -138,7 +138,7 @@ public class UsingN2TenantManager {
         var ghost = NewTenant("Ghost");
         // Id not seeded in DB
 
-        var result = await manager.DeleteAsync(ghost, CancellationToken.None);
+        var result = await manager.Delete(ghost, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -150,11 +150,11 @@ public class UsingN2TenantManager {
         badTenant.Id = Guid.Empty;
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.DeleteAsync(badTenant, CancellationToken.None));
+            () => manager.Delete(badTenant, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // UpdateAsync
+    // Update
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -166,10 +166,10 @@ public class UsingN2TenantManager {
         tenant.AdminEmail = "new@email.com";
         tenant.ContactInfo = "updated contact";
 
-        var result = await manager.UpdateAsync(tenant, CancellationToken.None);
+        var result = await manager.Update(tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(tenant.Id, CancellationToken.None);
+        var found = await manager.FindById(tenant.Id, CancellationToken.None);
         Assert.IsNotNull(found);
         Assert.AreEqual("After Update", found!.Name);
         Assert.AreEqual("AFTER UPDATE", found.NormalizedName);
@@ -183,7 +183,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         var ghost = NewTenant("Ghost");
 
-        var result = await manager.UpdateAsync(ghost, CancellationToken.None);
+        var result = await manager.Update(ghost, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -195,18 +195,18 @@ public class UsingN2TenantManager {
         tenant.Name = "  "; // whitespace only
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => manager.UpdateAsync(tenant, CancellationToken.None));
+            () => manager.Update(tenant, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // FindByIdAsync
+    // FindById
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task FindByIdAsync_ExistingTenant_ShouldReturn() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.TenantGuid, found!.Id);
@@ -216,7 +216,7 @@ public class UsingN2TenantManager {
     public async Task FindByIdAsync_UnknownId_ShouldReturnNull() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByIdAsync(Guid.NewGuid(), CancellationToken.None);
+        var found = await manager.FindById(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsNull(found);
     }
@@ -226,18 +226,18 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.FindByIdAsync(Guid.Empty, CancellationToken.None));
+            () => manager.FindById(Guid.Empty, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // FindByNameAsync
+    // FindByName
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task FindByNameAsync_ExistingTenant_ShouldReturn() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByNameAsync("Test Tenant", CancellationToken.None);
+        var found = await manager.FindByName("Test Tenant", CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.TenantGuid, found!.Id);
@@ -247,7 +247,7 @@ public class UsingN2TenantManager {
     public async Task FindByNameAsync_NormalizesInput_ShouldFindWithMixedCase() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByNameAsync("  test tenant  ", CancellationToken.None);
+        var found = await manager.FindByName("  test tenant  ", CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.TenantGuid, found!.Id);
@@ -257,20 +257,20 @@ public class UsingN2TenantManager {
     public async Task FindByNameAsync_UnknownName_ShouldReturnNull() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByNameAsync("Does Not Exist XYZ", CancellationToken.None);
+        var found = await manager.FindByName("Does Not Exist XYZ", CancellationToken.None);
 
         Assert.IsNull(found);
     }
 
     // -------------------------------------------------------------------------
-    // FindByEmailAsync
+    // FindByEmail
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task FindByEmailAsync_ExistingEmail_ShouldReturn() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByEmailAsync("admin@testtenant.com", CancellationToken.None);
+        var found = await manager.FindByEmail("admin@testtenant.com", CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.TenantGuid, found!.Id);
@@ -280,7 +280,7 @@ public class UsingN2TenantManager {
     public async Task FindByEmailAsync_NormalizesInput_ShouldFindWithMixedCase() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByEmailAsync("  ADMIN@TestTenant.COM  ", CancellationToken.None);
+        var found = await manager.FindByEmail("  ADMIN@TestTenant.COM  ", CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.TenantGuid, found!.Id);
@@ -290,27 +290,27 @@ public class UsingN2TenantManager {
     public async Task FindByEmailAsync_UnknownEmail_ShouldReturnNull() {
         var manager = BuildTenantManager();
 
-        var found = await manager.FindByEmailAsync("nobody@nowhere.com", CancellationToken.None);
+        var found = await manager.FindByEmail("nobody@nowhere.com", CancellationToken.None);
 
         Assert.IsNull(found);
     }
 
     // -------------------------------------------------------------------------
-    // GetTenantsAsync
+    // GetTenants
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task GetTenantsAsync_ShouldReturnSeededTenants() {
         var manager = BuildTenantManager();
 
-        var list = await manager.GetTenantsAsync(CancellationToken.None);
+        var list = await manager.GetTenants(CancellationToken.None);
 
         Assert.IsNotNull(list);
         Assert.IsGreaterThanOrEqualTo(2, list.Count, "At least the two seeded tenants should be returned");
     }
 
     // -------------------------------------------------------------------------
-    // LockAsync / UnlockAsync
+    // Lock / Unlock
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -318,10 +318,10 @@ public class UsingN2TenantManager {
         var tenant = await CreateTenantAsync($"To Lock {Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        var result = await manager.LockAsync(tenant, CancellationToken.None);
+        var result = await manager.Lock(tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(tenant.Id, CancellationToken.None);
+        var found = await manager.FindById(tenant.Id, CancellationToken.None);
         Assert.IsTrue(found!.IsLocked);
     }
 
@@ -329,7 +329,7 @@ public class UsingN2TenantManager {
     public async Task LockAsync_NonExistentTenant_ShouldFail() {
         var manager = BuildTenantManager();
 
-        var result = await manager.LockAsync(NewTenant("Ghost"), CancellationToken.None);
+        var result = await manager.Lock(NewTenant("Ghost"), CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -337,14 +337,14 @@ public class UsingN2TenantManager {
     [TestMethod]
     public async Task UnlockAsync_LockedTenant_ShouldSetIsLockedFalse() {
         var manager = BuildTenantManager();
-        var lockedTenant = await manager.FindByIdAsync(TestContext.LockedTenantGuid, CancellationToken.None);
+        var lockedTenant = await manager.FindById(TestContext.LockedTenantGuid, CancellationToken.None);
         Assert.IsNotNull(lockedTenant);
         Assert.IsTrue(lockedTenant!.IsLocked);
 
-        var result = await manager.UnlockAsync(lockedTenant, CancellationToken.None);
+        var result = await manager.Unlock(lockedTenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(TestContext.LockedTenantGuid, CancellationToken.None);
+        var found = await manager.FindById(TestContext.LockedTenantGuid, CancellationToken.None);
         Assert.IsFalse(found!.IsLocked);
     }
 
@@ -352,13 +352,13 @@ public class UsingN2TenantManager {
     public async Task UnlockAsync_NonExistentTenant_ShouldFail() {
         var manager = BuildTenantManager();
 
-        var result = await manager.UnlockAsync(NewTenant("Ghost"), CancellationToken.None);
+        var result = await manager.Unlock(NewTenant("Ghost"), CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
 
     // -------------------------------------------------------------------------
-    // AddUserAsync / RemoveUserAsync
+    // AddUser / RemoveUser
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -367,10 +367,10 @@ public class UsingN2TenantManager {
         var tenant = await CreateTenantAsync($"Add User Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        var result = await manager.AddUserAsync(user, tenant, CancellationToken.None);
+        var result = await manager.AddUser(user, tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var ids = await manager.GetTenantIdsForUserAsync(user.Id, CancellationToken.None);
+        var ids = await manager.GetTenantIdsForUser(user.Id, CancellationToken.None);
         Assert.IsTrue(ids.Contains(tenant.Id));
     }
 
@@ -379,13 +379,13 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"tenant.idem.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Idempotent Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, CancellationToken.None);
+        await manager.AddUser(user, tenant, CancellationToken.None);
 
         // Second call — should not error
-        var result = await manager.AddUserAsync(user, tenant, CancellationToken.None);
+        var result = await manager.AddUser(user, tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var users = (await manager.GetUsersForTenantAsync(tenant.Id, CancellationToken.None)).ToList();
+        var users = (await manager.GetUsersForTenant(tenant.Id, CancellationToken.None)).ToList();
         Assert.AreEqual(1, users.Count(u => u == user.UserName));
     }
 
@@ -395,7 +395,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         var ghost = new ApplicationUser { Id = Guid.NewGuid() };
 
-        var result = await manager.AddUserAsync(ghost, tenant, CancellationToken.None);
+        var result = await manager.AddUser(ghost, tenant, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -405,7 +405,7 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"tenant.ghost.{Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        var result = await manager.AddUserAsync(user, NewTenant("Ghost Tenant"), CancellationToken.None);
+        var result = await manager.AddUser(user, NewTenant("Ghost Tenant"), CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -415,12 +415,12 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"tenant.remove.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Remove User Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, CancellationToken.None);
+        await manager.AddUser(user, tenant, CancellationToken.None);
 
-        var result = await manager.RemoveUserAsync(user, tenant, CancellationToken.None);
+        var result = await manager.RemoveUser(user, tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var ids = await manager.GetTenantIdsForUserAsync(user.Id, CancellationToken.None);
+        var ids = await manager.GetTenantIdsForUser(user.Id, CancellationToken.None);
         Assert.IsFalse(ids.Contains(tenant.Id));
     }
 
@@ -430,13 +430,13 @@ public class UsingN2TenantManager {
         var tenant = await CreateTenantAsync($"No Assignment Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        var result = await manager.RemoveUserAsync(user, tenant, CancellationToken.None);
+        var result = await manager.RemoveUser(user, tenant, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
     }
 
     // -------------------------------------------------------------------------
-    // AddUserAsync — isAdmin overload
+    // AddUser — isAdmin overload
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -445,9 +445,9 @@ public class UsingN2TenantManager {
         var tenant = await CreateTenantAsync($"Admin Add Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: true, CancellationToken.None);
 
-        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsTrue(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -456,9 +456,9 @@ public class UsingN2TenantManager {
         var tenant = await CreateTenantAsync($"Member Add Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: false, CancellationToken.None);
 
-        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsFalse(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -467,9 +467,9 @@ public class UsingN2TenantManager {
         var tenant = await CreateTenantAsync($"Default Add Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
 
-        await manager.AddUserAsync(user, tenant, CancellationToken.None);
+        await manager.AddUser(user, tenant, CancellationToken.None);
 
-        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsFalse(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -477,12 +477,12 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"promote.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Promote Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: false, CancellationToken.None);
 
-        var result = await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        var result = await manager.AddUser(user, tenant, isAdmin: true, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsTrue(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -490,16 +490,16 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"idem.admin.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Idem Admin Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: true, CancellationToken.None);
 
-        var result = await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        var result = await manager.AddUser(user, tenant, isAdmin: true, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsTrue(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // SetAdminAsync
+    // SetAdmin
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -507,12 +507,12 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"grant.admin.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Grant Admin Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: false, CancellationToken.None);
 
-        var result = await manager.SetAdminAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        var result = await manager.SetAdmin(user, tenant, isAdmin: true, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsTrue(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -520,12 +520,12 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"revoke.admin.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Revoke Admin Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: true, CancellationToken.None);
 
-        var result = await manager.SetAdminAsync(user, tenant, isAdmin: false, CancellationToken.None);
+        var result = await manager.SetAdmin(user, tenant, isAdmin: false, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsFalse(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -533,12 +533,12 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"noop.admin.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"NoOp Admin Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: true, CancellationToken.None);
 
-        var result = await manager.SetAdminAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        var result = await manager.SetAdmin(user, tenant, isAdmin: true, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None));
+        Assert.IsTrue(await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None));
     }
 
     [TestMethod]
@@ -548,7 +548,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         // user is never added to tenant
 
-        var result = await manager.SetAdminAsync(user, tenant, isAdmin: true, CancellationToken.None);
+        var result = await manager.SetAdmin(user, tenant, isAdmin: true, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -560,11 +560,11 @@ public class UsingN2TenantManager {
         var ghost = new ApplicationUser { Id = Guid.Empty };
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.SetAdminAsync(ghost, tenant, isAdmin: true, CancellationToken.None));
+            () => manager.SetAdmin(ghost, tenant, isAdmin: true, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // IsAdminAsync
+    // IsAdmin
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -572,7 +572,7 @@ public class UsingN2TenantManager {
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var manager = BuildTenantManager();
 
-        var isAdmin = await manager.IsAdminAsync(adminId, TestContext.TenantGuid, CancellationToken.None);
+        var isAdmin = await manager.IsAdmin(adminId, TestContext.TenantGuid, CancellationToken.None);
 
         Assert.IsTrue(isAdmin);
     }
@@ -582,9 +582,9 @@ public class UsingN2TenantManager {
         var user = await CreateUserAsync($"regular.check.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Regular Check Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenant, isAdmin: false, CancellationToken.None);
+        await manager.AddUser(user, tenant, isAdmin: false, CancellationToken.None);
 
-        var isAdmin = await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None);
+        var isAdmin = await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None);
 
         Assert.IsFalse(isAdmin);
     }
@@ -596,7 +596,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         // user is never added to tenant
 
-        var isAdmin = await manager.IsAdminAsync(user.Id, tenant.Id, CancellationToken.None);
+        var isAdmin = await manager.IsAdmin(user.Id, tenant.Id, CancellationToken.None);
 
         Assert.IsFalse(isAdmin);
     }
@@ -607,15 +607,15 @@ public class UsingN2TenantManager {
         var tenantA = await CreateTenantAsync($"Tenant A {Guid.NewGuid()}");
         var tenantB = await CreateTenantAsync($"Tenant B {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(user, tenantA, isAdmin: true, CancellationToken.None);
-        await manager.AddUserAsync(user, tenantB, isAdmin: false, CancellationToken.None);
+        await manager.AddUser(user, tenantA, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(user, tenantB, isAdmin: false, CancellationToken.None);
 
-        Assert.IsTrue(await manager.IsAdminAsync(user.Id, tenantA.Id, CancellationToken.None));
-        Assert.IsFalse(await manager.IsAdminAsync(user.Id, tenantB.Id, CancellationToken.None));
+        Assert.IsTrue(await manager.IsAdmin(user.Id, tenantA.Id, CancellationToken.None));
+        Assert.IsFalse(await manager.IsAdmin(user.Id, tenantB.Id, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // GetAdminsForTenantAsync
+    // GetAdminsForTenant
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -624,10 +624,10 @@ public class UsingN2TenantManager {
         var member = await CreateUserAsync($"getadmin.member.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"GetAdmins Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(admin, tenant, isAdmin: true, CancellationToken.None);
-        await manager.AddUserAsync(member, tenant, isAdmin: false, CancellationToken.None);
+        await manager.AddUser(admin, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(member, tenant, isAdmin: false, CancellationToken.None);
 
-        var admins = (await manager.GetAdminsForTenantAsync(tenant.Id, CancellationToken.None)).ToList();
+        var admins = (await manager.GetAdminsForTenant(tenant.Id, CancellationToken.None)).ToList();
 
         Assert.IsTrue(admins.Contains(admin.Id));
         Assert.IsFalse(admins.Contains(member.Id));
@@ -639,10 +639,10 @@ public class UsingN2TenantManager {
         var adminB = await CreateUserAsync($"multi.adminB.{Guid.NewGuid()}");
         var tenant = await CreateTenantAsync($"Multi Admin Tenant {Guid.NewGuid()}");
         var manager = BuildTenantManager();
-        await manager.AddUserAsync(adminA, tenant, isAdmin: true, CancellationToken.None);
-        await manager.AddUserAsync(adminB, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(adminA, tenant, isAdmin: true, CancellationToken.None);
+        await manager.AddUser(adminB, tenant, isAdmin: true, CancellationToken.None);
 
-        var admins = (await manager.GetAdminsForTenantAsync(tenant.Id, CancellationToken.None)).ToList();
+        var admins = (await manager.GetAdminsForTenant(tenant.Id, CancellationToken.None)).ToList();
 
         Assert.IsTrue(admins.Contains(adminA.Id));
         Assert.IsTrue(admins.Contains(adminB.Id));
@@ -654,18 +654,18 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.GetAdminsForTenantAsync(Guid.Empty, CancellationToken.None));
+            () => manager.GetAdminsForTenant(Guid.Empty, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // GetUsersForTenantAsync / GetTenantIdsForUserAsync
+    // GetUsersForTenant / GetTenantIdsForUser
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task GetUsersForTenantAsync_ShouldReturnAssignedUsers() {
         var manager = BuildTenantManager();
 
-        var users = (await manager.GetUsersForTenantAsync(TestContext.TenantGuid, CancellationToken.None)).ToList();
+        var users = (await manager.GetUsersForTenant(TestContext.TenantGuid, CancellationToken.None)).ToList();
 
         Assert.IsTrue(users.Count >= 1, "The seeded admin user should be returned");
         Assert.IsTrue(users.Contains("admin", StringComparer.OrdinalIgnoreCase));
@@ -676,7 +676,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
 
         // TenantGetUsers skips locked tenants
-        var users = await manager.GetUsersForTenantAsync(TestContext.LockedTenantGuid, CancellationToken.None);
+        var users = await manager.GetUsersForTenant(TestContext.LockedTenantGuid, CancellationToken.None);
 
         Assert.IsFalse(users.Any());
     }
@@ -686,7 +686,7 @@ public class UsingN2TenantManager {
         var manager = BuildTenantManager();
         var adminId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        var ids = (await manager.GetTenantIdsForUserAsync(adminId, CancellationToken.None)).ToList();
+        var ids = (await manager.GetTenantIdsForUser(adminId, CancellationToken.None)).ToList();
 
         Assert.IsTrue(ids.Contains(TestContext.TenantGuid));
         Assert.IsTrue(ids.Contains(TestContext.LockedTenantGuid));
@@ -696,13 +696,13 @@ public class UsingN2TenantManager {
     public async Task GetTenantIdsForUserAsync_UnknownUser_ShouldReturnEmpty() {
         var manager = BuildTenantManager();
 
-        var ids = await manager.GetTenantIdsForUserAsync(Guid.NewGuid(), CancellationToken.None);
+        var ids = await manager.GetTenantIdsForUser(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsFalse(ids.Any());
     }
 
     // -------------------------------------------------------------------------
-    // CanSignInAsync
+    // CanSignIn
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -763,10 +763,10 @@ public class UsingN2TenantManager {
     private async Task<ApplicationTenant> CreateTenantWithKeyMaterialAsync(string name, byte[] keyMaterial) {
         var tenant = await CreateTenantAsync(name);
         var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
-        using var ctx = await factory.CreateAsync("IdentityDb");
+        using var ctx = await factory.Create("IdentityDb", CancellationToken.None);
         var record = await ctx.TenantFindRecord(tenant.Id, CancellationToken.None);
         record!.SecretKeyMaterial = keyMaterial;
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
         return tenant;
     }
 

@@ -23,7 +23,9 @@ public class UsingN2UserAlerts : N2IdentityTestsBase {
         var user = await CreateTestUser($"alert_{Guid.NewGuid():N}", "P@ssword1!", MultiFactorType.None);
         var userManager = GetN2UserManager();
 
-        await userManager.CreateUserAlert(user.Id, new UserAlert("Test alert", Priority.Normal), CancellationToken.None);
+        var status = await userManager.CreateUserAlert(user.Id, new UserAlert("Test alert", Priority.Normal), CancellationToken.None);
+
+        Assert.AreEqual(N2.Core.Commands.ResponseStatus.Success, status);
 
         var alert = GetRawContext().UserAlert.SingleOrDefault(a => a.ApplicationUserId == user.Id);
         Assert.IsNotNull(alert);
@@ -87,7 +89,7 @@ public class UsingN2UserAlerts : N2IdentityTestsBase {
         var user = await CreateTestUser(userName, "P@ssword1!", MultiFactorType.None);
         await GetN2UserManager().CreateUserAlert(user.Id, new UserAlert("Login notice", Priority.Normal), CancellationToken.None);
 
-        var userContext = await GetAuthenticator().AuthenticateAsync(new UserLogin { Username = userName, Password = "P@ssword1!" });
+        var userContext = await GetAuthenticator().Authenticate(new UserLogin { Username = userName, Password = "P@ssword1!" }, CancellationToken.None);
 
         Assert.IsNotNull(userContext);
         Assert.AreEqual(1, userContext!.Alerts.Count());
@@ -100,7 +102,7 @@ public class UsingN2UserAlerts : N2IdentityTestsBase {
         var userName = $"alert_{Guid.NewGuid():N}";
         await CreateTestUser(userName, "P@ssword1!", MultiFactorType.None);
 
-        var userContext = await GetAuthenticator().AuthenticateAsync(new UserLogin { Username = userName, Password = "P@ssword1!" });
+        var userContext = await GetAuthenticator().Authenticate(new UserLogin { Username = userName, Password = "P@ssword1!" }, CancellationToken.None);
 
         Assert.IsNotNull(userContext);
         Assert.AreEqual(0, userContext!.Alerts.Count());
@@ -115,7 +117,7 @@ public class UsingN2UserAlerts : N2IdentityTestsBase {
     public async Task Alert_ShouldAddToInMemoryList() {
         var userName = $"alert_{Guid.NewGuid():N}";
         await CreateTestUser(userName, "P@ssword1!", MultiFactorType.None);
-        var userContext = await GetAuthenticator().AuthenticateAsync(new UserLogin { Username = userName, Password = "P@ssword1!" });
+        var userContext = await GetAuthenticator().Authenticate(new UserLogin { Username = userName, Password = "P@ssword1!" }, CancellationToken.None);
         Assert.IsNotNull(userContext);
 
         userContext!.Alert("Runtime alert", Priority.High);
@@ -129,7 +131,7 @@ public class UsingN2UserAlerts : N2IdentityTestsBase {
     public async Task Alert_ShouldBePersistedToDatabase() {
         var userName = $"alert_{Guid.NewGuid():N}";
         var user = await CreateTestUser(userName, "P@ssword1!", MultiFactorType.None);
-        var userContext = await GetAuthenticator().AuthenticateAsync(new UserLogin { Username = userName, Password = "P@ssword1!" });
+        var userContext = await GetAuthenticator().Authenticate(new UserLogin { Username = userName, Password = "P@ssword1!" }, CancellationToken.None);
         Assert.IsNotNull(userContext);
 
         userContext!.Alert("Persisted alert", Priority.Low);
@@ -152,7 +154,7 @@ public class UsingN2UserAlerts : N2IdentityTestsBase {
         var user = await CreateTestUser(userName, "P@ssword1!", MultiFactorType.None);
         await GetN2UserManager().CreateUserAlert(user.Id, new UserAlert("DB alert", Priority.Normal), CancellationToken.None);
 
-        var userContext = await GetAuthenticator().AuthenticateAsync(new UserLogin { Username = userName, Password = "P@ssword1!" });
+        var userContext = await GetAuthenticator().Authenticate(new UserLogin { Username = userName, Password = "P@ssword1!" }, CancellationToken.None);
         Assert.IsNotNull(userContext);
         userContext!.Alert("Runtime alert", Priority.High);
 

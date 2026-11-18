@@ -16,15 +16,18 @@ public sealed class IdentityUserContext : IUserContext
     internal IdentityUserContext(ClaimsPrincipal user)
     {
         this.user = user;
-        PublicId = Guid.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? AnonymousUserId);
-        UserName = user.FindFirst(ClaimTypes.Name)?.Value ?? "Anonymous";
-        Description = user.FindFirst(ClaimTypes.GivenName)?.Value ?? string.Empty;
-        Name = user.FindFirst(ClaimTypes.Surname)?.Value ?? string.Empty;
-        PhoneNumber = user.FindFirst(ClaimTypes.MobilePhone)?.Value ?? string.Empty;
-        Email = user.FindFirst(ClaimTypes.Email)?.Value ?? "noreply@mydomain.com";
+        PublicId = Guid.Parse(ClaimValue(user, ClaimTypes.NameIdentifier, AnonymousUserId));
+        UserName = ClaimValue(user, ClaimTypes.Name, "Anonymous");
+        Description = ClaimValue(user, ClaimTypes.GivenName, string.Empty);
+        Name = ClaimValue(user, ClaimTypes.Surname, string.Empty);
+        PhoneNumber = ClaimValue(user, ClaimTypes.MobilePhone, string.Empty);
+        Email = ClaimValue(user, ClaimTypes.Email, "noreply@mydomain.com");
 
         tenants = BuildTenantIndex(user.Claims);
     }
+
+    private static string ClaimValue(ClaimsPrincipal principal, string claimType, string fallback) =>
+        principal.FindFirst(claimType)?.Value ?? fallback;
 
     private static Dictionary<Guid, (string Name, IReadOnlyList<string> Roles)> BuildTenantIndex(
         IEnumerable<Claim> claims)

@@ -26,27 +26,27 @@ public sealed class UsingN2AuthenticationService {
 
     private void SetupUserFound(ApplicationUser user) =>
         userManager
-            .Setup(m => m.FindByNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.FindByName(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApplicationUserResponse(user));
 
     private void SetupUserNotFound() =>
         userManager
-            .Setup(m => m.FindByNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.FindByName(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApplicationUserResponse((ApplicationUser?)null));
 
     private void SetupValidateSuccess() =>
         userManager
-            .Setup(m => m.ValidateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.Validate(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(RequestResult.Ok());
 
     private void SetupValidateFail(ResponseStatus status = ResponseStatus.NotAccepted) =>
         userManager
-            .Setup(m => m.ValidateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.Validate(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RequestResult(status, "fail"));
 
     private void SetupCanSignIn(bool canSignIn) =>
         userManager
-            .Setup(m => m.CanSignInAsync(It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()))
+            .Setup(m => m.CanSignIn(It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(canSignIn);
 
     // -------------------------------------------------------------------------
@@ -68,7 +68,7 @@ public sealed class UsingN2AuthenticationService {
         var service = CreateService();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
-            () => service.AuthenticateAsync(null!));
+            () => service.Authenticate(null!, CancellationToken.None));
     }
 
     [TestMethod]
@@ -76,7 +76,7 @@ public sealed class UsingN2AuthenticationService {
         var service = CreateService();
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => service.AuthenticateAsync(new UserLogin { Username = "", Password = "secret" }));
+            () => service.Authenticate(new UserLogin { Username = "", Password = "secret" }, CancellationToken.None));
     }
 
     [TestMethod]
@@ -84,7 +84,7 @@ public sealed class UsingN2AuthenticationService {
         var service = CreateService();
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "" }));
+            () => service.Authenticate(new UserLogin { Username = "alice", Password = "" }, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
@@ -96,7 +96,7 @@ public sealed class UsingN2AuthenticationService {
         SetupUserNotFound();
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "ghost", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "ghost", Password = "secret" }, CancellationToken.None);
 
         Assert.IsNull(result);
     }
@@ -106,10 +106,10 @@ public sealed class UsingN2AuthenticationService {
         SetupUserNotFound();
         var service = CreateService();
 
-        await service.AuthenticateAsync(new UserLogin { Username = "ghost", Password = "secret" });
+        await service.Authenticate(new UserLogin { Username = "ghost", Password = "secret" }, CancellationToken.None);
 
         userManager.Verify(
-            m => m.ValidateAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            m => m.Validate(It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -123,7 +123,7 @@ public sealed class UsingN2AuthenticationService {
         SetupValidateFail(ResponseStatus.NotAccepted);
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "wrong" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "wrong" }, CancellationToken.None);
 
         Assert.IsNull(result);
     }
@@ -134,7 +134,7 @@ public sealed class UsingN2AuthenticationService {
         SetupValidateFail(ResponseStatus.Locked);
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         Assert.IsNull(result);
     }
@@ -145,10 +145,10 @@ public sealed class UsingN2AuthenticationService {
         SetupValidateFail(ResponseStatus.Locked);
         var service = CreateService();
 
-        await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         userManager.Verify(
-            m => m.CanSignInAsync(It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()),
+            m => m.CanSignIn(It.IsAny<ApplicationUser>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -163,7 +163,7 @@ public sealed class UsingN2AuthenticationService {
         SetupCanSignIn(false);
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         Assert.IsNull(result);
     }
@@ -180,7 +180,7 @@ public sealed class UsingN2AuthenticationService {
 
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         Assert.IsNotNull(result);
     }
@@ -193,7 +193,7 @@ public sealed class UsingN2AuthenticationService {
 
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         Assert.IsTrue(result!.IsAuthenticated);
     }
@@ -207,7 +207,7 @@ public sealed class UsingN2AuthenticationService {
 
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         Assert.AreEqual(user.Id, result!.PublicId);
         Assert.AreEqual("alice", result.Name);
@@ -216,7 +216,7 @@ public sealed class UsingN2AuthenticationService {
 
     [TestMethod]
     public async Task AuthenticateAsync_ValidCredentials_NoTenantMemberships_CurrentRolesIsEmpty() {
-        // Roles are now tenant-scoped. The auth service populates them via GetTenantMembershipsAsync
+        // Roles are now tenant-scoped. The auth service populates them via GetTenantMemberships
         // on the concrete N2UserManager. A mock IUserManager never satisfies that guard, so the
         // returned context has no tenant memberships and therefore no roles.
         SetupUserFound(MakeUser());
@@ -224,7 +224,7 @@ public sealed class UsingN2AuthenticationService {
         SetupCanSignIn(true);
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         Assert.IsNotNull(result);
         Assert.IsFalse(result!.CurrentRoles().Any());
@@ -239,7 +239,7 @@ public sealed class UsingN2AuthenticationService {
         SetupCanSignIn(true);
         var service = CreateService();
 
-        var result = await service.AuthenticateAsync(new UserLogin { Username = "alice", Password = "secret" });
+        var result = await service.Authenticate(new UserLogin { Username = "alice", Password = "secret" }, CancellationToken.None);
 
         Assert.IsFalse(result!.IsAdmin());
     }

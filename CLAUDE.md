@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 N2.Core.Identity is a modular identity and role management library for .NET built on top of ASP.NET Core Identity. It provides a strongly-typed N2IdentityContext (extending IdentityDbContext) and a feature-rich N2UserManager for advanced user, role, and authentication scenarios.
 
 **Key Technologies:**
-- Multi-targeted for .NET 8.0 and .NET 9.0
+- Multi-targeted for .NET 10.0 and .NET 11.0 (since 2.0.0)
 - ASP.NET Core Identity with Entity Framework Core
 - SQL Server database provider
 - JWT Bearer authentication
@@ -95,8 +95,8 @@ The library uses a factory pattern (`IIdentityContextFactory`) to create databas
 ### Authentication Flow
 
 1. User credentials received via `IUserLogin`
-2. `N2AuthenticationService.AuthenticateAsync` validates username/password
-3. User lockout status checked via `CanSignInAsync`
+2. `N2AuthenticationService.Authenticate` validates username/password
+3. User lockout status checked via `CanSignIn`
 4. Roles retrieved from database
 5. `AspNetUserContext` returned with user details and roles
 6. JWT token generated via `WebTokenGenerator` with user claims
@@ -198,8 +198,8 @@ Test users and data are configured via the `TestContext` service collection conf
 ## Dependencies
 
 **Core:**
-- N2.Core.Abstractions (1.4.4) - base abstractions for commands and responses
-- Microsoft.AspNetCore.Identity.EntityFrameworkCore (version varies by target framework)
+- N2.Core.Abstractions (2.0.0) - base abstractions for commands and responses
+- Microsoft.AspNetCore.Identity.EntityFrameworkCore and EF Core 10.0.x (SQL Server only; MySQL was removed in 2.0.0)
 - Microsoft.EntityFrameworkCore.SqlServer
 
 **Authentication:**
@@ -208,13 +208,20 @@ Test users and data are configured via the `TestContext` service collection conf
 - System.IdentityModel.Tokens.Jwt
 
 **MFA:**
-- QRCoder (1.7.0) - QR code generation for TOTP
-- Otp.NET (1.4.0) - TOTP implementation
+- QRCoder (1.8.1) - QR code generation for TOTP
+- Otp.NET (1.4.1) - TOTP implementation
 
 ## CI/CD
 
-GitHub Actions workflow (`.github/workflows/dotnet.yml`):
-- Builds on push/PR to `trunk` branch
-- Tests with both .NET 8.0 and 9.0
-- Publishes NuGet package to nuget.org on success
-- Uses secret `PACKAGE_N2` for NuGet API key
+Azure Pipelines (`Pipelines/`):
+- `n2-core-identity-ci-pr.yml` builds and runs the unit tests on every PR to `trunk`
+- `n2-core-identity-ci-publish.yml` builds, tests and, for a new package version, publishes to
+  the `vault-packages` Azure Artifacts feed (no nuget.org push)
+- Both install the .NET 11.0 and 10.0 SDKs; coverage runs on net10.0
+- The GitHub Actions workflows in `github-historic/` are no longer used
+
+## Coding conventions (2.0.0)
+
+- Every member returning `Task`, `ValueTask` or `IAsyncEnumerable` takes a required
+  `CancellationToken` as its last parameter (no default value, no overload without it)
+- No member name ends in `Async`

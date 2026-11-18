@@ -64,7 +64,7 @@ public class UsingRotateMfaSecrets {
         string plainSecret,
         string encryptedWithKey) {
 
-        using var ctx = await factory.CreateAsync();
+        using var ctx = await factory.Create(CancellationToken.None);
         var user = new ApplicationUser {
             Id = Guid.NewGuid(),
             UserName = $"mfa.user.{Guid.NewGuid()}@test.com",
@@ -72,7 +72,7 @@ public class UsingRotateMfaSecrets {
             MfaSecret = MfaSecretEncryption.Encrypt(plainSecret, encryptedWithKey),
         };
         await ctx.UserAdd(user, CancellationToken.None);
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
         return user;
     }
 
@@ -88,7 +88,7 @@ public class UsingRotateMfaSecrets {
 
         // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(
-            () => manager.RotateMfaSecretsAsync());
+            () => manager.RotateMfaSecrets(CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
@@ -109,13 +109,13 @@ public class UsingRotateMfaSecrets {
         var originalCiphertext = user.MfaSecret;
 
         // Act
-        var rotated = await manager.RotateMfaSecretsAsync();
+        var rotated = await manager.RotateMfaSecrets(CancellationToken.None);
 
         // Assert
         Assert.AreEqual(1, rotated, "Exactly one secret should have been rotated.");
 
         // Verify the stored value has changed and decrypts correctly with the primary key.
-        using var ctx = await factory.CreateAsync();
+        using var ctx = await factory.Create(CancellationToken.None);
         var updated = await ctx.UserFindRecord(user.Id, CancellationToken.None);
         Assert.IsNotNull(updated);
         Assert.AreNotEqual(originalCiphertext, updated.MfaSecret, "Ciphertext should have changed.");
@@ -140,7 +140,7 @@ public class UsingRotateMfaSecrets {
         await SeedUserWithMfaSecretAsync(factory, "JBSWY3DPEHPK3PXP", PrimaryKey);
 
         // Act
-        var rotated = await manager.RotateMfaSecretsAsync();
+        var rotated = await manager.RotateMfaSecrets(CancellationToken.None);
 
         // Assert
         Assert.AreEqual(0, rotated, "No secrets should be rotated when already current.");
@@ -157,7 +157,7 @@ public class UsingRotateMfaSecrets {
         await using var _ = provider;
 
         var factory = provider.GetRequiredService<IIdentityContextFactory>();
-        using var ctx = await factory.CreateAsync();
+        using var ctx = await factory.Create(CancellationToken.None);
 
         var user = new ApplicationUser {
             Id = Guid.NewGuid(),
@@ -167,10 +167,10 @@ public class UsingRotateMfaSecrets {
             MfaSecret = "v1:" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
         };
         await ctx.UserAdd(user, CancellationToken.None);
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
 
         // Act — must not throw
-        var rotated = await manager.RotateMfaSecretsAsync();
+        var rotated = await manager.RotateMfaSecrets(CancellationToken.None);
 
         // Assert
         Assert.AreEqual(0, rotated, "Corrupted secret should be skipped, not counted.");
@@ -187,7 +187,7 @@ public class UsingRotateMfaSecrets {
         await using var _ = provider;
 
         var factory = provider.GetRequiredService<IIdentityContextFactory>();
-        using var ctx = await factory.CreateAsync();
+        using var ctx = await factory.Create(CancellationToken.None);
 
         await ctx.UserAdd(new ApplicationUser {
             Id = Guid.NewGuid(),
@@ -195,10 +195,10 @@ public class UsingRotateMfaSecrets {
             NormalizedUserName = $"NOMFA.{Guid.NewGuid()}@TEST.COM",
             MfaSecret = null,
         }, CancellationToken.None);
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
 
         // Act
-        var rotated = await manager.RotateMfaSecretsAsync();
+        var rotated = await manager.RotateMfaSecrets(CancellationToken.None);
 
         // Assert
         Assert.AreEqual(0, rotated, "Users without an MFA secret must be ignored.");
@@ -223,7 +223,7 @@ public class UsingRotateMfaSecrets {
         await SeedUserWithMfaSecretAsync(factory, plain, SecondaryKey);
 
         // Act
-        var rotated = await manager.RotateMfaSecretsAsync();
+        var rotated = await manager.RotateMfaSecrets(CancellationToken.None);
 
         // Assert
         Assert.AreEqual(2, rotated, "Only the two stale secrets should be rotated.");

@@ -26,31 +26,26 @@ public sealed class N2AuthenticationService : IAuthenticator {
         this.logger = logger;
     }
 
-    // IAuthenticator does not expose a CancellationToken parameter; use the overload below
-    // when calling the concrete type directly so the HTTP request token is honoured.
-    public Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin) =>
-        AuthenticateAsync(userLogin, CancellationToken.None);
-
-    public async Task<IUserContext?> AuthenticateAsync(IUserLogin userLogin, CancellationToken cancellationToken) {
+    public async Task<IUserContext?> Authenticate(IUserLogin userLogin, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(userLogin);
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Username);
         ArgumentException.ThrowIfNullOrEmpty(userLogin.Password);
 
         var timer = new TimeoutTimer(TimeForAuthenticationMs);
 
-        var userResponse = await userManager.FindByNameAsync(userLogin.Username, cancellationToken);
+        var userResponse = await userManager.FindByName(userLogin.Username, cancellationToken);
         var user = userResponse.Value;
         ICommandResponse? result = null;
         if (user == null) {
             LoginAttempt(logger, userLogin.Username, userNotFoundException);
-            await timer.Wait();
+            await timer.Wait(cancellationToken);
             return null;
         }
 
-        result = await userManager.ValidateAsync(user, userLogin.Password, cancellationToken);
+        result = await userManager.Validate(user, userLogin.Password, cancellationToken);
         if (result == null) {
             LoginAttempt(logger, userLogin.Username, unexpectedResult);
-            await timer.Wait();
+            await timer.Wait(cancellationToken);
             return null;
         }
         if (!result.Status.IsSuccess()) {
@@ -59,14 +54,14 @@ public sealed class N2AuthenticationService : IAuthenticator {
             } else {
                 LoginAttempt(logger, userLogin.Username, loginFailed);
             }
-            await timer.Wait();
+            await timer.Wait(cancellationToken);
 
             return null;
         }
 
-        if (!await userManager.CanSignInAsync(user, cancellationToken)) {
+        if (!await userManager.CanSignIn(user, cancellationToken)) {
             LoginAttempt(logger, userLogin.Username, userLockedOutException);
-            await timer.Wait();
+            await timer.Wait(cancellationToken);
             return null;
         }
 
@@ -74,18 +69,22 @@ public sealed class N2AuthenticationService : IAuthenticator {
 
         IList<(Guid TenantId, string TenantName, IReadOnlyList<string> Roles)> memberships = [];
         if (userManager is N2UserManager nm) {
-            memberships = await nm.GetTenantMembershipsAsync(user, cancellationToken);
+            memberships = await nm.GetTenantMemberships(user, cancellationToken);
         }
-        await timer.Wait();
+        await timer.Wait(cancellationToken);
 
+        // The alert callback runs later, outside this authentication request, so it must not
+        // be bound to the request token; StoreUserAlert bounds it with its own timeout instead.
         return new AspNetUserContext(user, memberships, alerts, (a) => StoreUserAlert(user.Id, a, CancellationToken.None));
     }
 
-    private void StoreUserAlert(Guid userId, UserAlert userAlert, CancellationToken ct) {
-        if (userManager is N2UserManager ctx) {
-            var task = ctx.CreateUserAlert(userId, userAlert, ct);
-            task.Wait(AlertStorageTimeoutMs, ct);
+    /// <returns><c>true</c> when the alert was stored successfully within the timeout.</returns>
+    private bool StoreUserAlert(Guid userId, UserAlert userAlert, CancellationToken ct) {
+        if (userManager is not N2UserManager ctx) {
+            return false;
         }
+        var task = ctx.CreateUserAlert(userId, userAlert, ct);
+        return task.Wait(AlertStorageTimeoutMs, ct) && task.Result.IsSuccess();
     }
 
     private static readonly AuthenticationException userNotFoundException = new("Login attempt with invalid username.");

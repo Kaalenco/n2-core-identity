@@ -5,7 +5,7 @@ namespace N2.Core.Identity.Models;
 /// <summary>
 /// A read-only view of an <c>ApplicationSecret</c>.
 /// The <see cref="Payload"/> property is only populated when retrieved via
-/// <see cref="ISecretManager.ValidateAsync"/>, which authenticates and decrypts in one step.
+/// <see cref="ISecretManager.Validate"/>, which authenticates and decrypts in one step.
 /// </summary>
 public class ApplicationSecretDto {
     /// <summary>Unique identifier of the secret record.</summary>
@@ -22,7 +22,7 @@ public class ApplicationSecretDto {
 
     /// <summary>
     /// Decrypted secret payload. Only populated when retrieved via
-    /// <see cref="ISecretManager.ValidateAsync"/>; <c>null</c> for metadata-only lookups
+    /// <see cref="ISecretManager.Validate"/>; <c>null</c> for metadata-only lookups
     /// or when no value was stored.
     /// </summary>
     public string? Payload { get; init; }

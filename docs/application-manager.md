@@ -63,7 +63,7 @@ var app = new ApplicationDefinition {
     Id = Guid.NewGuid(),
     Name = "Payment Service"
 };
-var result = await applicationManager.CreateAsync(tenantId, app, ct);
+var result = await applicationManager.Create(tenantId, app, ct);
 // NotFound if the tenant does not exist
 // NotAcceptable if an application with the same name already exists in the tenant
 ```
@@ -74,14 +74,14 @@ Only `Name` and `MfaSecret` are written back. The application must have a valid 
 
 ```csharp
 app.Name = "Payment Gateway";
-var result = await applicationManager.UpdateAsync(tenantId, app, ct);
+var result = await applicationManager.Update(tenantId, app, ct);
 // NotFound if not found or if the application belongs to a different tenant
 ```
 
 ### Deleting an application
 
 ```csharp
-var result = await applicationManager.DeleteAsync(tenantId, app, ct);
+var result = await applicationManager.Delete(tenantId, app, ct);
 // NotFound if not found or if the application belongs to a different tenant
 ```
 
@@ -91,11 +91,11 @@ var result = await applicationManager.DeleteAsync(tenantId, app, ct);
 
 ```csharp
 // By ID within a tenant
-var app = await applicationManager.FindByIdAsync(tenantId, applicationId, ct);
+var app = await applicationManager.FindById(tenantId, applicationId, ct);
 // null if not found or if it belongs to a different tenant
 
 // By name within a tenant (normalised internally — Trim().ToUpperInvariant())
-var app = await applicationManager.FindByNameAsync(tenantId, "Payment Service", ct);
+var app = await applicationManager.FindByName(tenantId, "Payment Service", ct);
 
 // Select list for UI — all applications belonging to a tenant
 SelectItemList<HtmlString> list = await applicationManager.GetApplicationGetSelectList(tenantId, ct);
@@ -109,8 +109,8 @@ SelectItemList<HtmlString> list = await applicationManager.GetApplicationGetSele
 Locking an application prevents it from being used without removing it from the system. An application's lock state is independent of its owning tenant's lock state.
 
 ```csharp
-var lockResult = await applicationManager.LockAsync(tenantId, app, ct);
-var unlockResult = await applicationManager.UnlockAsync(tenantId, app, ct);
+var lockResult = await applicationManager.Lock(tenantId, app, ct);
+var unlockResult = await applicationManager.Unlock(tenantId, app, ct);
 // Both return NotFound if not found or if the application belongs to a different tenant
 ```
 
@@ -124,7 +124,7 @@ Before creating secrets, the application's `SecretKeyMaterial` column must be pr
 
 ```csharp
 app.SecretKeyMaterial = RandomNumberGenerator.GetBytes(32);
-await applicationManager.UpdateAsync(tenantId, app, ct);
+await applicationManager.Update(tenantId, app, ct);
 ```
 
 Then resolve the owner and use `ISecretManager`:
@@ -141,18 +141,18 @@ var owner = await applicationManager.GetSecretOwner(applicationId, ct);
 
 ```csharp
 // 1. Look up the application
-var app = await applicationManager.FindByNameAsync(tenantId, "Payment Service", ct)
+var app = await applicationManager.FindByName(tenantId, "Payment Service", ct)
     ?? throw new InvalidOperationException("Application not found");
 
 // 2. Provision key material on first use (one-time setup)
 if (app.SecretKeyMaterial == null) {
     app.SecretKeyMaterial = RandomNumberGenerator.GetBytes(32);
-    await applicationManager.UpdateAsync(tenantId, app, ct);
+    await applicationManager.Update(tenantId, app, ct);
 }
 
 // 3. Create a named secret with an expiry
 var owner = await applicationManager.GetSecretOwner(app.Id, ct);
-var created = await secretManager.CreateAsync(owner!, new CreateSecretDto {
+var created = await secretManager.Create(owner!, new CreateSecretDto {
     Name = "CI/CD Deploy Key",
     Expiration = DateTime.UtcNow.AddYears(1),
     Description = "Used by the deployment pipeline"

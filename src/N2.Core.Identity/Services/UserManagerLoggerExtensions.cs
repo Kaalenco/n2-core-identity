@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 
+using N2.Core.Commands;
+
 namespace N2.Core.Identity.Services;
 
 public static class UserManagerLoggerExtensions {
@@ -35,14 +37,25 @@ public static class UserManagerLoggerExtensions {
         logMfaSecretNotSet(logger, userName, null);
     }
 
-    private static readonly Action<ILogger, string, string, string, Exception?> logMfaVerificationWarning =
-        LoggerMessage.Define<string, string, string>(
+    // The multifactor code is never logged: it is a credential. Only the user id is written.
+    private static readonly Action<ILogger, string, Guid, Exception?> logMfaVerificationWarning =
+        LoggerMessage.Define<string, Guid>(
             LogLevel.Warning,
             new EventId(2, nameof(LogMfaVerificationWarning)),
-            "Error {Message} while verifying MFA token [{MultifactorCode}] for user [{UserName}].");
+            "Error {Message} while verifying an MFA token for user {UserId}.");
 
-    public static void LogMfaVerificationWarning(this ILogger logger, string message, string mfaCode, string userName, Exception ex) {
-        logMfaVerificationWarning(logger, message, mfaCode, userName, ex);
+    public static void LogMfaVerificationWarning(this ILogger logger, string message, Guid userId, Exception ex) {
+        logMfaVerificationWarning(logger, message, userId, ex);
+    }
+
+    private static readonly Action<ILogger, Guid, ResponseStatus, Exception?> logAccessFailedCountNotPersisted =
+        LoggerMessage.Define<Guid, ResponseStatus>(
+            LogLevel.Error,
+            new EventId(11, nameof(LogAccessFailedCountNotPersisted)),
+            "The access failed count (lockout state) for user {UserId} was not persisted: {Status}.");
+
+    public static void LogAccessFailedCountNotPersisted(this ILogger logger, Guid userId, ResponseStatus status) {
+        logAccessFailedCountNotPersisted(logger, userId, status, null);
     }
 
     private static readonly Action<ILogger, string, Exception?> logResetAccessCountFailure =

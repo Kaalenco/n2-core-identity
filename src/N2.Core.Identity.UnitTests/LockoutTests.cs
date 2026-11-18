@@ -13,22 +13,22 @@ public class AccountLockoutTests : N2IdentityTestsBase {
 
         // Act - Attempt 5 failed logins
         for (var i = 0; i < 5; i++) {
-            var result = await authService.AuthenticateAsync(new UserLogin {
+            var result = await authService.Authenticate(new UserLogin {
                 Username = userName,
                 Password = wrongPassword
-            });
+            }, CancellationToken.None);
             Assert.IsNull(result, $"Attempt {i + 1} should fail");
         }
 
         // Assert - 6th attempt should be blocked due to lockout
-        var lockedResult = await authService.AuthenticateAsync(new UserLogin {
+        var lockedResult = await authService.Authenticate(new UserLogin {
             Username = "testuser",
             Password = "CorrectP@ssw0rd" // Even correct password should be blocked
-        });
+        }, CancellationToken.None);
         Assert.IsNull(lockedResult, "Account should be locked");
 
         // Verify lockout state
-        var dbUser = await userManager.FindByNameAsync(userName, CancellationToken.None);
+        var dbUser = await userManager.FindByName(userName, CancellationToken.None);
         Assert.IsNotNull(dbUser.Value);
         Assert.IsTrue(dbUser.Value.LockoutEnabled);
         Assert.IsNotNull(dbUser.Value.LockoutEnd);
@@ -45,21 +45,21 @@ public class AccountLockoutTests : N2IdentityTestsBase {
 
         // Act - 3 failed attempts
         for (var i = 0; i < 3; i++) {
-            await authService.AuthenticateAsync(new UserLogin {
+            await authService.Authenticate(new UserLogin {
                 Username = userName,
                 Password = "WrongPassword"
-            });
+            }, CancellationToken.None);
         }
 
         // Successful login
-        var result = await authService.AuthenticateAsync(new UserLogin {
+        var result = await authService.Authenticate(new UserLogin {
             Username = userName,
             Password = "CorrectP@ssw0rd"
-        });
+        }, CancellationToken.None);
 
         // Assert
         Assert.IsNotNull(result);
-        var dbUser = await userManager.FindByNameAsync(userName, CancellationToken.None);
+        var dbUser = await userManager.FindByName(userName, CancellationToken.None);
         Assert.IsNotNull(dbUser.Value);
         Assert.AreEqual(0, dbUser.Value.AccessFailedCount);
     }
@@ -73,17 +73,17 @@ public class AccountLockoutTests : N2IdentityTestsBase {
 
         // Lock the account
         for (var i = 0; i < 5; i++) {
-            await authService.AuthenticateAsync(new UserLogin {
+            await authService.Authenticate(new UserLogin {
                 Username = userName,
                 Password = "WrongPassword"
-            });
+            }, CancellationToken.None);
         }
 
         // Act - Try with correct password
-        var result = await authService.AuthenticateAsync(new UserLogin {
+        var result = await authService.Authenticate(new UserLogin {
             Username = userName,
             Password = "CorrectP@ssw0rd"
-        });
+        }, CancellationToken.None);
 
         // Assert
         Assert.IsNull(result, "Locked account should reject even correct password");
@@ -100,23 +100,23 @@ public class AccountLockoutTests : N2IdentityTestsBase {
 
         // Lock the account
         for (var i = 0; i < 5; i++) {
-            await authService.AuthenticateAsync(new UserLogin {
+            await authService.Authenticate(new UserLogin {
                 Username = userName,
                 Password = "WrongPassword"
-            });
+            }, CancellationToken.None);
         }
 
         // Simulate lockout expiration (in real test, might need to adjust lockout time)
         var dbUser = await identityContext.UserFindRecord(userName.ToUpperInvariant(), CancellationToken.None);
         Assert.IsNotNull(dbUser);
         dbUser.LockoutEnd = DateTimeOffset.UtcNow.AddSeconds(-1);
-        await identityContext.Complete();
+        await identityContext.Complete(CancellationToken.None);
 
         // Act - Try with correct password after lockout expired
-        var result = await authService.AuthenticateAsync(new UserLogin {
+        var result = await authService.Authenticate(new UserLogin {
             Username = userName,
             Password = "CorrectP@ssw0rd"
-        });
+        }, CancellationToken.None);
 
         // Assert
         Assert.IsNotNull(result, "Should allow login after lockout expires");

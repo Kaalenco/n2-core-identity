@@ -91,7 +91,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
         var app = await CreateAppAsync(context, TestContext.TenantGuid, $"To Remove {Guid.NewGuid()}");
 
         context.ApplicationDelete(app);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         var retrieved = await context.ApplicationFindRecord(app.Id, CancellationToken.None);
@@ -209,7 +209,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
 
         var list = await context.ApplicationGetSelectList(Guid.NewGuid(), CancellationToken.None);
 
-        Assert.IsFalse(list.Any());
+        Assert.AreEqual(0, list.Count);
     }
 
     [TestMethod]
@@ -221,7 +221,7 @@ public class UsingApplicationPerTenant : N2IdentityTestsBase {
         var retrieved = await context.ApplicationFindRecord(app.Id, CancellationToken.None);
         Assert.IsNotNull(retrieved);
         retrieved.IsLocked = true;
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var list = await context.ApplicationGetSelectList(TestContext.TenantGuid, CancellationToken.None);
         var item = list.FirstOrDefault(i => i.Key == app.Id);

@@ -61,11 +61,11 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
         }
     }
 
-    private Task<IIdentityContext> CreateContextAsync() =>
-        factory.CreateAsync(provider, connectionName);
+    private Task<IIdentityContext> CreateContext(CancellationToken ct) =>
+        factory.Create(provider, connectionName, ct);
 
-    public async Task<ICommandResponse> CreateAsync([NotNull] ApplicationTenant tenant, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+    public async Task<ICommandResponse> Create([NotNull] ApplicationTenant tenant, CancellationToken ct) {
+        using var ctx = await CreateContext(ct);
         // Check for existing tenant
         var existingTenant = await ctx.TenantFindRecord(tenant.NormalizedName!, ct);
         if (existingTenant != null) { 
@@ -78,31 +78,31 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
 
         // Add new tenant
         await ctx.TenantAdd(tenant, ct);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> DeleteAsync([NotNull] ApplicationTenant tenant, CancellationToken ct) {
+    public async Task<ICommandResponse> Delete([NotNull] ApplicationTenant tenant, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var existing = await ctx.TenantFindRecord(tenant.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
         }
 
         ctx.TenantDelete(existing);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> UpdateAsync([NotNull] ApplicationTenant tenant, CancellationToken ct) {
+    public async Task<ICommandResponse> Update([NotNull] ApplicationTenant tenant, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenant.Name);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var existing = await ctx.TenantFindRecord(tenant.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
@@ -119,63 +119,63 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
         existing.IsHidden = tenant.IsHidden;
         existing.MfaSecret = string.IsNullOrEmpty(tenant.MfaSecret) ? existing.MfaSecret : tenant.MfaSecret;
 
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ApplicationTenant?> FindByIdAsync(Guid tenantId, CancellationToken ct) {
+    public async Task<ApplicationTenant?> FindById(Guid tenantId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.TenantFindRecord(tenantId, ct);
     }
 
-    public async Task<ApplicationTenant?> FindByNameAsync(string name, CancellationToken ct) {
+    public async Task<ApplicationTenant?> FindByName(string name, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(name);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.TenantFindRecord(name.Trim().ToUpperInvariant(), ct);
     }
 
-    public async Task<ApplicationTenant?> FindByEmailAsync(string email, CancellationToken ct) {
+    public async Task<ApplicationTenant?> FindByEmail(string email, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(email);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.TenantFindRecordByEmail(email.Trim().ToUpperInvariant(), ct);
     }
 
-    public async Task<SelectItemList<UserSelectItem>> GetTenantsAsync(CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+    public async Task<SelectItemList<UserSelectItem>> GetTenants(CancellationToken ct) {
+        using var ctx = await CreateContext(ct);
         return await ctx.TenantGetSelectList(ct);
     }
 
-    public async Task<ICommandResponse> LockAsync([NotNull] ApplicationTenant tenant, CancellationToken ct) {
+    public async Task<ICommandResponse> Lock([NotNull] ApplicationTenant tenant, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var existing = await ctx.TenantFindRecord(tenant.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
         }
 
         existing.IsLocked = true;
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> UnlockAsync([NotNull] ApplicationTenant tenant, CancellationToken ct) {
+    public async Task<ICommandResponse> Unlock([NotNull] ApplicationTenant tenant, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var existing = await ctx.TenantFindRecord(tenant.Id, ct);
         if (existing == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
         }
 
         existing.IsLocked = false;
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
@@ -191,16 +191,16 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
         });
     }
 
-    public Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken ct)
-        => AddUserAsync(user, tenant, isAdmin: false, ct);
+    public Task<ICommandResponse> AddUser([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken ct)
+        => AddUser(user, tenant, isAdmin: false, ct);
 
-    public async Task<ICommandResponse> AddUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken ct) {
+    public async Task<ICommandResponse> AddUser([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(user.Id, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var existingTenant = await ctx.TenantFindRecord(tenant.Id, ct);
         if (existingTenant == null) {
             return new RequestResult(ResponseStatus.NotFound, $"Tenant '{tenant.Id}' not found");
@@ -230,18 +230,18 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
             IsAdmin = isAdmin
         };
         await ctx.UserTenantAdd(userTenant, ct);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         Log(user.Id, isAdmin ? $"Added to tenant '{tenant.Id}' as admin" : $"Added to tenant '{tenant.Id}'");
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> RemoveUserAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken ct) {
+    public async Task<ICommandResponse> RemoveUser([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(user.Id, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var userTenant = await ctx.UserTenant
             .FirstOrDefaultAsync(ut => ut.ApplicationUserId == user.Id && ut.ApplicationTenantId == tenant.Id, ct);
 
@@ -251,35 +251,35 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
         }
 
         ctx.UserTenantDelete(userTenant);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> SetAdminAsync([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken ct) {
+    public async Task<ICommandResponse> SetAdmin([NotNull] ApplicationUser user, [NotNull] ApplicationTenant tenant, bool isAdmin, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentOutOfRangeException.ThrowIfEqual(user.Id, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenant.Id, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         (var code, var message) = await ctx.UserTenantSetAdmin(user.Id, tenant.Id, isAdmin, ct);
         if (code == ResponseStatus.Success && message != "No change required.")
             Log(user.Id, isAdmin ? $"Granted admin in tenant '{tenant.Id}'" : $"Revoked admin in tenant '{tenant.Id}'");
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<bool> IsAdminAsync(Guid userId, Guid tenantId, CancellationToken ct) {
+    public async Task<bool> IsAdmin(Guid userId, Guid tenantId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.UserTenantIsAdmin(userId, tenantId, ct);
     }
 
-    public async Task<IEnumerable<Guid>> GetAdminsForTenantAsync(Guid tenantId, CancellationToken ct) {
+    public async Task<IEnumerable<Guid>> GetAdminsForTenant(Guid tenantId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.UserTenant
             .AsNoTracking()
             .Where(ut => ut.ApplicationTenantId == tenantId && ut.IsAdmin)
@@ -287,17 +287,17 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
             .ToListAsync(ct);
     }
 
-    public async Task<IEnumerable<string>> GetUsersForTenantAsync(Guid tenantId, CancellationToken ct) {
+    public async Task<IEnumerable<string>> GetUsersForTenant(Guid tenantId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.TenantGetUsers(tenantId, ct);
     }
 
-    public async Task<IEnumerable<Guid>> GetTenantIdsForUserAsync(Guid userId, CancellationToken ct) {
+    public async Task<IEnumerable<Guid>> GetTenantIdsForUser(Guid userId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.UserTenant
             .AsNoTracking()
             .Where(ut => ut.ApplicationUserId == userId)
@@ -309,12 +309,12 @@ public class N2TenantManager : ITenantManager, IHaveSecrets {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(tenantId, Guid.Empty);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.UserCanSignInTenant(userId, tenantId, ct);
     }
 
     public async Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var dbTenant = await ctx.TenantFindRecord(id, ct);
         if (dbTenant == null) {
             return null;

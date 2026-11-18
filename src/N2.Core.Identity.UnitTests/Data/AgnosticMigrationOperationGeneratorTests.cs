@@ -34,7 +34,7 @@ public class UsingAgnosticMigrationOperationGenerator {
     }
 
     // -------------------------------------------------------------------------
-    // StripType (tested indirectly through Generate)
+    // Column type stripping (tested through Generate)
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -49,12 +49,12 @@ public class UsingAgnosticMigrationOperationGenerator {
         // Act
         _generator.Generate("mb", [createTable], new IndentedStringBuilder());
 
-        // Assert – StripType must have cleared the column type
+        // Assert - the column type must have been cleared
         Assert.IsNull(col.ColumnType, "ColumnType should be null after Generate for CreateTable.");
     }
 
     [TestMethod]
-    public void Generate_CreateTable_WithSqlServerIdentity_ShouldAddMySqlValueGenerationStrategy() {
+    public void Generate_CreateTable_WithSqlServerIdentity_ShouldKeepIdentityAndAddNoMySqlAnnotation() {
         // Arrange
         var col = new AddColumnOperation { Name = "Id", Table = "Users", ClrType = typeof(int) };
         col["SqlServer:Identity"] = "1, 1";
@@ -66,28 +66,9 @@ public class UsingAgnosticMigrationOperationGenerator {
         // Act
         _generator.Generate("mb", [createTable], new IndentedStringBuilder());
 
-        // Assert – StripType must have added the MySql strategy annotation
-        Assert.IsNotNull(col["MySql:ValueGenerationStrategy"], "MySql:ValueGenerationStrategy annotation should be added when SqlServer:Identity is present.");
-        Assert.AreEqual(MySqlValueGenerationStrategy.IdentityColumn, col["MySql:ValueGenerationStrategy"]);
-    }
-
-    [TestMethod]
-    public void Generate_CreateTable_WhenMySqlStrategyAlreadySet_ShouldNotOverwrite() {
-        // Arrange – consumer has already pinned a specific strategy
-        var col = new AddColumnOperation { Name = "Id", Table = "Users", ClrType = typeof(int) };
-        col["SqlServer:Identity"] = "1, 1";
-        col["MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.ComputedColumn;
-        var createTable = new CreateTableOperation {
-            Name = "Users",
-            Columns = { col }
-        };
-
-        // Act
-        _generator.Generate("mb", [createTable], new IndentedStringBuilder());
-
-        // Assert – pre-existing value must be preserved
-        Assert.AreEqual(MySqlValueGenerationStrategy.ComputedColumn, col["MySql:ValueGenerationStrategy"],
-            "A pre-existing MySql:ValueGenerationStrategy must not be overwritten.");
+        // Assert - MySQL support was removed in 2.0.0; no MySQL annotation may be added.
+        Assert.AreEqual("1, 1", col["SqlServer:Identity"]);
+        Assert.IsNull(col["MySql:ValueGenerationStrategy"]);
     }
 
     [TestMethod]
@@ -100,19 +81,6 @@ public class UsingAgnosticMigrationOperationGenerator {
 
         // Assert
         Assert.IsNull(add.ColumnType, "ColumnType should be null after Generate for AddColumn.");
-    }
-
-    [TestMethod]
-    public void Generate_AddColumn_WithSqlServerIdentity_ShouldAddMySqlValueGenerationStrategy() {
-        // Arrange
-        var add = new AddColumnOperation { Name = "Id", Table = "Users", ClrType = typeof(int) };
-        add["SqlServer:Identity"] = "1, 1";
-
-        // Act
-        _generator.Generate("mb", [add], new IndentedStringBuilder());
-
-        // Assert
-        Assert.AreEqual(MySqlValueGenerationStrategy.IdentityColumn, add["MySql:ValueGenerationStrategy"]);
     }
 
     [TestMethod]

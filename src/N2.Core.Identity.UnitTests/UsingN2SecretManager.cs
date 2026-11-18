@@ -46,7 +46,7 @@ public class UsingN2SecretManager {
         using var userManager = BuildUserManager();
         var name = $"secret.user.{Guid.NewGuid():N}";
         ApplicationUser user = new() { UserName = name, Email = $"{name}@test.com" };
-        var result = await userManager.CreateAsync(user, "TestPassword1!", CancellationToken.None);
+        var result = await userManager.Create(user, "TestPassword1!", CancellationToken.None);
         if (!result.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to create user: {result.Message}");
         }
@@ -55,10 +55,10 @@ public class UsingN2SecretManager {
         var keyMaterial = RandomNumberGenerator.GetBytes(32);
         var config = serviceProvider.GetRequiredService<IConfiguration>();
         var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
-        using var ctx = await factory.CreateAsync(DatabaseProvider.SqlServer, "IdentityDb");
+        using var ctx = await factory.Create(DatabaseProvider.SqlServer, "IdentityDb", CancellationToken.None);
         var found = await ctx.UserFindRecord(user.Id, CancellationToken.None);
         found!.SecretKeyMaterial = keyMaterial;
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
 
         var owner = new SecretOwner(found.Id, OwnerTypeCode.User, keyMaterial);
         return (found, owner);
@@ -72,7 +72,7 @@ public class UsingN2SecretManager {
     };
 
     // -------------------------------------------------------------------------
-    // CreateAsync
+    // Create
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -80,7 +80,7 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var result = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
         Assert.IsNotNull(result.Value);
@@ -93,7 +93,7 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var result = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
         var parts = result.Value!.PlainToken.Split('.');
@@ -105,7 +105,7 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var result = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
         var parts = result.Value!.PlainToken.Split('.');
@@ -117,7 +117,7 @@ public class UsingN2SecretManager {
         var manager = BuildSecretManager();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
-            () => manager.CreateAsync(null!, NewCreateDto(), CancellationToken.None));
+            () => manager.Create(null!, NewCreateDto(), CancellationToken.None));
     }
 
     [TestMethod]
@@ -126,7 +126,7 @@ public class UsingN2SecretManager {
         var manager = BuildSecretManager();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
-            () => manager.CreateAsync(owner, null!, CancellationToken.None));
+            () => manager.Create(owner, null!, CancellationToken.None));
     }
 
     [TestMethod]
@@ -135,7 +135,7 @@ public class UsingN2SecretManager {
         var manager = BuildSecretManager();
         var expiration = DateTime.UtcNow.AddDays(7);
 
-        var result = await manager.CreateAsync(owner, NewCreateDto(expiration: expiration), CancellationToken.None);
+        var result = await manager.Create(owner, NewCreateDto(expiration: expiration), CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
         Assert.IsNotNull(result.Value!.Expiration);
@@ -144,16 +144,16 @@ public class UsingN2SecretManager {
     }
 
     // -------------------------------------------------------------------------
-    // ValidateAsync
+    // Validate
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task ValidateAsync_ValidToken_ShouldReturnSuccess() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
-        var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+        var result = await manager.Validate(created.Value!.PlainToken, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
         Assert.IsNotNull(result.Value);
@@ -164,7 +164,7 @@ public class UsingN2SecretManager {
     public async Task ValidateAsync_NullToken_ShouldReturnForbidden() {
         var manager = BuildSecretManager();
 
-        var result = await manager.ValidateAsync(null!, CancellationToken.None);
+        var result = await manager.Validate(null!, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
@@ -173,7 +173,7 @@ public class UsingN2SecretManager {
     public async Task ValidateAsync_EmptyToken_ShouldReturnForbidden() {
         var manager = BuildSecretManager();
 
-        var result = await manager.ValidateAsync(string.Empty, CancellationToken.None);
+        var result = await manager.Validate(string.Empty, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
@@ -182,7 +182,7 @@ public class UsingN2SecretManager {
     public async Task ValidateAsync_RandomGarbage_ShouldReturnForbidden() {
         var manager = BuildSecretManager();
 
-        var result = await manager.ValidateAsync("notavalidtoken", CancellationToken.None);
+        var result = await manager.Validate("notavalidtoken", CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
@@ -191,12 +191,12 @@ public class UsingN2SecretManager {
     public async Task ValidateAsync_TamperedRandomSegment_ShouldReturnForbidden() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var parts = created.Value!.PlainToken.Split('.');
         // Replace the random segment with fresh random bytes
         var tampered = $"{parts[0]}.{parts[1]}.{Base64UrlExtensions.Encode(RandomNumberGenerator.GetBytes(32))}";
 
-        var result = await manager.ValidateAsync(tampered, CancellationToken.None);
+        var result = await manager.Validate(tampered, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
@@ -205,13 +205,13 @@ public class UsingN2SecretManager {
     public async Task ValidateAsync_TamperedOwnerSegment_ShouldReturnForbidden() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var parts = created.Value!.PlainToken.Split('.');
         // Replace owner ID segment with a different GUID
         var differentOwner = Base64UrlExtensions.Encode(Guid.NewGuid().ToByteArray());
         var tampered = $"{differentOwner}.{parts[1]}.{parts[2]}";
 
-        var result = await manager.ValidateAsync(tampered, CancellationToken.None);
+        var result = await manager.Validate(tampered, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
@@ -221,9 +221,9 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
         var expiredDto = NewCreateDto(expiration: DateTime.UtcNow.AddSeconds(-1));
-        var created = await manager.CreateAsync(owner, expiredDto, CancellationToken.None);
+        var created = await manager.Create(owner, expiredDto, CancellationToken.None);
 
-        var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+        var result = await manager.Validate(created.Value!.PlainToken, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
@@ -232,25 +232,25 @@ public class UsingN2SecretManager {
     public async Task ValidateAsync_RevokedToken_ShouldReturnForbidden() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
-        await manager.RevokeAsync(owner, created.Value!.Id, CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
+        await manager.Revoke(owner, created.Value!.Id, CancellationToken.None);
 
-        var result = await manager.ValidateAsync(created.Value.PlainToken, CancellationToken.None);
+        var result = await manager.Validate(created.Value.PlainToken, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Forbidden, result.Status);
     }
 
     // -------------------------------------------------------------------------
-    // RevokeAsync
+    // Revoke
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task RevokeAsync_ExistingSecret_ShouldSucceed() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
-        var result = await manager.RevokeAsync(owner, created.Value!.Id, CancellationToken.None);
+        var result = await manager.Revoke(owner, created.Value!.Id, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
     }
@@ -260,7 +260,7 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.RevokeAsync(owner, Guid.NewGuid(), CancellationToken.None);
+        var result = await manager.Revoke(owner, Guid.NewGuid(), CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -270,13 +270,13 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var (_, otherOwner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
-        var result = await manager.RevokeAsync(otherOwner, created.Value!.Id, CancellationToken.None);
+        var result = await manager.Revoke(otherOwner, created.Value!.Id, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
         // The original secret should still validate
-        var validateResult = await manager.ValidateAsync(created.Value.PlainToken, CancellationToken.None);
+        var validateResult = await manager.Validate(created.Value.PlainToken, CancellationToken.None);
         Assert.IsTrue(validateResult.Status.IsSuccess());
     }
 
@@ -285,20 +285,20 @@ public class UsingN2SecretManager {
         var manager = BuildSecretManager();
 
         await Assert.ThrowsAsync<ArgumentNullException>(
-            () => manager.RevokeAsync(null!, Guid.NewGuid(), CancellationToken.None));
+            () => manager.Revoke(null!, Guid.NewGuid(), CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // FindByIdAsync
+    // FindById
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task FindByIdAsync_ExistingSecret_ShouldReturnDto() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto("My Token"), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto("My Token"), CancellationToken.None);
 
-        var found = await manager.FindByIdAsync(owner, created.Value!.Id, CancellationToken.None);
+        var found = await manager.FindById(owner, created.Value!.Id, CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(created.Value.Id, found!.Id);
@@ -310,7 +310,7 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var found = await manager.FindByIdAsync(owner, Guid.NewGuid(), CancellationToken.None);
+        var found = await manager.FindById(owner, Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsNull(found);
     }
@@ -320,15 +320,15 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var (_, otherOwner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
-        var found = await manager.FindByIdAsync(otherOwner, created.Value!.Id, CancellationToken.None);
+        var found = await manager.FindById(otherOwner, created.Value!.Id, CancellationToken.None);
 
         Assert.IsNull(found);
     }
 
     // -------------------------------------------------------------------------
-    // GetSelectListAsync
+    // GetSelectList
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -336,9 +336,9 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
         var name = $"Listed_{Guid.NewGuid():N}";
-        var created = await manager.CreateAsync(owner, NewCreateDto(name), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(name), CancellationToken.None);
 
-        var list = await manager.GetSelectListAsync(owner, CancellationToken.None);
+        var list = await manager.GetSelectList(owner, CancellationToken.None);
 
         Assert.IsTrue(list.Any(item => item.Key == created.Value!.Id));
     }
@@ -347,26 +347,26 @@ public class UsingN2SecretManager {
     public async Task GetSelectListAsync_AfterRevoke_ShouldNotContainSecret() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
-        await manager.RevokeAsync(owner, created.Value!.Id, CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
+        await manager.Revoke(owner, created.Value!.Id, CancellationToken.None);
 
-        var list = await manager.GetSelectListAsync(owner, CancellationToken.None);
+        var list = await manager.GetSelectList(owner, CancellationToken.None);
 
         Assert.IsFalse(list.Any(item => item.Key == created.Value.Id));
     }
 
     // -------------------------------------------------------------------------
-    // GetPolicyAsync / SetPolicyAsync
+    // GetPolicy / SetPolicy
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task SetPolicyAsync_NewPolicy_ShouldSucceed() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var policy = new TestPolicy { Scope = "read", MaxRequests = 1000 };
 
-        var result = await manager.SetPolicyAsync(owner, created.Value!.Id, policy, CancellationToken.None);
+        var result = await manager.SetPolicy(owner, created.Value!.Id, policy, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
     }
@@ -375,11 +375,11 @@ public class UsingN2SecretManager {
     public async Task GetPolicyAsync_AfterSet_ShouldReturnCorrectValues() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var policy = new TestPolicy { Scope = "write", MaxRequests = 500 };
-        await manager.SetPolicyAsync(owner, created.Value!.Id, policy, CancellationToken.None);
+        await manager.SetPolicy(owner, created.Value!.Id, policy, CancellationToken.None);
 
-        var retrieved = await manager.GetPolicyAsync<TestPolicy>(owner, created.Value.Id, CancellationToken.None);
+        var retrieved = await manager.GetPolicy<TestPolicy>(owner, created.Value.Id, CancellationToken.None);
 
         Assert.IsNotNull(retrieved);
         Assert.AreEqual("write", retrieved!.Scope);
@@ -390,9 +390,9 @@ public class UsingN2SecretManager {
     public async Task GetPolicyAsync_NoPolicy_ShouldReturnNull() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
-        var result = await manager.GetPolicyAsync<TestPolicy>(owner, created.Value!.Id, CancellationToken.None);
+        var result = await manager.GetPolicy<TestPolicy>(owner, created.Value!.Id, CancellationToken.None);
 
         Assert.IsNull(result);
     }
@@ -402,7 +402,7 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var result = await manager.GetPolicyAsync<TestPolicy>(owner, Guid.NewGuid(), CancellationToken.None);
+        var result = await manager.GetPolicy<TestPolicy>(owner, Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsNull(result);
     }
@@ -412,9 +412,9 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var (_, otherOwner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
 
-        var result = await manager.SetPolicyAsync(otherOwner, created.Value!.Id,
+        var result = await manager.SetPolicy(otherOwner, created.Value!.Id,
             new TestPolicy { Scope = "none" }, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
@@ -424,12 +424,12 @@ public class UsingN2SecretManager {
     public async Task SetPolicyAsync_OverwritesPreviousPolicy() {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
-        await manager.SetPolicyAsync(owner, created.Value!.Id, new TestPolicy { Scope = "read" }, CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
+        await manager.SetPolicy(owner, created.Value!.Id, new TestPolicy { Scope = "read" }, CancellationToken.None);
 
-        await manager.SetPolicyAsync(owner, created.Value.Id, new TestPolicy { Scope = "admin" }, CancellationToken.None);
+        await manager.SetPolicy(owner, created.Value.Id, new TestPolicy { Scope = "admin" }, CancellationToken.None);
 
-        var result = await manager.GetPolicyAsync<TestPolicy>(owner, created.Value.Id, CancellationToken.None);
+        var result = await manager.GetPolicy<TestPolicy>(owner, created.Value.Id, CancellationToken.None);
         Assert.AreEqual("admin", result!.Scope);
     }
 
@@ -443,26 +443,26 @@ public class UsingN2SecretManager {
         var manager = BuildSecretManager();
 
         // Create
-        var createResult = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var createResult = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         Assert.IsTrue(createResult.Status.IsSuccess());
         var plainToken = createResult.Value!.PlainToken;
         var secretId = createResult.Value.Id;
 
         // Validate → should succeed
-        var validateResult = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        var validateResult = await manager.Validate(plainToken, CancellationToken.None);
         Assert.IsTrue(validateResult.Status.IsSuccess());
 
         // Revoke
-        var revokeResult = await manager.RevokeAsync(owner, secretId, CancellationToken.None);
+        var revokeResult = await manager.Revoke(owner, secretId, CancellationToken.None);
         Assert.IsTrue(revokeResult.Status.IsSuccess());
 
         // Validate after revoke → should fail
-        var afterRevoke = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        var afterRevoke = await manager.Validate(plainToken, CancellationToken.None);
         Assert.IsFalse(afterRevoke.Status.IsSuccess());
     }
 
     // -------------------------------------------------------------------------
-    // Payload storage — CreateAsync with value
+    // Payload storage — Create with value
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -471,10 +471,10 @@ public class UsingN2SecretManager {
         var manager = BuildSecretManager();
         const string expectedValue = "Server=prod;Database=mydb;Password=s3cr3t";
 
-        var created = await manager.CreateAsync(owner, NewCreateDto(value: expectedValue), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(value: expectedValue), CancellationToken.None);
         Assert.IsTrue(created.Status.IsSuccess());
 
-        var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+        var result = await manager.Validate(created.Value!.PlainToken, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
         Assert.AreEqual(expectedValue, result.Value!.Payload);
@@ -485,15 +485,15 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
-        var result = await manager.ValidateAsync(created.Value!.PlainToken, CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
+        var result = await manager.Validate(created.Value!.PlainToken, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
         Assert.IsNull(result.Value!.Payload);
     }
 
     // -------------------------------------------------------------------------
-    // Payload storage — SetValueAsync
+    // Payload storage — SetValue
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -502,13 +502,13 @@ public class UsingN2SecretManager {
         var manager = BuildSecretManager();
         const string expectedValue = "my-api-key-abc123";
 
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var plainToken = created.Value!.PlainToken;
 
-        var setResult = await manager.SetValueAsync(plainToken, expectedValue, CancellationToken.None);
+        var setResult = await manager.SetValue(plainToken, expectedValue, CancellationToken.None);
         Assert.IsTrue(setResult.Status.IsSuccess());
 
-        var validated = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        var validated = await manager.Validate(plainToken, CancellationToken.None);
         Assert.IsTrue(validated.Status.IsSuccess());
         Assert.AreEqual(expectedValue, validated.Value!.Payload);
     }
@@ -518,11 +518,11 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var created = await manager.CreateAsync(owner, NewCreateDto(value: "initial-value"), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(value: "initial-value"), CancellationToken.None);
         var plainToken = created.Value!.PlainToken;
 
-        await manager.SetValueAsync(plainToken, "updated-value", CancellationToken.None);
-        var validated = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        await manager.SetValue(plainToken, "updated-value", CancellationToken.None);
+        var validated = await manager.Validate(plainToken, CancellationToken.None);
 
         Assert.AreEqual("updated-value", validated.Value!.Payload);
     }
@@ -532,13 +532,13 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var created = await manager.CreateAsync(owner, NewCreateDto(value: "some-value"), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(value: "some-value"), CancellationToken.None);
         var plainToken = created.Value!.PlainToken;
 
-        var setResult = await manager.SetValueAsync(plainToken, null, CancellationToken.None);
+        var setResult = await manager.SetValue(plainToken, null, CancellationToken.None);
         Assert.IsTrue(setResult.Status.IsSuccess());
 
-        var validated = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        var validated = await manager.Validate(plainToken, CancellationToken.None);
         Assert.IsTrue(validated.Status.IsSuccess());
         Assert.IsNull(validated.Value!.Payload);
     }
@@ -547,7 +547,7 @@ public class UsingN2SecretManager {
     public async Task SetValueAsync_InvalidToken_ShouldReturnNotFound() {
         var manager = BuildSecretManager();
 
-        var result = await manager.SetValueAsync("not.a.valid.token.at.all", "value", CancellationToken.None);
+        var result = await manager.SetValue("not.a.valid.token.at.all", "value", CancellationToken.None);
 
         Assert.IsFalse(result.Status.IsSuccess());
     }
@@ -557,11 +557,11 @@ public class UsingN2SecretManager {
         var (_, owner) = await CreateUserWithKeyMaterialAsync();
         var manager = BuildSecretManager();
 
-        var created = await manager.CreateAsync(owner, NewCreateDto(), CancellationToken.None);
+        var created = await manager.Create(owner, NewCreateDto(), CancellationToken.None);
         var plainToken = created.Value!.PlainToken;
-        await manager.RevokeAsync(owner, created.Value.Id, CancellationToken.None);
+        await manager.Revoke(owner, created.Value.Id, CancellationToken.None);
 
-        var result = await manager.SetValueAsync(plainToken, "new-value", CancellationToken.None);
+        var result = await manager.SetValue(plainToken, "new-value", CancellationToken.None);
 
         Assert.IsFalse(result.Status.IsSuccess());
     }
@@ -578,35 +578,35 @@ public class UsingN2SecretManager {
         const string updatedValue = "Server=db2;Password=updated";
 
         // Create with an initial value
-        var createResult = await manager.CreateAsync(owner, NewCreateDto(value: initialValue), CancellationToken.None);
+        var createResult = await manager.Create(owner, NewCreateDto(value: initialValue), CancellationToken.None);
         Assert.IsTrue(createResult.Status.IsSuccess());
         var plainToken = createResult.Value!.PlainToken;
         var secretId = createResult.Value.Id;
 
         // Validate → initial value returned
-        var firstValidate = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        var firstValidate = await manager.Validate(plainToken, CancellationToken.None);
         Assert.IsTrue(firstValidate.Status.IsSuccess());
         Assert.AreEqual(initialValue, firstValidate.Value!.Payload);
 
         // Update the value
-        var setResult = await manager.SetValueAsync(plainToken, updatedValue, CancellationToken.None);
+        var setResult = await manager.SetValue(plainToken, updatedValue, CancellationToken.None);
         Assert.IsTrue(setResult.Status.IsSuccess());
 
         // Validate → updated value returned
-        var secondValidate = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        var secondValidate = await manager.Validate(plainToken, CancellationToken.None);
         Assert.IsTrue(secondValidate.Status.IsSuccess());
         Assert.AreEqual(updatedValue, secondValidate.Value!.Payload);
 
         // Revoke
-        var revokeResult = await manager.RevokeAsync(owner, secretId, CancellationToken.None);
+        var revokeResult = await manager.Revoke(owner, secretId, CancellationToken.None);
         Assert.IsTrue(revokeResult.Status.IsSuccess());
 
         // Validate after revoke → should fail
-        var afterRevoke = await manager.ValidateAsync(plainToken, CancellationToken.None);
+        var afterRevoke = await manager.Validate(plainToken, CancellationToken.None);
         Assert.IsFalse(afterRevoke.Status.IsSuccess());
 
         // SetValue after revoke → should also fail
-        var setAfterRevoke = await manager.SetValueAsync(plainToken, "any-value", CancellationToken.None);
+        var setAfterRevoke = await manager.SetValue(plainToken, "any-value", CancellationToken.None);
         Assert.IsFalse(setAfterRevoke.Status.IsSuccess());
     }
 

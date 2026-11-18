@@ -36,7 +36,7 @@ namespace N2.Core.Identity.Services;
 /// </para>
 /// <para><b>Token format</b></para>
 /// <para>
-/// Every plaintext token produced by <see cref="CreateAsync"/> is a dot-separated string:
+/// Every plaintext token produced by <see cref="Create"/> is a dot-separated string:
 /// <code>
 ///   {base64url(ownerId)}.{ownerTypeCode}.{base64url(randomBytes)}
 /// </code>
@@ -47,7 +47,7 @@ namespace N2.Core.Identity.Services;
 ///   <item><term>ownerTypeCode</term><description>An 8-character base64url code derived from <c>SHA-256(typeName)[0..5]</c> via <see cref="N2.Core.Identity.Models.OwnerTypeCode.Compute"/>. Opaque — does not reveal the type name.</description></item>
 ///   <item><term>randomBytes</term><description>Cryptographically random bytes (minimum 32) that constitute the token's entropy. These have no relation to the stored secret value.</description></item>
 /// </list>
-/// Embedding the owner identity in the token allows <see cref="ValidateAsync"/> to
+/// Embedding the owner identity in the token allows <see cref="Validate"/> to
 /// resolve the correct owner record and its key material without any caller-supplied context.
 /// The full token string is HMAC-SHA256 signed with <c>TokenSigningSecret</c> and the result
 /// is stored in <c>ApplicationSecret.HashedToken</c>; the plaintext is never persisted.
@@ -85,7 +85,7 @@ public interface ISecretManager {
     /// The plaintext token is returned once in
     /// <see cref="SecretCreateResultDto.PlainToken"/> and cannot be recovered afterwards.
     /// </remarks>
-    Task<ICommandResponse<SecretCreateResultDto>> CreateAsync(
+    Task<ICommandResponse<SecretCreateResultDto>> Create(
         [NotNull] ISecretOwner owner,
         [NotNull] CreateSecretDto request,
         CancellationToken ct);
@@ -95,7 +95,7 @@ public interface ISecretManager {
     /// Returns <see cref="ResponseStatus.NotFound"/> if the secret does not exist
     /// or does not belong to <paramref name="owner"/>.
     /// </summary>
-    Task<ICommandResponse> RevokeAsync(
+    Task<ICommandResponse> Revoke(
         [NotNull] ISecretOwner owner,
         Guid secretId,
         CancellationToken ct);
@@ -111,7 +111,7 @@ public interface ISecretManager {
     /// Returns <see cref="ResponseStatus.NotFound"/> for unknown, tampered, or expired tokens
     /// without distinguishing the failure reason.
     /// </remarks>
-    Task<ICommandResponse> SetValueAsync(
+    Task<ICommandResponse> SetValue(
         string plainToken,
         string? value,
         CancellationToken ct);
@@ -151,7 +151,7 @@ public interface ISecretManager {
     /// brute-force enumeration of token hashes.
     /// </para>
     /// </remarks>
-    Task<ICommandResponse<ApplicationSecretDto>> ValidateAsync(
+    Task<ICommandResponse<ApplicationSecretDto>> Validate(
         string plainToken,
         CancellationToken ct);
 
@@ -162,7 +162,7 @@ public interface ISecretManager {
     /// <summary>
     /// Returns the metadata for a single secret, or <c>null</c> if not found or not owned by <paramref name="owner"/>.
     /// </summary>
-    Task<ApplicationSecretDto?> FindByIdAsync(
+    Task<ApplicationSecretDto?> FindById(
         [NotNull] ISecretOwner owner,
         Guid secretId,
         CancellationToken ct);
@@ -170,7 +170,7 @@ public interface ISecretManager {
     /// <summary>
     /// Returns a select list of all active (non-expired, named) secrets for the given owner.
     /// </summary>
-    Task<SelectItemList<HtmlString>> GetSelectListAsync(
+    Task<SelectItemList<HtmlString>> GetSelectList(
         [NotNull] ISecretOwner owner,
         CancellationToken ct);
 
@@ -182,7 +182,7 @@ public interface ISecretManager {
     /// Deserialises the JSON policy payload stored on the secret into <typeparamref name="T"/>.
     /// Returns <c>null</c> if no policy is set, the secret does not exist, or the secret does not belong to <paramref name="owner"/>.
     /// </summary>
-    Task<T?> GetPolicyAsync<T>(
+    Task<T?> GetPolicy<T>(
         [NotNull] ISecretOwner owner,
         Guid secretId,
         CancellationToken ct);
@@ -192,7 +192,7 @@ public interface ISecretManager {
     /// overwriting any previously stored value.
     /// Returns <see cref="ResponseStatus.NotFound"/> if the secret does not exist or does not belong to <paramref name="owner"/>.
     /// </summary>
-    Task<ICommandResponse> SetPolicyAsync<T>(
+    Task<ICommandResponse> SetPolicy<T>(
         [NotNull] ISecretOwner owner,
         Guid secretId,
         [NotNull] T policy,

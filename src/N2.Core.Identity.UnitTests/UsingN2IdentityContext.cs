@@ -86,7 +86,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         await context.UserAdd(user, CancellationToken.None);
 
         context.UserDelete(user);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         var retrieved = await context.UserFindRecord(user.Id, CancellationToken.None);
@@ -125,7 +125,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         await context.RoleAdd(role, CancellationToken.None);
 
         context.RoleDelete(role);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         var retrieved = await context.RoleFindRecord("TOREMOVE_ROLE", CancellationToken.None);
@@ -194,7 +194,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         await context.UserRoleAdd(userRole, CancellationToken.None);
 
         context.UserRoleDelete(userRole);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var retrieved = await context.UserRoleFindRecord(userId, roleId, CancellationToken.None);
         Assert.IsNull(retrieved);
@@ -232,7 +232,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         await context.TenantAdd(tenant, CancellationToken.None);
 
         context.TenantDelete(tenant);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         var retrieved = await context.TenantFindRecord("TOREMOVE_TENANT", CancellationToken.None);
@@ -551,7 +551,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var roles = await context.RoleGetSelectList(CancellationToken.None);
 
         Assert.IsNotNull(roles);
-        Assert.IsTrue(roles.Any(), "At least the seeded roles should be present.");
+        Assert.IsTrue(roles.Count > 0, "At least the seeded roles should be present.");
     }
 
     [TestMethod]
@@ -561,7 +561,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var users = await context.UserGetSelectList(CancellationToken.None);
 
         Assert.IsNotNull(users);
-        Assert.IsTrue(users.Any(), "At least the seeded users should be present.");
+        Assert.IsTrue(users.Count > 0, "At least the seeded users should be present.");
     }
 
     [TestMethod]
@@ -571,7 +571,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var tenants = await context.TenantGetSelectList(CancellationToken.None);
 
         Assert.IsNotNull(tenants);
-        Assert.IsTrue(tenants.Any(), "At least the seeded tenant should be present.");
+        Assert.IsTrue(tenants.Count > 0, "At least the seeded tenant should be present.");
     }
 
     // -------------------------------------------------------------------------
@@ -631,7 +631,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
 
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var retrieved = await context.SecretFindRecord(secret.Id, CancellationToken.None);
         Assert.IsNotNull(retrieved);
@@ -644,7 +644,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var hashedToken = $"hash_{Guid.NewGuid():N}";
         var secret = NewSecret(Guid.NewGuid(), hashedToken);
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var retrieved = await context.SecretFindRecord(hashedToken, CancellationToken.None);
 
@@ -675,10 +675,10 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         using var context = await GetIdentityContext();
         var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         context.SecretDelete(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var retrieved = await context.SecretFindRecord(secret.Id, CancellationToken.None);
         Assert.IsNull(retrieved);
@@ -690,7 +690,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var ownerId = Guid.NewGuid();
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "My Token", DateTime.UtcNow.AddDays(30));
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
 
@@ -703,7 +703,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         var ownerId = Guid.NewGuid();
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "Expired Token", DateTime.UtcNow.AddDays(-1));
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
 
@@ -716,7 +716,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
 
         var list = await context.SecretGetSelectList(Guid.NewGuid(), "test", CancellationToken.None);
 
-        Assert.IsFalse(list.Any());
+        Assert.AreEqual(0, list.Count);
     }
 
     // -------------------------------------------------------------------------
@@ -804,7 +804,7 @@ public class UsingN2IdentityContext : N2IdentityTestsBase {
         Assert.IsNotNull(retrieved);
         retrieved.Name = "CompleteTestRole_Updated";
 
-        var (status, message) = await context.Complete();
+        var (status, message) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         Assert.IsNotNull(message);

@@ -11,12 +11,12 @@ public sealed class UserContextFactory : IUserContextFactory
     public UserContextFactory(AuthenticationStateProvider authenticationStateProvider)
     {
         contextTask = new Lazy<Task<IdentityUserContext>>(
-            () => InitializeAsync(authenticationStateProvider));
+            () => Initialize(authenticationStateProvider));
     }
 
-    public async Task<IUserContext> CreateAsync() => await contextTask.Value;
+    public async Task<IUserContext> Create(CancellationToken cancellationToken) => await contextTask.Value.WaitAsync(cancellationToken);
 
-    private static async Task<IdentityUserContext> InitializeAsync(
+    private static async Task<IdentityUserContext> Initialize(
         AuthenticationStateProvider? provider)
     {
         if (provider == null)

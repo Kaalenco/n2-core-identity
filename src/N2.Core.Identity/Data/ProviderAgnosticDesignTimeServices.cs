@@ -15,8 +15,10 @@ namespace N2.Core.Identity.Data;
 /// Registered automatically by EF Core design-time tooling.
 /// Replaces the default migration operation generator and snapshot annotation
 /// code generator with provider-agnostic equivalents, so that every generated
-/// migration — and its embedded Designer snapshot — works against both SQL Server
-/// and MySQL without post-editing.
+/// migration and its embedded Designer snapshot stays consistent with the existing,
+/// provider-neutral migrations (no explicit column types, no partial-index filters).
+/// MySQL support was removed in 2.0.0; keeping the migrations neutral lets a future
+/// N2.Core.Identity.MySql package reuse them.
 /// </summary>
 internal sealed class ProviderAgnosticDesignTimeServices : IDesignTimeServices {
     public void ConfigureDesignTimeServices(IServiceCollection serviceCollection) {
@@ -29,10 +31,8 @@ internal sealed class ProviderAgnosticDesignTimeServices : IDesignTimeServices {
 /// Generates provider-agnostic migration code by:
 /// <list type="bullet">
 ///   <item>Nullifying explicit column types so each provider resolves its own DDL type.</item>
-///   <item>Adding a <c>MySql:ValueGenerationStrategy</c> annotation next to every
-///         <c>SqlServer:Identity</c> annotation so auto-increment columns work on both engines.</item>
-///   <item>Removing SQL Server partial-index <c>filter:</c> expressions — MySQL UNIQUE
-///         indexes natively allow multiple NULLs, so no filter is required.</item>
+///   <item>Removing SQL Server partial-index <c>filter:</c> expressions, consistent with the
+///         indexes created by the existing migrations.</item>
 /// </list>
 /// </summary>
 internal sealed class AgnosticMigrationOperationGenerator : CSharpMigrationOperationGenerator {
@@ -46,10 +46,10 @@ internal sealed class AgnosticMigrationOperationGenerator : CSharpMigrationOpera
         foreach (var op in operations) {
             switch (op) {
                 case CreateTableOperation create:
-                    foreach (var col in create.Columns) StripType(col);
+                    foreach (var col in create.Columns) col.ColumnType = null;
                     break;
                 case AddColumnOperation add:
-                    StripType(add);
+                    add.ColumnType = null;
                     break;
                 case CreateIndexOperation index:
                     index.Filter = null;
@@ -57,12 +57,6 @@ internal sealed class AgnosticMigrationOperationGenerator : CSharpMigrationOpera
             }
         }
         base.Generate(builderName, operations, builder);
-    }
-
-    private static void StripType(ColumnOperation col) {
-        col.ColumnType = null;
-        if (col["SqlServer:Identity"] is not null && col["MySql:ValueGenerationStrategy"] is null)
-            col["MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.IdentityColumn;
     }
 }
 

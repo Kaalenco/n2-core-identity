@@ -19,7 +19,7 @@ public class TokenCryptographyTests : N2IdentityTestsBase {
         var user = await CreateTestUser($"testuser-{Guid.NewGuid}", "P@ssw0rd123", MultiFactorType.Email);
         var userManager = GetUserManager();
         // Act
-        var tokenResponse = await userManager.GenerateConfirmationTokenAsync(user, CancellationToken.None);
+        var tokenResponse = await userManager.GenerateConfirmationToken(user, CancellationToken.None);
 
         // Assert
         Assert.IsTrue(tokenResponse.Status.IsSuccess());
@@ -39,11 +39,11 @@ public class TokenCryptographyTests : N2IdentityTestsBase {
         // Arrange
         var user = await CreateTestUser($"testuser-{Guid.NewGuid}", "P@ssw0rd123", MultiFactorType.Email);
         var userManager = GetUserManager();
-        var tokenResponse = await userManager.GenerateConfirmationTokenAsync(user, CancellationToken.None);
+        var tokenResponse = await userManager.GenerateConfirmationToken(user, CancellationToken.None);
         var token = tokenResponse.Value;
 
         // Act
-        var result = await userManager.ValidateMultifactorAsync(user, token!, CancellationToken.None);
+        var result = await userManager.ValidateMultifactor(user, token!, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Success, result.Status);
@@ -54,7 +54,7 @@ public class TokenCryptographyTests : N2IdentityTestsBase {
         // Arrange
         var user = await CreateTestUser($"testuser-{Guid.NewGuid}", "P@ssw0rd123", MultiFactorType.Email);
         var userManager = GetUserManager();
-        var tokenResponse = await userManager.GenerateConfirmationTokenAsync(user, CancellationToken.None);
+        var tokenResponse = await userManager.GenerateConfirmationToken(user, CancellationToken.None);
         var token = tokenResponse.Value;
 
         // Tamper with the token
@@ -63,7 +63,7 @@ public class TokenCryptographyTests : N2IdentityTestsBase {
         var tamperedToken = $"{parts[0]}.{tamperedSignature}";
 
         // Act
-        var result = await userManager.ValidateMultifactorAsync(user, tamperedToken, CancellationToken.None);
+        var result = await userManager.ValidateMultifactor(user, tamperedToken, CancellationToken.None);
 
         // Assert
         Assert.AreEqual(ResponseStatus.Unauthorized, result.Status);

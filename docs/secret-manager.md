@@ -36,7 +36,7 @@ The secret value is encrypted with AES-256-GCM. The encryption key is derived vi
 | HKDF input | Source |
 |---|---|
 | IKM | System secret from `AuthenticationConfig:SecretEncryptionKey` configuration |
-| Salt | Per-record random bytes in `ApplicationSecret.EncryptionSalt` (refreshed on every `SetValueAsync` call) |
+| Salt | Per-record random bytes in `ApplicationSecret.EncryptionSalt` (refreshed on every `SetValue` call) |
 | Info | `owner.SecretKeyMaterial` concatenated with `HashedToken` |
 
 This means decryption requires **three independent inputs**: the system config, the owner's key material from the database, and the stored HMAC. A database dump alone is not sufficient to recover plaintext secret values.
@@ -95,7 +95,7 @@ entity.SecretKeyMaterial = RandomNumberGenerator.GetBytes(32);
 
 ### Creating a secret
 
-Obtain the owner via `IHaveSecrets.GetSecretOwner`, then call `CreateAsync`. The returned `PlainToken` is shown **once** — it cannot be recovered after this point.
+Obtain the owner via `IHaveSecrets.GetSecretOwner`, then call `Create`. The returned `PlainToken` is shown **once** — it cannot be recovered after this point.
 
 ```csharp
 var owner = await applicationManager.GetSecretOwner(applicationId, ct);
@@ -107,7 +107,7 @@ var request = new CreateSecretDto {
     Description = "Used by the payment service"
 };
 
-var result = await secretManager.CreateAsync(owner, request, ct);
+var result = await secretManager.Create(owner, request, ct);
 if (!result.Status.IsSuccess()) return Problem(result.Message);
 
 // Return the plain token to the caller — this is the only time it is available
@@ -123,7 +123,7 @@ var request = new CreateSecretDto {
     Value = "Server=prod-db;Database=myapp;User Id=svc;Password=..."  // CreateSecretDto.Value (input)
 };
 
-var result = await secretManager.CreateAsync(owner, request, ct);
+var result = await secretManager.Create(owner, request, ct);
 // result.Value!.PlainToken is the token to store and present on future reads
 ```
 
@@ -131,10 +131,10 @@ var result = await secretManager.CreateAsync(owner, request, ct);
 
 ### Storing or updating a secret value
 
-Use `SetValueAsync` to set or replace the encrypted value of an existing secret. The plain token is the sole credential — no owner context is required.
+Use `SetValue` to set or replace the encrypted value of an existing secret. The plain token is the sole credential — no owner context is required.
 
 ```csharp
-var setResult = await secretManager.SetValueAsync(plainToken, newValue, ct);
+var setResult = await secretManager.SetValue(plainToken, newValue, ct);
 if (!setResult.Status.IsSuccess()) {
     // Token unknown, expired, or tampered — do not distinguish to the caller
     return Unauthorized();
@@ -145,16 +145,16 @@ Every call re-encrypts with a **fresh random salt**, so repeated calls with the 
 
 ```csharp
 // Clear the value while keeping the token valid
-await secretManager.SetValueAsync(plainToken, null, ct);
+await secretManager.SetValue(plainToken, null, ct);
 ```
 
 ### Validating a token and retrieving the secret value
 
-`ValidateAsync` authenticates the token and returns the decrypted value in a single step. No owner context is needed — the owner identity is parsed from the token itself.
+`Validate` authenticates the token and returns the decrypted value in a single step. No owner context is needed — the owner identity is parsed from the token itself.
 
 ```csharp
 // Token arrives in e.g. an Authorization: Bearer header
-var validation = await secretManager.ValidateAsync(incomingToken, ct);
+var validation = await secretManager.Validate(incomingToken, ct);
 
 if (!validation.Status.IsSuccess()) {
     // Both unknown tokens and ownership mismatches return a generic failure
@@ -168,13 +168,13 @@ var secretDto = validation.Value!;
 var connectionString = secretDto.Payload;
 ```
 
-> **Rate limiting is the caller's responsibility.** The implementation does not enforce per-IP or per-owner throttling. Apply back-off or lockout before calling `ValidateAsync` when you detect repeated failures.
+> **Rate limiting is the caller's responsibility.** The implementation does not enforce per-IP or per-owner throttling. Apply back-off or lockout before calling `Validate` when you detect repeated failures.
 
 ### Revoking a secret
 
 ```csharp
 var owner = await applicationManager.GetSecretOwner(applicationId, ct);
-var response = await secretManager.RevokeAsync(owner!, secretId, ct);
+var response = await secretManager.Revoke(owner!, secretId, ct);
 // ResponseStatus.NotFound if the secret does not exist or belongs to a different owner
 ```
 
@@ -182,16 +182,16 @@ var response = await secretManager.RevokeAsync(owner!, secretId, ct);
 
 ```csharp
 var owner = await tenantManager.GetSecretOwner(tenantId, ct);
-var selectList = await secretManager.GetSelectListAsync(owner!, ct);
+var selectList = await secretManager.GetSelectList(owner!, ct);
 // Returns active (non-expired, named) secrets only
 ```
 
 ### Looking up a single secret
 
 ```csharp
-var secret = await secretManager.FindByIdAsync(owner, secretId, ct);
+var secret = await secretManager.FindById(owner, secretId, ct);
 // Returns null if not found or not owned by owner
-// Note: Payload is NOT populated here — use ValidateAsync to retrieve the decrypted payload
+// Note: Payload is NOT populated here — use Validate to retrieve the decrypted payload
 ```
 
 ---
@@ -205,19 +205,19 @@ A secret can carry an arbitrary typed policy payload serialised as JSON. Policie
 public record ApiKeyPolicy(string[] AllowedScopes, string[] AllowedIpRanges);
 
 // Write
-await secretManager.SetPolicyAsync(owner, secretId, new ApiKeyPolicy(
+await secretManager.SetPolicy(owner, secretId, new ApiKeyPolicy(
     AllowedScopes: ["payments:read", "payments:write"],
     AllowedIpRanges: ["10.0.0.0/8"]
 ), ct);
 
 // Read
-var policy = await secretManager.GetPolicyAsync<ApiKeyPolicy>(owner, secretId, ct);
+var policy = await secretManager.GetPolicy<ApiKeyPolicy>(owner, secretId, ct);
 if (policy != null) {
     // enforce policy.AllowedScopes, policy.AllowedIpRanges, etc.
 }
 ```
 
-> Policies are stored as plaintext JSON in `ApplicationSecret.Policies`. If the policy contains sensitive data, encrypt it within the policy object itself before passing it to `SetPolicyAsync`.
+> Policies are stored as plaintext JSON in `ApplicationSecret.Policies`. If the policy contains sensitive data, encrypt it within the policy object itself before passing it to `SetPolicy`.
 
 ---
 
@@ -229,19 +229,19 @@ The simplest use case: the token itself is the credential. No value is stored. T
 
 ```csharp
 // Provisioning
-var result = await secretManager.CreateAsync(owner, new CreateSecretDto {
+var result = await secretManager.Create(owner, new CreateSecretDto {
     Name = "Webhook receiver key",
     Expiration = DateTime.UtcNow.AddYears(1)
 }, ct);
 var apiKey = result.Value!.PlainToken; // hand to the caller once
 
 // Verification (on each incoming request)
-var validation = await secretManager.ValidateAsync(incomingApiKey, ct);
+var validation = await secretManager.Validate(incomingApiKey, ct);
 if (!validation.Status.IsSuccess()) return Unauthorized();
 // No value to read — the successful response is sufficient proof
 ```
 
-Combine with `GetPolicyAsync` to attach scopes or rate-limit tiers to the key without embedding them in the token.
+Combine with `GetPolicy` to attach scopes or rate-limit tiers to the key without embedding them in the token.
 
 ### Pattern 2 — Encrypted credential store
 
@@ -249,7 +249,7 @@ Use the secret manager as a lightweight vault: store a connection string, third-
 
 ```csharp
 // Provisioning — store the connection string encrypted
-var result = await secretManager.CreateAsync(owner, new CreateSecretDto {
+var result = await secretManager.Create(owner, new CreateSecretDto {
     Name = "Primary DB",
     Description = "Connection string for the reporting database",
     Value = configuration["ConnectionStrings:ReportingDb"]
@@ -258,7 +258,7 @@ var retrievalToken = result.Value!.PlainToken;
 // Store retrievalToken in the consuming service's config (not the connection string itself)
 
 // At runtime — retrieve and use
-var validation = await secretManager.ValidateAsync(retrievalToken, ct);
+var validation = await secretManager.Validate(retrievalToken, ct);
 if (!validation.Status.IsSuccess()) throw new InvalidOperationException("Credential unavailable.");
 var connectionString = validation.Value!.Payload!;
 ```
@@ -272,12 +272,12 @@ Rotate the stored value (e.g. after a database password change) without invalida
 var existingToken = configuration["Services:ReportingDb:Token"];
 
 // Replace the stored value — fresh salt applied automatically
-var setResult = await secretManager.SetValueAsync(existingToken, newConnectionString, ct);
+var setResult = await secretManager.SetValue(existingToken, newConnectionString, ct);
 if (!setResult.Status.IsSuccess()) {
     logger.LogError("Credential rotation failed — token may be expired or revoked.");
     return;
 }
-// Callers holding the existing token will now retrieve the new value on next ValidateAsync
+// Callers holding the existing token will now retrieve the new value on next Validate
 ```
 
 This separates **credential identity** (the token) from **credential material** (the value), so you can rotate secrets on a different schedule from tokens.
@@ -286,7 +286,7 @@ This separates **credential identity** (the token) from **credential material** 
 
 ```csharp
 // 1. Create
-var created = await secretManager.CreateAsync(owner, new CreateSecretDto {
+var created = await secretManager.Create(owner, new CreateSecretDto {
     Name = "CI deploy key",
     Expiration = DateTime.UtcNow.AddDays(90),
     Value = signingSecret
@@ -295,17 +295,17 @@ var token = created.Value!.PlainToken;
 var secretId = created.Value.Id;
 
 // 2. Use — validate and read on each request
-var validation = await secretManager.ValidateAsync(token, ct);
+var validation = await secretManager.Validate(token, ct);
 var currentSecret = validation.Value!.Payload;
 
 // 3. Rotate the value (e.g. scheduled job)
-await secretManager.SetValueAsync(token, newSigningSecret, ct);
+await secretManager.SetValue(token, newSigningSecret, ct);
 
 // 4. Revoke when the key is no longer needed or suspected of compromise
-await secretManager.RevokeAsync(owner, secretId, ct);
+await secretManager.Revoke(owner, secretId, ct);
 
-// After revocation, both ValidateAsync and SetValueAsync return failure
-var afterRevoke = await secretManager.ValidateAsync(token, ct);
+// After revocation, both Validate and SetValue return failure
+var afterRevoke = await secretManager.Validate(token, ct);
 Assert.IsFalse(afterRevoke.Status.IsSuccess());
 ```
 
@@ -323,14 +323,14 @@ Assert.IsFalse(afterRevoke.Status.IsSuccess());
 
 | Situation | Recommendation |
 |---|---|
-| The secret is small and changes infrequently (e.g. a connection string, signing key) | Store in `Payload` — rotation via `SetValueAsync` is lightweight |
+| The secret is small and changes infrequently (e.g. a connection string, signing key) | Store in `Payload` — rotation via `SetValue` is lightweight |
 | The secret is large (e.g. a TLS certificate chain) | Store externally; use the token to gate retrieval from that store |
 | The secret must not leave your infrastructure | Store in `Payload` and follow the hardening steps in [Using as a private key vault](#using-as-a-private-key-vault) |
 | The secret must stay off third-party cloud infrastructure | Deploy the dedicated vault server — see `vault-server-plan.md` |
 
 ### Value rotation cadence
 
-- Rotate the **value** (`SetValueAsync`) on any suspected exposure or as part of a regular schedule.
+- Rotate the **value** (`SetValue`) on any suspected exposure or as part of a regular schedule.
 - Rotate the **token** (revoke and re-create) only when the token itself may be compromised — for example, if it was accidentally logged or sent over an unencrypted channel.
 - Prefer rotating values over tokens to avoid coordinating token redistribution across services.
 
@@ -338,11 +338,11 @@ Assert.IsFalse(afterRevoke.Status.IsSuccess());
 
 - Always set `Expiration` on secrets used for automated service-to-service authentication. Unexpired secrets accumulate and are difficult to audit.
 - Use short lifetimes for secrets issued to external parties (webhooks, CI pipelines) and longer lifetimes for internal service credentials where revocation is tightly controlled.
-- Build an automated renewal workflow rather than using non-expiring secrets. `GetSelectListAsync` makes it easy to surface secrets nearing expiry in a management UI.
+- Build an automated renewal workflow rather than using non-expiring secrets. `GetSelectList` makes it easy to surface secrets nearing expiry in a management UI.
 
 ### Rate limiting on validation
 
-`ValidateAsync` does not enforce per-caller throttling. Gate incoming requests with a rate limiter before calling it:
+`Validate` does not enforce per-caller throttling. Gate incoming requests with a rate limiter before calling it:
 
 ```csharp
 // ASP.NET Core example using a fixed-window limiter keyed on the token prefix
@@ -373,11 +373,11 @@ An attacker with access to both the database and the application configuration c
 
 ### Owner-confusion attacks
 
-`ValidateAsync` and `SetValueAsync` both parse the owner identity from the token itself rather than accepting caller-supplied context. This eliminates the class of attack where a caller presents a valid token from owner A but claims it belongs to owner B.
+`Validate` and `SetValue` both parse the owner identity from the token itself rather than accepting caller-supplied context. This eliminates the class of attack where a caller presents a valid token from owner A but claims it belongs to owner B.
 
 ### Ciphertext freshness
 
-`SetValueAsync` always generates a fresh `EncryptionSalt` before encrypting, even when the value is unchanged. This ensures that two calls with the same plaintext produce distinct ciphertexts, preventing an observer with database read access from detecting whether a value has changed.
+`SetValue` always generates a fresh `EncryptionSalt` before encrypting, even when the value is unchanged. This ensures that two calls with the same plaintext produce distinct ciphertexts, preventing an observer with database read access from detecting whether a value has changed.
 
 ---
 
@@ -425,19 +425,19 @@ HashiCorp Vault produces a tamper-evident audit log of every operation — who c
 
 #### 4. No access policy enforcement
 
-The library enforces owner isolation — owner A cannot read owner B's secrets — but it has no concept of roles or policies within an owner context. Any code that holds a reference to `ISecretManager` can call `CreateAsync`, `SetValueAsync`, or `RevokeAsync` for any owner it can supply. Access control is entirely the caller's responsibility. Dedicated vaults have fine-grained policy engines: policy A may read, policy B may read and write, policy C may only list.
+The library enforces owner isolation — owner A cannot read owner B's secrets — but it has no concept of roles or policies within an owner context. Any code that holds a reference to `ISecretManager` can call `Create`, `SetValue`, or `Revoke` for any owner it can supply. Access control is entirely the caller's responsibility. Dedicated vaults have fine-grained policy engines: policy A may read, policy B may read and write, policy C may only list.
 
 **Risk level:** Medium. Mitigated by deploying the secret manager as a dedicated service and controlling which callers can reach it.
 
 #### 5. No secret versioning or point-in-time recovery
 
-HashiCorp Vault KV v2 retains previous secret versions and allows rollback. `SetValueAsync` is destructive — the previous payload is overwritten immediately with no recovery path. A bad rotation that writes incorrect or corrupted data cannot be undone.
+HashiCorp Vault KV v2 retains previous secret versions and allows rollback. `SetValue` is destructive — the previous payload is overwritten immediately with no recovery path. A bad rotation that writes incorrect or corrupted data cannot be undone.
 
 **Risk level:** Medium. Mitigated by keeping an out-of-band encrypted backup before every rotation.
 
 #### 6. Managed memory — secrets not explicitly zeroed
 
-After `ValidateAsync` decrypts a payload, the plaintext exists as a .NET `string` on the managed heap. .NET strings are immutable; the GC may not collect them promptly; and if swap is enabled, they may be written to disk in plaintext before collection. Dedicated vaults and HSMs keep sensitive material in hardware or in pinned native memory that is explicitly zeroed after use. This is a fundamental limitation of the .NET managed runtime, not specific to this library.
+After `Validate` decrypts a payload, the plaintext exists as a .NET `string` on the managed heap. .NET strings are immutable; the GC may not collect them promptly; and if swap is enabled, they may be written to disk in plaintext before collection. Dedicated vaults and HSMs keep sensitive material in hardware or in pinned native memory that is explicitly zeroed after use. This is a fundamental limitation of the .NET managed runtime, not specific to this library.
 
 **Risk level:** Low to medium depending on your swap and memory dump policy. On systems without swap and with restricted dump access, the exposure window is bounded.
 
@@ -500,9 +500,9 @@ public class AuditingSecretManager : ISecretManager {
     private readonly ILogger<AuditingSecretManager> logger;
     private readonly IHttpContextAccessor httpContext;
 
-    public async Task<ICommandResponse<ApplicationSecretDto>> ValidateAsync(
+    public async Task<ICommandResponse<ApplicationSecretDto>> Validate(
             string plainToken, CancellationToken ct) {
-        var result = await inner.ValidateAsync(plainToken, ct);
+        var result = await inner.Validate(plainToken, ct);
         logger.LogInformation(
             "SecretValidate status={Status} caller={Caller} tokenPrefix={Prefix}",
             result.Status,
@@ -523,9 +523,9 @@ Add a thin authorisation layer in front of `ISecretManager` that enforces which 
 
 | Operation | Permitted callers |
 |---|---|
-| `CreateAsync`, `SetValueAsync`, `RevokeAsync` | Vault admin service account only |
-| `ValidateAsync` | Any authenticated internal service |
-| `FindByIdAsync`, `GetSelectListAsync` | Vault admin or the owning service |
+| `Create`, `SetValue`, `Revoke` | Vault admin service account only |
+| `Validate` | Any authenticated internal service |
+| `FindById`, `GetSelectList` | Vault admin or the owning service |
 
 Implement this as a policy-checked wrapper, an ASP.NET Core `[Authorize]` policy on the vault endpoints, or mutual TLS certificate policies.
 
@@ -537,7 +537,7 @@ Without a rotation plan, a compromised `SecretEncryptionKey` cannot safely be re
 2. Decrypt every existing `ApplicationSecret.Secret` using the old key.
 3. Re-encrypt each payload under the new key with a fresh `EncryptionSalt`.
 4. Once all records are migrated, remove the old key from configuration and redeploy.
-5. Verify `ValidateAsync` succeeds for a representative sample of secrets.
+5. Verify `Validate` succeeds for a representative sample of secrets.
 
 Run this as a maintenance migration, not live traffic. Take a verified encrypted backup before starting.
 
@@ -560,18 +560,18 @@ Instrument the audit log to trigger alerts on:
 
 | Event | Suggested threshold |
 |---|---|
-| `ValidateAsync` failures from a single source | > 10 in 60 seconds |
-| `SetValueAsync` or `RevokeAsync` from an unexpected caller | Any occurrence |
+| `Validate` failures from a single source | > 10 in 60 seconds |
+| `SetValue` or `Revoke` from an unexpected caller | Any occurrence |
 | Secrets expiring within 7 days without renewal | Daily report |
 | Host process restarted (potential key re-load from config) | Any occurrence in production |
 
-Repeated `ValidateAsync` failures for the same token prefix indicate a brute-force attempt. After a configurable threshold, auto-revoke the secret and alert an operator.
+Repeated `Validate` failures for the same token prefix indicate a brute-force attempt. After a configurable threshold, auto-revoke the secret and alert an operator.
 
 #### Step 9 — Backup and recovery
 
 - Take an encrypted backup of the database daily, retaining at least 30 days.
 - Store key material backups **separately** from database backups — a combined backup of database + keys in the same location gives an attacker both pieces at once.
-- Test restoration quarterly: restore a backup to a staging environment and verify that `ValidateAsync` returns the expected payload.
+- Test restoration quarterly: restore a backup to a staging environment and verify that `Validate` returns the expected payload.
 - Document the RTO and RPO for your vault — losing the database and keys simultaneously means all stored secrets are permanently unrecoverable.
 
 ### Comparison summary
@@ -603,9 +603,9 @@ This library is a reasonable choice for **low-to-medium sensitivity secrets** on
 | Token not found or expired | `NotFound` |
 | Token found but ownership mismatch | `NotFound` (indistinguishable from above by design) |
 | Secret ID not found or wrong owner on revoke / lookup | `NotFound` |
-| `SetValueAsync` — token unknown, tampered, or expired | `NotFound` |
-| `SetValueAsync` — owner key material missing | `NotFound` |
+| `SetValue` — token unknown, tampered, or expired | `NotFound` |
+| `SetValue` — owner key material missing | `NotFound` |
 | Validation succeeded | `Success` |
-| `SetValueAsync` succeeded | `Success` |
+| `SetValue` succeeded | `Success` |
 
-Both `NotFound` and ownership mismatch map to the same response code in `ValidateAsync` and `SetValueAsync` to prevent callers from inferring whether a token exists.
+Both `NotFound` and ownership mismatch map to the same response code in `Validate` and `SetValue` to prevent callers from inferring whether a token exists.

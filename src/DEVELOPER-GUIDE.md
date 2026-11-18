@@ -13,7 +13,7 @@ n2-core-identity/
 ├── scripts/
 └── src/
     ├── N2.Core.Identity.sln
-    ├── N2.Core.Identity/                # Library (net8.0 + net10.0)
+    ├── N2.Core.Identity/                # Library (net10.0 + net11.0)
     └── N2.Core.Identity.UnitTests/      # MSTest test project
 ```
 
@@ -48,23 +48,16 @@ Test results are written to the console and, when run in CI, published as a pipe
 
 ### Integration tests
 
-Integration tests are tagged `[TestCategory("Integration")]` and require a running database. There are two variants:
+Integration tests are tagged `[TestCategory("Integration")]` and require a running SQL Server database:
 
 | Category              | Required connection string key |
 |-----------------------|-------------------------------|
-| `Integration.MySql`   | `ConnectionStrings:UserDbMySqlTest`    |
 | `Integration.SqlServer` | `ConnectionStrings:UserDbSqlServerTest` |
 
-Supply the connection string via user secrets (ID `N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09`) or the matching double-underscore environment variable (`ConnectionStrings__UserDbMySqlTest`).
+Supply the connection string via user secrets (ID `N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09`) or the matching double-underscore environment variable (`ConnectionStrings__UserDbSqlServerTest`).
 
-To run the MySQL integration tests locally using Docker:
-
-```bash
-docker compose -f src/docker-compose.integration.yml up \
-  --build --exit-code-from integration-tests --abort-on-container-exit
-
-docker compose -f src/docker-compose.integration.yml down --volumes
-```
+MySQL support and its Docker-based integration tests were removed in 2.0.0; MySQL is planned to
+return as a separate package (N2.Core.Identity.MySql) once a stable EF Core 10 MySQL provider exists.
 
 ## CI/CD pipeline
 
@@ -89,9 +82,9 @@ Path filter: only changes under `src/N2.*/**` trigger a run. Documentation-only 
 | # | Stage | Runs on |
 |---|-------|---------|
 | 1 | Build and Test | push to trunk |
-| 2 | Code Analysis | parallel with Integration Tests, after Build |
-| 3 | Integration Tests (MySQL) | parallel with Code Analysis — opt-in, see below |
-| 4 | Publish NuGet | after Build passes and Integration Tests passed or skipped |
+| 2 | Long-Running Tests | after Build, only for a new package version |
+| 3 | Code Analysis | after Build |
+| 4 | Publish NuGet | after Build and Long-Running Tests pass, only for a new package version |
 
 ### Pipeline variables
 
@@ -99,19 +92,6 @@ Path filter: only changes under `src/N2.*/**` trigger a run. Documentation-only 
 |----------|-----------|-------------|
 | `buildConfiguration` | YAML | MSBuild configuration (`Release`) |
 | `artifactsFeedName` | YAML | Azure Artifacts feed (`vault-packages`) |
-| `MYSQL_INTEGRATION_TESTS` | Pipeline UI | Enables the Integration Tests stage (see below) |
-
-#### Enabling MySQL integration tests
-
-The Integration Tests stage in the publish pipeline is **skipped by default**. It runs only when `MYSQL_INTEGRATION_TESTS` is set to exactly `true` in the Azure DevOps pipeline UI.
-
-To enable it:
-
-1. Go to **Pipelines → n2-core-identity-ci-publish → Edit → Variables**.
-2. Add a variable named `MYSQL_INTEGRATION_TESTS` with value `true`.
-3. Optionally tick **Settable at queue time** to toggle it per run without editing the variable permanently.
-
-When the variable is absent or set to any other value, the stage is skipped and the Publish stage proceeds normally.
 
 ### Azure DevOps setup required
 
@@ -128,7 +108,7 @@ When the variable is absent or set to any other value, the stage is skipped and 
 
 ### Runtime targets
 
-The library targets `net8.0` and `net10.0`. Both SDK versions are installed in the pipeline via `UseDotNet@2` steps. When adding or dropping a target framework:
+The library targets `net10.0` and `net11.0`. Both SDK versions are installed in the pipeline via `UseDotNet@2` steps. When adding or dropping a target framework:
 
 1. Update `<TargetFrameworks>` in `src/N2.Core.Identity/N2.Core.Identity.csproj`.
 2. Add or remove the matching `UseDotNet@2` step in both pipeline YAML files.
@@ -139,9 +119,9 @@ The library targets `net8.0` and `net10.0`. Both SDK versions are installed in t
 The version is set in `src/N2.Core.Identity/N2.Core.Identity.csproj`:
 
 ```xml
-<Version>1.7.3</Version>
-<PackageVersion>1.7.3</PackageVersion>
-<AssemblyVersion>1.7.3</AssemblyVersion>
+<Version>2.0.0</Version>
+<PackageVersion>2.0.0</PackageVersion>
+<AssemblyVersion>2.0.0</AssemblyVersion>
 ```
 
 Bump all three before tagging a release. The `.nupkg` is produced automatically by `GeneratePackageOnBuild` on Release builds.
@@ -155,4 +135,4 @@ dotnet list src package --outdated
 dotnet list src package --vulnerable
 ```
 
-Framework-specific packages (e.g. `Microsoft.AspNetCore.*`) have separate versions under the `net8.0` and `net10.0` conditional `<ItemGroup>` blocks — update both.
+Both targets share one dependency set (no framework-conditional `<ItemGroup>` blocks). EF Core and ASP.NET Core packages use the 10.0.x band. Use `dotnet list src package --vulnerable --include-transitive` to include transitive packages.

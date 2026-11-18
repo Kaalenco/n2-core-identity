@@ -14,7 +14,7 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         var userName = $"testuser_{Guid.NewGuid():N}";
         await CreateTestUser(userName, "secret", MultiFactorType.None);
         var authenticator = GetAuthenticator();
-        var user = await authenticator.AuthenticateAsync(new UserLogin { Password = "admin", Username = userName });
+        var user = await authenticator.Authenticate(new UserLogin { Password = "admin", Username = userName }, CancellationToken.None);
         Assert.IsNull(user);
     }
 
@@ -25,7 +25,7 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         UserLogin userInfo = new() { Password = "secret", Username = username };
 
         var authenticator = GetAuthenticator();
-        var user = await authenticator.AuthenticateAsync(userInfo);
+        var user = await authenticator.Authenticate(userInfo, CancellationToken.None);
 
         Assert.IsNotNull(user, "User should be authenticated");
         Assert.AreNotEqual(Guid.Empty, user.PublicId);
@@ -37,15 +37,15 @@ public class UsingN2Authenticator : N2IdentityTestsBase {
         await CreateTestUser("existinguser", "P@ssword123", MultiFactorType.None);
         var authService = GetAuthenticator();
 
-        var invalidUserResult = await authService.AuthenticateAsync(new UserLogin {
+        var invalidUserResult = await authService.Authenticate(new UserLogin {
             Username = "nonexistentuser",
             Password = "WrongPassword"
-        });
+        }, CancellationToken.None);
 
-        var invalidPasswordResult = await authService.AuthenticateAsync(new UserLogin {
+        var invalidPasswordResult = await authService.Authenticate(new UserLogin {
             Username = "existinguser",
             Password = "WrongPassword"
-        });
+        }, CancellationToken.None);
 
         Assert.IsNull(invalidUserResult, "Invalid user should return null");
         Assert.IsNull(invalidPasswordResult, "Invalid password should return null");

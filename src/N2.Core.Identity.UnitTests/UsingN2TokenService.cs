@@ -45,10 +45,10 @@ public sealed class UsingN2TokenService {
             }
         };
 
-        contextFactory.Setup(f => f.CreateAsync()).ReturnsAsync(context.Object);
-        context.Setup(c => c.Complete()).ReturnsAsync((ResponseStatus.Success, (string?)null));
+        contextFactory.Setup(f => f.Create(It.IsAny<CancellationToken>())).ReturnsAsync(context.Object);
+        context.Setup(c => c.Complete(It.IsAny<CancellationToken>())).ReturnsAsync((ResponseStatus.Success, (string?)null));
         context.Setup(c => c.RefreshTokenRevokeAll(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(1);
 
         tokenGenerator.Setup(g => g.GenerateWebToken(It.IsAny<IUserContext>(), It.IsAny<int>()))
             .Returns(FakeAccessToken);
@@ -153,7 +153,7 @@ public sealed class UsingN2TokenService {
         await service.IssueTokenPair(ctx, 5, CancellationToken.None);
 
         context.Verify(c => c.RefreshTokenAdd(It.IsAny<ApplicationRefreshToken>()), Times.Once);
-        context.Verify(c => c.Complete(), Times.Once);
+        context.Verify(c => c.Complete(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [TestMethod]
@@ -465,7 +465,7 @@ public sealed class UsingN2TokenService {
 
         await service.RevokeRefreshToken(token.Token, CancellationToken.None);
 
-        context.Verify(c => c.Complete(), Times.Never);
+        context.Verify(c => c.Complete(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // -------------------------------------------------------------------------
@@ -496,7 +496,7 @@ public sealed class UsingN2TokenService {
         await service.RevokeRefreshToken(token.Token, CancellationToken.None);
 
         context.Verify(c => c.RefreshTokenRevoke(token), Times.Once);
-        context.Verify(c => c.Complete(), Times.Once);
+        context.Verify(c => c.Complete(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // -------------------------------------------------------------------------
@@ -659,7 +659,7 @@ public sealed class UsingN2TokenService {
 
         await service.Logoff(userId, CancellationToken.None);
 
-        context.Verify(c => c.Complete(), Times.Once);
+        context.Verify(c => c.Complete(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [TestMethod]
@@ -671,5 +671,74 @@ public sealed class UsingN2TokenService {
         var result = await service.Logoff(userId, CancellationToken.None);
 
         Assert.IsTrue(result);
+    }
+
+    // -------------------------------------------------------------------------
+    // Revocation is a security write and is not cancellable
+    // -------------------------------------------------------------------------
+
+    [TestMethod]
+    public async Task Logoff_CancelledToken_ShouldStillRevokeAndPersist() {
+        var userId = Guid.NewGuid();
+        var service = CreateService();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var result = await service.Logoff(userId, cts.Token);
+
+        Assert.IsTrue(result);
+        context.Verify(c => c.RefreshTokenRevokeAll(userId, It.Is<CancellationToken>(t => !t.CanBeCanceled)), Times.Once);
+        context.Verify(c => c.Complete(It.Is<CancellationToken>(t => !t.CanBeCanceled)), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task RevokeRefreshToken_CancelledAfterLookup_ShouldStillPersistRevocation() {
+        var user = MakeUser();
+        var token = MakeRefreshToken(user);
+        using var cts = new CancellationTokenSource();
+        context.Setup(c => c.RefreshTokenFind(token.Token, It.IsAny<CancellationToken>()))
+            .Callback(() => cts.Cancel())
+            .ReturnsAsync(token);
+        var service = CreateService();
+
+        var result = await service.RevokeRefreshToken(token.Token, cts.Token);
+
+        Assert.IsTrue(result);
+        context.Verify(c => c.RefreshTokenRevoke(token), Times.Once);
+        context.Verify(c => c.Complete(It.Is<CancellationToken>(t => !t.CanBeCanceled)), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task RevokeRefreshToken_PersistFails_ShouldReturnFalse() {
+        var user = MakeUser();
+        var token = MakeRefreshToken(user);
+        context.Setup(c => c.RefreshTokenFind(token.Token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(token);
+        context.Setup(c => c.Complete(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ResponseStatus.ServerError, "db down"));
+        var service = CreateService();
+
+        var result = await service.RevokeRefreshToken(token.Token, CancellationToken.None);
+
+        Assert.IsFalse(result);
+    }
+
+    [TestMethod]
+    public async Task Refresh_SecurityStampMismatch_CancelledAfterLookup_ShouldStillRevokeAll() {
+        var user = MakeUser(stamp: "current-stamp");
+        var token = MakeRefreshToken(user, stamp: "old-stamp");
+        using var cts = new CancellationTokenSource();
+        context.Setup(c => c.RefreshTokenFind(token.Token, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(token);
+        context.Setup(c => c.UserFindRecord(user.Id, It.IsAny<CancellationToken>()))
+            .Callback(() => cts.Cancel())
+            .ReturnsAsync(user);
+        var service = CreateService();
+
+        var result = await service.Refresh(token.Token, cts.Token);
+
+        Assert.IsNull(result);
+        context.Verify(c => c.RefreshTokenRevokeAll(user.Id, It.Is<CancellationToken>(t => !t.CanBeCanceled)), Times.Once);
+        context.Verify(c => c.Complete(It.Is<CancellationToken>(t => !t.CanBeCanceled)), Times.Once);
     }
 }

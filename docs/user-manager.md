@@ -10,11 +10,11 @@
 
 ### Password hashing — OWASP 2023
 
-Passwords are hashed using PBKDF2-HMAC-SHA256 with **310,000 iterations**, which meets the OWASP 2023 recommendation. This is configured through ASP.NET Core Identity's `PasswordHasher<ApplicationUser>` with `CompatibilityMode.IdentityV3`. If a stored hash was produced at a lower iteration count, `ValidateAsync` detects this on the next successful login and automatically re-hashes the password to the current standard.
+Passwords are hashed using PBKDF2-HMAC-SHA256 with **310,000 iterations**, which meets the OWASP 2023 recommendation. This is configured through ASP.NET Core Identity's `PasswordHasher<ApplicationUser>` with `CompatibilityMode.IdentityV3`. If a stored hash was produced at a lower iteration count, `Validate` detects this on the next successful login and automatically re-hashes the password to the current standard.
 
 ### Timing attack protection — constant-time responses
 
-`N2UserManager.ValidateAsync` and `N2UserManager.ValidateMultifactorAsync` always take **at least 500 ms** to return, regardless of whether the user exists or the credentials are correct. This is enforced by an internal `TimeoutTimer` that pads short execution paths to the configured minimum. The same 500 ms floor is applied independently by `N2AuthenticationService.AuthenticateAsync` (the recommended authentication entry point).
+`N2UserManager.Validate` and `N2UserManager.ValidateMultifactor` always take **at least 500 ms** to return, regardless of whether the user exists or the credentials are correct. This is enforced by an internal `TimeoutTimer` that pads short execution paths to the configured minimum. The same 500 ms floor is applied independently by `N2AuthenticationService.Authenticate` (the recommended authentication entry point).
 
 This prevents user enumeration by measuring the time difference between "user not found" and "wrong password" responses.
 
@@ -71,7 +71,7 @@ Tokens are valid for **5 days**.
 
 ### Security stamp rotation
 
-`SetEmailAsync` and `SetUserNameAsync` both rotate the `SecurityStamp` to a new cryptographically random value. Any confirmation token or session tied to the old stamp is immediately invalidated.
+`SetEmail` and `SetUserName` both rotate the `SecurityStamp` to a new cryptographically random value. Any confirmation token or session tied to the old stamp is immediately invalidated.
 
 ---
 
@@ -152,7 +152,7 @@ services.AddScoped<IAuthenticator, N2AuthenticationService>();
 
 ```csharp
 // Returns null on any failure — no status code to leak which step failed
-IUserContext? context = await authenticator.AuthenticateAsync(userLogin, ct);
+IUserContext? context = await authenticator.Authenticate(userLogin, ct);
 if (context == null) return Unauthorized();
 
 // context.User — the authenticated ApplicationUser
@@ -174,22 +174,22 @@ var user = new ApplicationUser {
     Email = "jane@example.com",
     MfaType = MultiFactorType.Email
 };
-var result = await userManager.CreateAsync(user, "StrongP@ssword1!", ct);
+var result = await userManager.Create(user, "StrongP@ssword1!", ct);
 // ResponseStatus 406 if the username already exists
 ```
 
-`CreateAsync` sets `NormalizedUserName`, `NormalizedEmail`, `SecurityStamp`, `PasswordHash`, `MfaSecret` (new random 32-byte secret, AES-256-GCM encrypted), and `EmailConfirmed = false`. The user cannot sign in until email is confirmed.
+`Create` sets `NormalizedUserName`, `NormalizedEmail`, `SecurityStamp`, `PasswordHash`, `MfaSecret` (new random 32-byte secret, AES-256-GCM encrypted), and `EmailConfirmed = false`. The user cannot sign in until email is confirmed.
 
 ### Deleting a user
 
 ```csharp
-var result = await userManager.DeleteAsync(user, ct);
+var result = await userManager.Delete(user, ct);
 ```
 
 ### Updating the username
 
 ```csharp
-var result = await userManager.SetUserNameAsync(user, "jane.smith", ct);
+var result = await userManager.SetUserName(user, "jane.smith", ct);
 // 406 if the new username is already taken by a different user
 // Rotates SecurityStamp — invalidates any pending confirmation tokens
 ```
@@ -197,7 +197,7 @@ var result = await userManager.SetUserNameAsync(user, "jane.smith", ct);
 ### Updating the email
 
 ```csharp
-var result = await userManager.SetEmailAsync(user, "new@example.com", ct);
+var result = await userManager.SetEmail(user, "new@example.com", ct);
 // 406 if the email is already taken by a different user
 // Sets EmailConfirmed = false and rotates SecurityStamp
 // Send a new confirmation token after this call
@@ -209,16 +209,16 @@ var result = await userManager.SetEmailAsync(user, "new@example.com", ct);
 
 ```csharp
 // By ID
-ICommandResponse<ApplicationUser> response = await userManager.FindByIdAsync(userId, ct);
+ICommandResponse<ApplicationUser> response = await userManager.FindById(userId, ct);
 
 // By username (normalised internally — Trim().ToUpperInvariant())
-ICommandResponse<ApplicationUser> response = await userManager.FindByNameAsync("jane.doe", ct);
+ICommandResponse<ApplicationUser> response = await userManager.FindByName("jane.doe", ct);
 
 // By email address (normalised internally)
-ICommandResponse<ApplicationUser> response = await userManager.FindByEmailAsync("jane@example.com", ct);
+ICommandResponse<ApplicationUser> response = await userManager.FindByEmail("jane@example.com", ct);
 
 // Sign-in eligibility (not locked, email or phone confirmed)
-bool canSignIn = await userManager.CanSignInAsync(user, ct);
+bool canSignIn = await userManager.CanSignIn(user, ct);
 ```
 
 `FindBy*` methods wrap the result in `ICommandResponse<ApplicationUser>`. Check `response.Status.IsSuccess()` and access `response.Value` when found.
@@ -230,7 +230,7 @@ bool canSignIn = await userManager.CanSignInAsync(user, ct);
 ### Step 1 — Validate password
 
 ```csharp
-var result = await userManager.ValidateAsync(user, password, ct);
+var result = await userManager.Validate(user, password, ct);
 // Returns after at least 500ms regardless of outcome
 // ResponseStatus 423 Locked — account is locked; message contains the lockout end time
 // ResponseStatus NotAccepted — wrong password (also increments the failed count)
@@ -241,7 +241,7 @@ var result = await userManager.ValidateAsync(user, password, ct);
 
 ```csharp
 if (user.MfaType != MultiFactorType.None) {
-    var mfaResult = await userManager.ValidateMultifactorAsync(user, mfaCode, ct);
+    var mfaResult = await userManager.ValidateMultifactor(user, mfaCode, ct);
     // Returns after at least 500ms
     // ResponseStatus Unauthorized — rate-limited, wrong code, or expired token
     // ResponseStatus Accepted — no MFA configured (MultiFactorType.None)
@@ -257,7 +257,7 @@ if (user.MfaType != MultiFactorType.None) {
 ### 1. Generate and send a token
 
 ```csharp
-var tokenResult = await userManager.GenerateConfirmationTokenAsync(user, ct);
+var tokenResult = await userManager.GenerateConfirmationToken(user, ct);
 var token = tokenResult.Value!;
 // Send via email / SMS depending on user.MfaType
 ```
@@ -273,7 +273,7 @@ Token lifetimes and formats by MFA type:
 ### 2. Confirm the email
 
 ```csharp
-var result = await userManager.ConfirmEmailAsync(user, confirmationToken, ct);
+var result = await userManager.ConfirmEmail(user, confirmationToken, ct);
 // Sets EmailConfirmed = true and LockoutEnabled = true on success
 ```
 
@@ -284,7 +284,7 @@ var result = await userManager.ConfirmEmailAsync(user, confirmationToken, ct);
 ### Enrol a user
 
 ```csharp
-var result = await userManager.SetMultifactorAsync(user, MultiFactorType.Totp, mfaToken, ct);
+var result = await userManager.SetMultifactor(user, MultiFactorType.Totp, mfaToken, ct);
 if (result.Status.IsSuccess()) {
     var props = result.Value!;
     // props.QrCode — PNG bytes for rendering a QR code (TOTP only)
@@ -304,21 +304,21 @@ TOTP validation uses a `VerificationWindow(1, 1)`, meaning codes from the curren
 
 ```csharp
 // Create / delete roles
-await userManager.CreateRoleAsync("Admin", ct);
-await userManager.RemoveRoleAsync("Admin", ct);
+await userManager.CreateRole("Admin", ct);
+await userManager.RemoveRole("Admin", ct);
 
 // Assign / remove a user from a role (both idempotent)
-await userManager.AddToRoleAsync(user, "Admin", ct);
-await userManager.RemoveFromRoleAsync(user, "Admin", ct);
+await userManager.AddToRole(user, "Admin", ct);
+await userManager.RemoveFromRole(user, "Admin", ct);
 
 // Check membership
-var inRole = await userManager.IsInRoleAsync(user, "Admin", ct);
+var inRole = await userManager.IsInRole(user, "Admin", ct);
 // Success = in role, NotAccepted = not in role
 
 // List all roles for a user
-IListResponse<string> rolesResponse = await userManager.GetRolesAsync(user, ct);
+IListResponse<string> rolesResponse = await userManager.GetRoles(user, ct);
 
-bool exists = await userManager.RoleExistsAsync("Admin", ct);
+bool exists = await userManager.RoleExists("Admin", ct);
 ```
 
 ---
@@ -332,10 +332,10 @@ bool exists = await userManager.RoleExistsAsync("Admin", ct);
 1. Set `MfaTokenSecret2` to the current value of `MfaTokenSecret`.
 2. Set `MfaTokenSecret` to the new key.
 3. Deploy the updated configuration.
-4. Call `RotateMfaSecretsAsync` once to re-encrypt all rows:
+4. Call `RotateMfaSecrets` once to re-encrypt all rows:
 
 ```csharp
-int count = await userManager.RotateMfaSecretsAsync(ct);
+int count = await userManager.RotateMfaSecrets(ct);
 // count = number of MfaSecret rows re-encrypted
 ```
 
@@ -359,7 +359,7 @@ var owner = await userManager.GetSecretOwner(userId, ct);
 // null if the user does not exist
 // throws InvalidOperationException if SecretKeyMaterial is not set
 
-var result = await secretManager.CreateAsync(owner!, new CreateSecretDto {
+var result = await secretManager.Create(owner!, new CreateSecretDto {
     Name = "Personal Access Token",
     Expiration = DateTime.UtcNow.AddYears(1)
 }, ct);

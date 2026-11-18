@@ -49,7 +49,7 @@ public sealed class N2TokenService : IN2TokenService {
         var expiresAt = tokenGenerator.RefreshTokenExpiry();
         var stamp = (userContext as AspNetUserContext)?.SecurityStamp;
 
-        using var db = await contextFactory.CreateAsync();
+        using var db = await contextFactory.Create(ct);
         db.RefreshTokenAdd(new ApplicationRefreshToken {
             ApplicationUserId = userContext.PublicId,
             Token = refreshTokenValue,
@@ -57,7 +57,7 @@ public sealed class N2TokenService : IN2TokenService {
             SecurityStamp = stamp
         });
 
-        var (code, message) = await db.Complete();
+        var (code, message) = await db.Complete(ct);
         if (!code.IsSuccess()) {
             TokenIssueFailed(logger, message ?? "unknown error", null);
             throw new InvalidOperationException($"Failed to persist refresh token: {message}");
@@ -78,7 +78,7 @@ public sealed class N2TokenService : IN2TokenService {
             return cached;
         }
 
-        using var db = await contextFactory.CreateAsync();
+        using var db = await contextFactory.Create(ct);
         var storedToken = await db.RefreshTokenFind(refreshToken, ct);
 
         if (storedToken == null || !storedToken.IsValid) {
@@ -93,12 +93,41 @@ public sealed class N2TokenService : IN2TokenService {
         }
 
         if (storedToken.SecurityStamp != null && storedToken.SecurityStamp != user.SecurityStamp) {
-            TokenRefreshFailed(logger, "security stamp mismatch — revoking all tokens for user", null);
-            await db.RefreshTokenRevokeAll(storedToken.ApplicationUserId, ct);
-            await db.Complete();
-            return null;
+            return await RevokeAllAfterStampMismatch(db, storedToken.ApplicationUserId);
         }
 
+        var result = await RotateRefreshToken(db, storedToken, user, ct);
+        if (result != null) {
+            cache.Set(cacheKey, result, GracePeriod);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Revokes every refresh token of the user after a security stamp mismatch.
+    /// </summary>
+    /// <remarks>
+    /// Revocation is a security write: it runs with CancellationToken.None so a caller that
+    /// cancels the request cannot leave the compromised sessions active.
+    /// </remarks>
+    /// <returns>Always <c>null</c>: no new token pair is issued.</returns>
+    private async Task<TokenPairResult?> RevokeAllAfterStampMismatch(IIdentityContext db, Guid userId) {
+        var revoked = await db.RefreshTokenRevokeAll(userId, CancellationToken.None);
+        var (revokeCode, _) = await db.Complete(CancellationToken.None);
+        TokenRefreshFailed(logger, $"security stamp mismatch; revoked {revoked} refresh token(s) for the user, persist status {revokeCode}", null);
+        return null;
+    }
+
+    /// <summary>
+    /// Revokes <paramref name="storedToken"/>, persists a new refresh token and issues a new
+    /// access token.
+    /// </summary>
+    /// <returns>The new token pair, or <c>null</c> when the rotation could not be persisted.</returns>
+    private async Task<TokenPairResult?> RotateRefreshToken(
+        IIdentityContext db,
+        ApplicationRefreshToken storedToken,
+        ApplicationUser user,
+        CancellationToken ct) {
         var newRefreshValue = tokenGenerator.GenerateRefreshToken();
         var expiresAt = tokenGenerator.RefreshTokenExpiry();
 
@@ -110,7 +139,7 @@ public sealed class N2TokenService : IN2TokenService {
             SecurityStamp = user.SecurityStamp
         });
 
-        var (code, message) = await db.Complete();
+        var (code, message) = await db.Complete(ct);
         if (!code.IsSuccess()) {
             TokenRefreshFailed(logger, message ?? "failed to persist rotated token", null);
             return null;
@@ -118,26 +147,23 @@ public sealed class N2TokenService : IN2TokenService {
 
         IList<(Guid TenantId, string TenantName, IReadOnlyList<string> Roles)> memberships = [];
         if (userManager is N2UserManager nm) {
-            memberships = await nm.GetTenantMembershipsAsync(user, ct);
+            memberships = await nm.GetTenantMemberships(user, ct);
         }
 
         var userContext = new AspNetUserContext(user, memberships, [], null);
         var accessToken = tokenGenerator.GenerateWebToken(userContext, jwtSettings.TokenExpirationInMinutes);
 
-        var result = new TokenPairResult {
+        return new TokenPairResult {
             AccessToken = accessToken,
             RefreshToken = newRefreshValue,
             RefreshTokenExpiresAt = expiresAt
         };
-
-        cache.Set(cacheKey, result, GracePeriod);
-        return result;
     }
 
     public async Task<bool> RevokeRefreshToken(string refreshToken, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(refreshToken);
 
-        using var db = await contextFactory.CreateAsync();
+        using var db = await contextFactory.Create(ct);
         var storedToken = await db.RefreshTokenFind(refreshToken, ct);
 
         if (storedToken == null || storedToken.IsRevoked) {
@@ -145,8 +171,9 @@ public sealed class N2TokenService : IN2TokenService {
         }
 
         db.RefreshTokenRevoke(storedToken);
-        await db.Complete();
-        return true;
+        // Security write: once the token is found the revocation is not cancellable (one row).
+        var (code, _) = await db.Complete(CancellationToken.None);
+        return code.IsSuccess();
     }
 
     public Guid? ReadUserIdFromExpiredToken(string token) {
@@ -195,10 +222,15 @@ public sealed class N2TokenService : IN2TokenService {
         return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
     }
 
+    /// <remarks>
+    /// Logoff is a security write. The whole revocation runs with CancellationToken.None, so a
+    /// cancelled request still revokes every session; the work is one bounded query and update.
+    /// The number of revoked tokens is not needed here: success means "no active session left".
+    /// </remarks>
     public async Task<bool> Logoff(Guid userId, CancellationToken ct) {
-        using var db = await contextFactory.CreateAsync();
-        await db.RefreshTokenRevokeAll(userId, ct);
-        var (code, _) = await db.Complete();
+        using var db = await contextFactory.Create(CancellationToken.None);
+        _ = await db.RefreshTokenRevokeAll(userId, CancellationToken.None);
+        var (code, _) = await db.Complete(CancellationToken.None);
         return code.IsSuccess();
     }
 

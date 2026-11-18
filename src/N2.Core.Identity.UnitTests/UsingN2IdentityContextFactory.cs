@@ -9,13 +9,12 @@ namespace N2.Core.Identity.UnitTests;
 
 [TestClass]
 public class UsingN2IdentityContextFactory {
-    private const string SqlServerConnectionName = "UserDbSqlServerTest";
-    private const string MySqlConnectionName = "UserDbMySqlTest";
+    private const string SqlServerConnectionName = "UserDbSqlServerTest";
 
     private static IConfiguration BuildConfiguration() =>
         new ConfigurationBuilder()
             .AddUserSecrets<UsingN2IdentityContextFactory>()
-            .AddEnvironmentVariables()   // CI injects ConnectionStrings__UserDbMySqlTest etc.
+            .AddEnvironmentVariables()   // CI injects ConnectionStrings__UserDbSqlServerTest etc.
             .Build();
 
     private static Mock<IConnectionStringService> BuildMock(IConfiguration configuration) {
@@ -32,7 +31,7 @@ public class UsingN2IdentityContextFactory {
         var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
-        using var context = await factory.CreateAsync(DatabaseProvider.SqlServer, SqlServerConnectionName);
+        using var context = await factory.Create(DatabaseProvider.SqlServer, SqlServerConnectionName, CancellationToken.None);
 
         // Assert
         var dbContext = (N2IdentityContext)context;
@@ -40,17 +39,41 @@ public class UsingN2IdentityContextFactory {
     }
 
     [TestMethod]
-    [TestCategory("Integration")]
-    public async Task CreateAsync_MySqlProvider_ShouldConfigureMySqlProvider() {
+    public void Constructor_UnsupportedProvider_ShouldThrowIdentityConfigurationException() {
+        // Arrange: value 1 was DatabaseProvider.MySql before 2.0.0.
+        const DatabaseProvider removedMySql = (DatabaseProvider)1;
+        var mock = new Mock<IConnectionStringService>();
+
+        // Act & Assert
+        var ex = Assert.ThrowsExactly<IdentityConfigurationException>(
+            () => new N2IdentityContextFactory(mock.Object, removedMySql, SqlServerConnectionName));
+        StringAssert.Contains(ex.Message, "SqlServer");
+    }
+
+    [TestMethod]
+    public async Task Create_UnsupportedProvider_ShouldThrowIdentityConfigurationException() {
         // Arrange
-        var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.MySql, MySqlConnectionName);
+        var mock = new Mock<IConnectionStringService>();
+        mock.Setup(s => s.GetConnectionString(It.IsAny<string>())).Returns("Server=x;Database=y");
+        var factory = new N2IdentityContextFactory(mock.Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
-        // Act
-        using var context = await factory.CreateAsync(DatabaseProvider.MySql, MySqlConnectionName);
+        // Act & Assert
+        await Assert.ThrowsExactlyAsync<IdentityConfigurationException>(
+            () => factory.Create((DatabaseProvider)1, SqlServerConnectionName, CancellationToken.None));
+        mock.Verify(s => s.GetConnectionString(It.IsAny<string>()), Times.Never);
+    }
 
-        // Assert
-        var dbContext = (N2IdentityContext)context;
-        Assert.AreEqual("Pomelo.EntityFrameworkCore.MySql", dbContext.Database.ProviderName);
+    [TestMethod]
+    public async Task Create_CancelledToken_ShouldThrowOperationCanceledException() {
+        // Arrange
+        var mock = new Mock<IConnectionStringService>();
+        var factory = new N2IdentityContextFactory(mock.Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        // Act & Assert
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+            () => factory.Create(cts.Token));
     }
 
     [TestMethod]
@@ -60,7 +83,7 @@ public class UsingN2IdentityContextFactory {
         var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
-        using var context = await factory.CreateAsync();
+        using var context = await factory.Create(CancellationToken.None);
 
         // Assert
         var dbContext = (N2IdentityContext)context;
@@ -74,7 +97,7 @@ public class UsingN2IdentityContextFactory {
         var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
-        using var context = await factory.CreateAsync(SqlServerConnectionName);
+        using var context = await factory.Create(SqlServerConnectionName, CancellationToken.None);
 
         // Assert
         var dbContext = (N2IdentityContext)context;
@@ -88,7 +111,7 @@ public class UsingN2IdentityContextFactory {
         var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, DatabaseProvider.SqlServer, SqlServerConnectionName);
 
         // Act
-        using var context = await factory.CreateAsync(DatabaseProvider.SqlServer);
+        using var context = await factory.Create(DatabaseProvider.SqlServer, CancellationToken.None);
 
         // Assert
         var dbContext = (N2IdentityContext)context;
@@ -105,6 +128,6 @@ public class UsingN2IdentityContextFactory {
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => factory.CreateAsync(DatabaseProvider.SqlServer, SqlServerConnectionName));
+            () => factory.Create(DatabaseProvider.SqlServer, SqlServerConnectionName, CancellationToken.None));
     }
 }

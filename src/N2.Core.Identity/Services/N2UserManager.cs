@@ -47,14 +47,14 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
     private static readonly Action<ILogger, Guid, Exception?> _logRotateMfaSecretDecryptionFailed =
         LoggerMessage.Define<Guid>(
             LogLevel.Warning,
-            new EventId(1001, nameof(RotateMfaSecretsAsync)),
-            "RotateMfaSecretsAsync: could not decrypt MfaSecret for user {UserId} — skipping.");
+            new EventId(1001, nameof(RotateMfaSecrets)),
+            "RotateMfaSecrets: could not decrypt MfaSecret for user {UserId} — skipping.");
 
     private static readonly Action<ILogger, int, Exception?> _logRotateMfaSecretRotated =
         LoggerMessage.Define<int>(
             LogLevel.Information,
-            new EventId(1002, nameof(RotateMfaSecretsAsync)),
-            "\"RotateMfaSecretsAsync: re-encrypted {Count} MfaSecret(s).\"");
+            new EventId(1002, nameof(RotateMfaSecrets)),
+            "\"RotateMfaSecrets: re-encrypted {Count} MfaSecret(s).\"");
 
     private static readonly MultiFactorType[] allowedConfirmation = [MultiFactorType.Email, MultiFactorType.Sms];
     private readonly AuthenticationConfig configuration;
@@ -71,7 +71,7 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
     private readonly IVaultCallerContext? callerContext;
 
     // Intentionally not disposed: Dispose() may be called by the DI container while
-    // ValidateMultifactorAsync is still waiting on WaitAsync(), which would cause an
+    // ValidateMultifactor is still waiting on WaitAsync(), which would cause an
     // ObjectDisposedException. SemaphoreSlim has no unmanaged resources; the GC reclaims it.
 #pragma warning disable CA2213
     private readonly SemaphoreSlim lockObject = new(1, 1);
@@ -125,9 +125,11 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         }
     }
 
-    public async Task CreateUserAlert(Guid userId, UserAlert userAlert, CancellationToken ct) {
+    /// <summary>Stores a user alert.</summary>
+    /// <returns>The persistence status from <see cref="N2.Core.Entity.IUnitOfWork.Complete(CancellationToken)"/>.</returns>
+    public async Task<ResponseStatus> CreateUserAlert(Guid userId, UserAlert userAlert, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(userAlert);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var alert = new ApplicationUserAlert {
             ApplicationUserId = userId,
             Message = userAlert.Message,
@@ -135,7 +137,8 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             CreatedAt = DateTime.UtcNow
         };
         await ctx.UserAlertAdd(alert, ct);
-        await ctx.Complete();
+        var (status, _) = await ctx.Complete(ct);
+        return status;
     }
 
     /// <summary>
@@ -145,12 +148,12 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
     /// <see cref="ApplicationUserTenant.IsAdmin"/>. The structure supports additional per-tenant
     /// roles once a dedicated role table is introduced.
     /// </summary>
-    public async Task<IList<(Guid TenantId, string TenantName, IReadOnlyList<string> Roles)>> GetTenantMembershipsAsync(
+    public async Task<IList<(Guid TenantId, string TenantName, IReadOnlyList<string> Roles)>> GetTenantMemberships(
         ApplicationUser user,
         CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
 
         var rows = await ctx.UserTenant
             .AsNoTracking()
@@ -170,10 +173,10 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             .ToList();
     }
 
-    public async Task<ICommandResponse> AddToRoleAsync(ApplicationUser user, string role, CancellationToken ct) {
+    public async Task<ICommandResponse> AddToRole(ApplicationUser user, string role, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.RoleFindRecord(normalizedName, ct);
         if (roleItem == null) {
@@ -188,20 +191,20 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             UserId = user.Id
         };
         await ctx.UserRoleAdd(userRole, ct);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
     public async Task<bool> ApplicationUserCanSignIn([NotNull] ApplicationUser user, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         return await ctx.UserCanSignIn(user.Id, ct);
     }
 
-    Task<bool> IUserManager<ApplicationUser>.CanSignInAsync(ApplicationUser user, CancellationToken ct)
+    Task<bool> IUserManager<ApplicationUser>.CanSignIn(ApplicationUser user, CancellationToken ct)
         => ApplicationUserCanSignIn(user, ct);
 
-    public async Task<ICommandResponse> ConfirmEmailAsync([NotNull] ApplicationUser user, string confirmationToken, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+    public async Task<ICommandResponse> ConfirmEmail([NotNull] ApplicationUser user, string confirmationToken, CancellationToken ct) {
+        using var ctx = await CreateContext(ct);
         var (flowControl, value, dbUser) = await ValidateConfirmationToken(ctx, user.Id, user.UserName, MultiFactorType.Email, user.Email, confirmationToken, ct);
         if (!flowControl) {
             return value;
@@ -210,15 +213,15 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         // dbUser should be set
         dbUser!.LockoutEnabled = true;
         dbUser!.EmailConfirmed = true;
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> CreateAsync([NotNull] ApplicationUser user, string password, CancellationToken ct) {
+    public async Task<ICommandResponse> Create([NotNull] ApplicationUser user, string password, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(password);
 
-        using var ctx = await CreateContextAsync();
-        var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName ?? string.Empty, ct);
+        using var ctx = await CreateContext(ct);
+        var dbUser = await ApplicationUserByName(ctx, user.UserName ?? string.Empty, ct);
         if (dbUser != null) {
             return new RequestResult(406, "Already exists");
         }
@@ -235,13 +238,13 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         user.PasswordHash = passwordHasher.HashPassword(user, password);
         await ctx.UserAdd(user, ct);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> CreateRoleAsync(string role, CancellationToken ct) {
+    public async Task<ICommandResponse> CreateRole(string role, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.RoleFindRecord(normalizedName, ct);
         if (roleItem != null) {
@@ -253,14 +256,14 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         };
         await ctx.RoleAdd(roleItem, ct);
 
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> DeleteAsync([NotNull] ApplicationUser user, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+    public async Task<ICommandResponse> Delete([NotNull] ApplicationUser user, CancellationToken ct) {
+        using var ctx = await CreateContext(ct);
         ctx.UserDelete(user);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
@@ -270,37 +273,37 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         GC.SuppressFinalize(this);
     }
 
-    public async Task<ICommandResponse<ApplicationUser>> FindByEmailAsync(string emailAddress, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+    public async Task<ICommandResponse<ApplicationUser>> FindByEmail(string emailAddress, CancellationToken ct) {
+        using var ctx = await CreateContext(ct);
         var result = await ApplicationUserFindRecordByEmail(ctx, emailAddress, ct);
         return new ApplicationUserResponse(result);
     }
 
-    public async Task<ICommandResponse<ApplicationUser>> FindByIdAsync(Guid userId, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
-        var user = await ApplicationUserByIdAsync(ctx, userId, ct);
+    public async Task<ICommandResponse<ApplicationUser>> FindById(Guid userId, CancellationToken ct) {
+        using var ctx = await CreateContext(ct);
+        var user = await ApplicationUserById(ctx, userId, ct);
         return new ApplicationUserResponse(user);
     }
 
     public async Task<ICommandResponse<ApplicationUser>> ApplicationUserFind(string? userName, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
-        var user = await ApplicationUserByNameAsync(ctx, userName, ct);
+        using var ctx = await CreateContext(ct);
+        var user = await ApplicationUserByName(ctx, userName, ct);
         return new ApplicationUserResponse(user);
     }
 
-    Task<ICommandResponse<ApplicationUser>> IUserManager<ApplicationUser>.FindByNameAsync(string userName, CancellationToken ct)
+    Task<ICommandResponse<ApplicationUser>> IUserManager<ApplicationUser>.FindByName(string userName, CancellationToken ct)
         => ApplicationUserFind(userName, ct);
 
-    public async Task<ICommandResponse<string>> GenerateConfirmationTokenAsync([NotNull] ApplicationUser user, CancellationToken ct) {
+    public async Task<ICommandResponse<string>> GenerateConfirmationToken([NotNull] ApplicationUser user, CancellationToken ct) {
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var mfaType = user.MfaType;
         ApplicationUser? dbUser;
         if (user.Id == Guid.Empty) {
-            dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, ct);
+            dbUser = await ApplicationUserByName(ctx, user.UserName, ct);
 
         } else {
-            dbUser = await ApplicationUserByIdAsync(ctx, user.Id, ct);
+            dbUser = await ApplicationUserById(ctx, user.Id, ct);
         }
         if (dbUser == null) {
             throw new InvalidOperationException("Invalid user");
@@ -309,7 +312,7 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         if (mfaType == MultiFactorType.None) {
             dbUser.MfaSecret = string.Empty;
             dbUser.MfaType = mfaType;
-            await ctx.Complete();
+            await ctx.Complete(ct);
             return StringResponse.Accept(string.Empty);
         }
 
@@ -318,7 +321,7 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
 
         dbUser.MfaSecret = MfaSecretEncryption.Encrypt(secret, configuration.MfaTokenSecret);
         dbUser.MfaType = mfaType;
-        await ctx.Complete();
+        await ctx.Complete(ct);
 
         if (mfaType == MultiFactorType.Totp) {
 
@@ -346,26 +349,26 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         return StringResponse.Fail(string.Empty, $"Not supported: {user.MfaType}");
     }
 
-    public async Task<IListResponse<string>> GetRolesAsync([NotNull] ApplicationUser user, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+    public async Task<IListResponse<string>> GetRoles([NotNull] ApplicationUser user, CancellationToken ct) {
+        using var ctx = await CreateContext(ct);
         var roles = await ctx.UserGetRoles(user.Id, ct);
         ListResponse<string> response = new(roles);
         return response;
     }
 
-    public async Task<ICommandResponse<Guid>> GetUserIdAsync(ApplicationUser user, CancellationToken ct) {
+    public async Task<ICommandResponse<Guid>> GetUserId(ApplicationUser user, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedName = (user.UserName ?? "").Trim().ToUpperInvariant();
         var userRecord = await ctx.User.FirstOrDefaultAsync(u => u.NormalizedUserName == normalizedName, ct);
         var result = userRecord?.Id ?? Guid.Empty;
         return GuidResponse.Accept(result);
     }
 
-    public async Task<ICommandResponse> IsInRoleAsync(ApplicationUser user, string role, CancellationToken ct) {
+    public async Task<ICommandResponse> IsInRole(ApplicationUser user, string role, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.RoleFindRecord(normalizedName, ct);
         if (roleItem == null) {
@@ -379,10 +382,10 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         }
     }
 
-    public async Task<ICommandResponse> RemoveFromRoleAsync(ApplicationUser user, string role, CancellationToken ct) {
+    public async Task<ICommandResponse> RemoveFromRole(ApplicationUser user, string role, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.RoleFindRecord(normalizedName, ct);
         if (roleItem == null) {
@@ -393,26 +396,26 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             return RequestResult.Ok();
         }
         ctx.UserRoleDelete(isAssigned);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<ICommandResponse> RemoveRoleAsync(string role, CancellationToken ct) {
+    public async Task<ICommandResponse> RemoveRole(string role, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedName = role.Trim().ToUpperInvariant();
         var roleItem = await ctx.Role.FirstOrDefaultAsync(r => r.NormalizedName == normalizedName, ct);
         if (roleItem == null) {
             return RequestResult.NotFound();
         }
         ctx.RoleDelete(roleItem);
-        (var code, var message) = await ctx.Complete();
+        (var code, var message) = await ctx.Complete(ct);
         return new RequestResult(code, message ?? string.Empty);
     }
 
-    public async Task<bool> RoleExistsAsync(string role, CancellationToken ct) {
+    public async Task<bool> RoleExists(string role, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(role);
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedName = role.Trim().ToUpperInvariant();
         var roleId = await ctx.RoleFindRecord(normalizedName, ct);
         return roleId != null;
@@ -471,38 +474,38 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
     /// </list>
     /// </remarks>
     /// <returns>The number of rows re-encrypted.</returns>
-    public async Task<int> RotateMfaSecretsAsync(CancellationToken cancellationToken = default) {
+    public async Task<int> RotateMfaSecrets(CancellationToken ct) {
         if (string.IsNullOrEmpty(configuration.MfaTokenSecret2)) {
             throw new InvalidOperationException(
                 "MfaTokenSecret2 must contain the retiring key before rotation can proceed.");
         }
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
 
         // Using explicit null / empty check because string.IsNullOrEmpty is not translatable
         // to SQL and would pull all rows into memory before filtering.
         var users = await ctx.User
             .Where(u => u.MfaSecret != null && u.MfaSecret != string.Empty)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(ct);
 
         var rotated = users.Count(TryRotateUserMfaSecret);
 
         if (rotated > 0) {
-            await ctx.Complete();
+            await ctx.Complete(ct);
             _logRotateMfaSecretRotated(logger, rotated, null);
         }
 
         return rotated;
     }
 
-    public async Task<ICommandResponse> SetEmailAsync([NotNull] ApplicationUser user, string email, CancellationToken ct) {
+    public async Task<ICommandResponse> SetEmail([NotNull] ApplicationUser user, string email, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(email);
         (var emailValid, var message) = ValidateEmail(email);
         if (!emailValid) {
             return new RequestResult(406, message);
         }
-        using var ctx = await CreateContextAsync();
-        var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName ?? string.Empty, ct);
+        using var ctx = await CreateContext(ct);
+        var dbUser = await ApplicationUserByName(ctx, user.UserName ?? string.Empty, ct);
         if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
@@ -511,13 +514,13 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         user.EmailConfirmed = false;
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
-        (var status, var commitMessage) = await ctx.Complete();
+        (var status, var commitMessage) = await ctx.Complete(ct);
         return status.IsSuccess()
             ? RequestResult.Ok()
             : new RequestResult(status, $"Email not set for {user.Id}, {commitMessage}");
     }
 
-    public async Task<ICommandResponse<MultiFactorProperties>> SetMultifactorAsync(
+    public async Task<ICommandResponse<MultiFactorProperties>> SetMultifactor(
         ApplicationUser user,
         MultiFactorType mfaType,
         string mfaToken,
@@ -563,14 +566,14 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
                 return MultifactorResponse.Failed($"Not supported : {mfaType}.");
         }
 
-        using var ctx = await CreateContextAsync();
-        var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, ct);
+        using var ctx = await CreateContext(ct);
+        var dbUser = await ApplicationUserByName(ctx, user.UserName, ct);
         if (dbUser is null) {
             return new MultifactorResponse(ResponseStatus.NotFound, $"Could not find user {user.UserName}");
         }
         dbUser.MfaSecret = MfaSecretEncryption.Encrypt(rngCode, configuration.MfaTokenSecret);
         dbUser.MfaType = mfaType;
-        (var responseCode, var message) = await ctx.Complete();
+        (var responseCode, var message) = await ctx.Complete(ct);
 
         if (responseCode.IsSuccess()) {
             MultiFactorProperties result = new() {
@@ -584,10 +587,10 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         }
     }
 
-    public async Task<ICommandResponse> SetUserNameAsync([NotNull] ApplicationUser user, string userName, CancellationToken ct) {
+    public async Task<ICommandResponse> SetUserName([NotNull] ApplicationUser user, string userName, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(userName);
-        using var ctx = await CreateContextAsync();
-        var dbUser = await ApplicationUserByNameAsync(ctx, userName, ct);
+        using var ctx = await CreateContext(ct);
+        var dbUser = await ApplicationUserByName(ctx, userName, ct);
         if (dbUser != null && dbUser.Id != user.Id) {
             return new RequestResult(406, "Already occupied");
         }
@@ -595,7 +598,7 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         user.NormalizedUserName = userName.Trim().ToUpperInvariant();
         user.SecurityStamp = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
-        (var status, var commitMessage) = await ctx.Complete();
+        (var status, var commitMessage) = await ctx.Complete(ct);
         return status.IsSuccess()
             ? RequestResult.Ok()
             : new RequestResult(status, $"Username not set for {user.Id}, {commitMessage}");
@@ -605,19 +608,19 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         rateLimiter.UpdateRateLimit(userId, userName, newEndDate);
     }
 
-    public async Task<ICommandResponse> ValidateAsync(ApplicationUser user, string password, CancellationToken ct) {
+    public async Task<ICommandResponse> Validate(ApplicationUser user, string password, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentException.ThrowIfNullOrEmpty(password);
         var timer = new TimeoutTimer(TimeForAuthenticationMs);
 
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var normalizedUserName = user.UserName?.ToUpperInvariant() ?? string.Empty;
         var appUser = await ctx.User
             .Where(m => m.NormalizedUserName == normalizedUserName)
             .FirstOrDefaultAsync(ct);
 
         if (appUser == null) {
-            await timer.Wait();
+            await timer.Wait(ct);
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
         }
 
@@ -626,7 +629,7 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             var lockoutEnd = appUser.LockoutEnd!.Value;
             var remainingTime = lockoutEnd - DateTimeOffset.UtcNow;
             logger.LogUserLockedOut(appUser.UserName ?? appUser.Id.ToString(), lockoutEnd, Math.Ceiling(remainingTime.TotalMinutes));
-            await timer.Wait();
+            await timer.Wait(ct);
             return new RequestResult(423, $"Account is locked. Try again after {lockoutEnd:u}");
         }
 
@@ -637,21 +640,33 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         );
 
         if (verificationResult == PasswordVerificationResult.Failed) {
-            await IncrementAccessFailedCountAsync(ctx, appUser, logger, ct);
+            _ = ReportCounterStatus(appUser.Id, await IncrementAccessFailedCount(ctx, appUser, logger));
             return new RequestResult(ResponseStatus.NotAccepted, "Not accepted");
         }
 
         // Password verified successfully - reset failed count
-        await ResetAccessFailedCountAsync(ctx, appUser, ct);
+        _ = ReportCounterStatus(appUser.Id, await ResetAccessFailedCount(ctx, appUser));
 
         // Optional: Rehash if using outdated format
         if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded) {
             appUser.PasswordHash = passwordHasher.HashPassword(appUser, password);
-            await ctx.Complete();
+            await ctx.Complete(ct);
         }
         return new RequestResult(ResponseStatus.Success, user.UserName ?? string.Empty);
     }
-    public async Task<ICommandResponse> ValidateMultifactorAsync(ApplicationUser user, string multifactorCode, CancellationToken ct) {
+
+    /// <summary>
+    /// Logs when a lockout counter write was not persisted.
+    /// </summary>
+    /// <returns><c>true</c> when <paramref name="status"/> is a success status.</returns>
+    private bool ReportCounterStatus(Guid userId, ResponseStatus status) {
+        if (status.IsSuccess()) {
+            return true;
+        }
+        logger.LogAccessFailedCountNotPersisted(userId, status);
+        return false;
+    }
+    public async Task<ICommandResponse> ValidateMultifactor(ApplicationUser user, string multifactorCode, CancellationToken ct) {
 
         ArgumentNullException.ThrowIfNull(user);
         var timer = new TimeoutTimer(TimeForAuthenticationMs);
@@ -660,119 +675,162 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             // Check rate limiting FIRST (before any validation)
             var (rateLimitCheck, remainingTime) = rateLimiter.CheckRateLimit(user.Id, user.NormalizedUserName);
             if (!rateLimitCheck) {
-                await timer.Wait();
+                await timer.Wait(ct);
                 return new MultifactorResponse(
                     ResponseStatus.Unauthorized,
                     $"Too many failed MFA attempts. Account locked for {remainingTime} more minutes."
                 );
             }
 
-            using var ctx = await CreateContextAsync();
+            using var ctx = await CreateContext(ct);
 
-            if (user == null || string.IsNullOrEmpty(user.UserName)) {
-                await timer.Wait();
+            if (string.IsNullOrEmpty(user.UserName)) {
+                await timer.Wait(ct);
                 return MultifactorResponse.Failed("User name is not valid.");
             }
 
-            var dbUser = await ApplicationUserByNameAsync(ctx, user.UserName, ct);
+            var dbUser = await ApplicationUserByName(ctx, user.UserName, ct);
             if (dbUser is null) {
-                await timer.Wait();
-                rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                return new MultifactorResponse(ResponseStatus.Unauthorized, $"Could not find user {user.UserName}");
+                return await RejectMultifactor(user, timer, $"Could not find user {user.UserName}", ct);
             }
             if (dbUser.MfaType == MultiFactorType.None) {
-                await timer.Wait();
+                await timer.Wait(ct);
                 return new MultifactorResponse(ResponseStatus.Accepted, "No multifactor required.");
             }
 
-            string[] splitCode = [];
-            if (dbUser.MfaType == MultiFactorType.Email) {
-                if (string.IsNullOrEmpty(multifactorCode) || !multifactorCode.Contains('.', StringComparison.Ordinal)) {
-                    await timer.Wait();
-                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                    return new MultifactorResponse(ResponseStatus.Unauthorized, "No multifactor code provided.");
-                }
-
-                splitCode = multifactorCode.Split('.');
-                if (splitCode.Length != 2) {
-                    await timer.Wait();
-                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid token format");
-                }
-            }
-
-            if (string.IsNullOrEmpty(user.MfaSecret)) {
-                logger.LogMfaSecretNotSet(user.UserName);
-                await timer.Wait();
-                return new MultifactorResponse(ResponseStatus.Conflict, "Multifactor is not configured.");
-            }
-
-            if (dbUser.MfaType == MultiFactorType.Totp) {
-                var decryptedSecret = MfaSecretEncryption.TryDecrypt(dbUser.MfaSecret, configuration.MfaTokenSecret, configuration.MfaTokenSecret2);
-                var (verified, message) = VerifyTwoFactorAuthentication(multifactorCode, decryptedSecret ?? "");
-                await timer.Wait();
-
-                if (verified) {
-                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, true);
-                    return MultifactorResponse.Ok();
-                } else {
-                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                    return new MultifactorResponse(ResponseStatus.Unauthorized, message);
-                }
-            } else if (dbUser.MfaType is MultiFactorType.Sms or MultiFactorType.Email) {
-
-#pragma warning disable CA1031 // Do not catch general exception types
-                try {
-                    var publicPart = Convert.FromBase64String(splitCode[0]);
-                    var publicTestPart = System.Text.Encoding.UTF8.GetString(publicPart).Split(':', StringSplitOptions.RemoveEmptyEntries);
-
-                    if (publicTestPart.Length != 2) {
-                        await timer.Wait();
-                        rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                        return new MultifactorResponse(ResponseStatus.Unauthorized, "Invalid token structure");
-                    }
-
-                    var nonce = publicTestPart[0];
-                    var timeout = long.Parse(publicTestPart[1], CultureInfo.InvariantCulture);
-                    var timeOutDate = new DateTime(timeout);
-                    if (timeOutDate < DateTime.UtcNow) {
-                        await timer.Wait();
-                        rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                        return new MultifactorResponse(ResponseStatus.Unauthorized, "Timeout.");
-                    }
-
-                    var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{dbUser.SecurityStamp}");
-                    var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
-
-                    using var hmac = new HMACSHA256(keyBytes);
-                    var expectedSignature = hmac.ComputeHash(message);
-
-                    var verify = Convert.FromBase64String(splitCode[1]);
-                    var arraysEqual = expectedSignature.ArraysAreEqual(verify);
-                    await timer.Wait();
-
-                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, arraysEqual);
-
-                    return arraysEqual
-                        ? MultifactorResponse.Ok()
-                        : new MultifactorResponse(ResponseStatus.Unauthorized, "Validation failed");
-                } catch (Exception ex) {
-                    logger.LogMfaVerificationWarning(ex.Message, multifactorCode, user.UserName, ex);
-                    await timer.Wait();
-                    rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                    return new MultifactorResponse(ResponseStatus.Unauthorized, "Validation error");
-                }
-#pragma warning restore CA1031 // Do not catch general exception types
-
-            } else {
-                rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
-                return new MultifactorResponse(
-                    ResponseStatus.NotImplemented,
-                    $"Multifactor {user.MfaType} is not available for {user.UserName}");
-            }
+            return await VerifyMultifactorCode(user, dbUser, multifactorCode, timer, ct);
         } finally {
             lockObject.Release();
         }
+    }
+
+    /// <summary>
+    /// Records a failed MFA attempt, then waits out the constant-time budget.
+    /// </summary>
+    /// <remarks>
+    /// The attempt is recorded before the cancellable padding wait, so cancelling the request
+    /// cannot skip the rate-limiter record.
+    /// </remarks>
+    private async Task<ICommandResponse> RejectMultifactor(ApplicationUser user, TimeoutTimer timer, string message, CancellationToken ct) {
+        rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+        await timer.Wait(ct);
+        return new MultifactorResponse(ResponseStatus.Unauthorized, message);
+    }
+
+    /// <summary>
+    /// Verifies <paramref name="multifactorCode"/> for a user whose MFA type is not None.
+    /// </summary>
+    private async Task<ICommandResponse> VerifyMultifactorCode(
+        ApplicationUser user,
+        ApplicationUser dbUser,
+        string multifactorCode,
+        TimeoutTimer timer,
+        CancellationToken ct) {
+        string[] splitCode = [];
+        if (dbUser.MfaType == MultiFactorType.Email) {
+            var formatError = SplitEmailCode(multifactorCode, out splitCode);
+            if (formatError != null) {
+                return await RejectMultifactor(user, timer, formatError, ct);
+            }
+        }
+
+        if (string.IsNullOrEmpty(user.MfaSecret)) {
+            logger.LogMfaSecretNotSet(user.UserName ?? string.Empty);
+            await timer.Wait(ct);
+            return new MultifactorResponse(ResponseStatus.Conflict, "Multifactor is not configured.");
+        }
+
+        if (dbUser.MfaType == MultiFactorType.Totp) {
+            return await VerifyTotpCode(user, dbUser, multifactorCode, timer, ct);
+        }
+        if (dbUser.MfaType is MultiFactorType.Sms or MultiFactorType.Email) {
+            return await VerifySignedCode(user, dbUser, splitCode, timer, ct);
+        }
+
+        rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, false);
+        return new MultifactorResponse(
+            ResponseStatus.NotImplemented,
+            $"Multifactor {user.MfaType} is not available for {user.UserName}");
+    }
+
+    /// <summary>
+    /// Splits an e-mail MFA code into its two dot-separated parts.
+    /// </summary>
+    /// <returns>An error message when the code is missing or malformed; otherwise <c>null</c>.</returns>
+    private static string? SplitEmailCode(string multifactorCode, out string[] splitCode) {
+        splitCode = [];
+        if (string.IsNullOrEmpty(multifactorCode) || !multifactorCode.Contains('.', StringComparison.Ordinal)) {
+            return "No multifactor code provided.";
+        }
+        splitCode = multifactorCode.Split('.');
+        return splitCode.Length == 2 ? null : "Invalid token format";
+    }
+
+    /// <summary>
+    /// Verifies a TOTP code against the user's decrypted MFA secret.
+    /// </summary>
+    private async Task<ICommandResponse> VerifyTotpCode(
+        ApplicationUser user,
+        ApplicationUser dbUser,
+        string multifactorCode,
+        TimeoutTimer timer,
+        CancellationToken ct) {
+        var decryptedSecret = MfaSecretEncryption.TryDecrypt(dbUser.MfaSecret, configuration.MfaTokenSecret, configuration.MfaTokenSecret2);
+        var (verified, message) = VerifyTwoFactorAuthentication(multifactorCode, decryptedSecret ?? "");
+        // Record before the cancellable padding wait so cancelling cannot skip the record.
+        rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, verified);
+        await timer.Wait(ct);
+
+        return verified
+            ? MultifactorResponse.Ok()
+            : new MultifactorResponse(ResponseStatus.Unauthorized, message);
+    }
+
+    /// <summary>
+    /// Verifies an SMS or e-mail code: <c>{base64(nonce:expiryTicks)}.{base64(hmac)}</c>.
+    /// </summary>
+    private async Task<ICommandResponse> VerifySignedCode(
+        ApplicationUser user,
+        ApplicationUser dbUser,
+        string[] splitCode,
+        TimeoutTimer timer,
+        CancellationToken ct) {
+#pragma warning disable CA1031 // Do not catch general exception types
+        try {
+            var publicPart = Convert.FromBase64String(splitCode[0]);
+            var publicTestPart = System.Text.Encoding.UTF8.GetString(publicPart).Split(':', StringSplitOptions.RemoveEmptyEntries);
+
+            if (publicTestPart.Length != 2) {
+                return await RejectMultifactor(user, timer, "Invalid token structure", ct);
+            }
+
+            var nonce = publicTestPart[0];
+            var timeout = long.Parse(publicTestPart[1], CultureInfo.InvariantCulture);
+            var timeOutDate = new DateTime(timeout);
+            if (timeOutDate < DateTime.UtcNow) {
+                return await RejectMultifactor(user, timer, "Timeout.", ct);
+            }
+
+            var message = System.Text.Encoding.UTF8.GetBytes($"{nonce}:{timeout}:{dbUser.SecurityStamp}");
+            var keyBytes = Convert.FromBase64String(configuration.TokenSigningSecret);
+
+            using var hmac = new HMACSHA256(keyBytes);
+            var expectedSignature = hmac.ComputeHash(message);
+
+            var verify = Convert.FromBase64String(splitCode[1]);
+            var arraysEqual = expectedSignature.ArraysAreEqual(verify);
+            // Record before the cancellable padding wait so cancelling cannot skip the record.
+            rateLimiter.RecordAttempt(user.Id, user.NormalizedUserName, arraysEqual);
+            await timer.Wait(ct);
+
+            return arraysEqual
+                ? MultifactorResponse.Ok()
+                : new MultifactorResponse(ResponseStatus.Unauthorized, "Validation failed");
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogMfaVerificationWarning(ex.Message, user.Id, ex);
+            return await RejectMultifactor(user, timer, "Validation error", ct);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
 
     private void Dispose(bool disposing) {
@@ -790,12 +848,12 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         return await ctx.UserFindRecordByEmail(normalizedName, ct);
     }
 
-    private static async Task<ApplicationUser?> ApplicationUserByIdAsync(IIdentityContext ctx, Guid userId, CancellationToken ct) {
+    private static async Task<ApplicationUser?> ApplicationUserById(IIdentityContext ctx, Guid userId, CancellationToken ct) {
         ArgumentOutOfRangeException.ThrowIfEqual(userId, Guid.Empty);
         return await ctx.UserFindRecord(userId, ct);
     }
 
-    private static async Task<ApplicationUser?> ApplicationUserByNameAsync(IIdentityContext ctx, string? userName, CancellationToken ct) {
+    private static async Task<ApplicationUser?> ApplicationUserByName(IIdentityContext ctx, string? userName, CancellationToken ct) {
         ArgumentException.ThrowIfNullOrEmpty(userName);
         var normalizedName = userName.Trim().ToUpperInvariant();
         return await ctx.UserFindRecord(normalizedName, ct);
@@ -818,12 +876,22 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
     /// <summary>
     /// Increments the failed access count for a user and locks account if threshold exceeded.
     /// </summary>
-    private static async Task IncrementAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, ILogger logger, CancellationToken ct = default) {
+    /// <remarks>
+    /// Runs with <see cref="CancellationToken.None"/> on purpose: a caller that cancels its request
+    /// after a wrong password must not be able to skip the lockout counter. The work is one
+    /// single-row read and update, so it is bounded.
+    /// </remarks>
+    /// <returns>
+    /// The persistence status: <see cref="ResponseStatus.NotFound"/> when the user row is gone,
+    /// <see cref="ResponseStatus.ServerError"/> when an exception was logged, otherwise the
+    /// status of <see cref="N2.Core.Entity.IUnitOfWork.Complete(CancellationToken)"/>.
+    /// </returns>
+    private static async Task<ResponseStatus> IncrementAccessFailedCount(IIdentityContext ctx, ApplicationUser user, ILogger logger) {
 #pragma warning disable CA1031 // Do not catch general exception types
         try {
-            var dbUser = await ctx.User.FirstOrDefaultAsync(m => m.Id == user.Id, ct);
+            var dbUser = await ctx.User.FirstOrDefaultAsync(m => m.Id == user.Id, CancellationToken.None);
             if (dbUser == null) {
-                return;
+                return ResponseStatus.NotFound;
             }
 
             dbUser.AccessFailedCount++;
@@ -836,9 +904,11 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
                 logger.LogIncrementAccessFailedCount(dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount, dbUser.LockoutEnd);
             }
 
-            await ctx.Complete();
-        } catch (Exception ex) {
+            var (status, _) = await ctx.Complete(CancellationToken.None);
+            return status;
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogIncrementAccessFailedException(user.UserName ?? user.Id.ToString(), ex);
+            return ResponseStatus.ServerError;
         }
 #pragma warning restore CA1031 // Do not catch general exception types
     }
@@ -907,34 +977,49 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
         }
     }
 
-    private Task<IIdentityContext> CreateContextAsync() =>
-        factory.CreateAsync(provider, connectionName);
+    private Task<IIdentityContext> CreateContext(CancellationToken ct) =>
+        factory.Create(provider, connectionName, ct);
 
     /// <summary>
     /// Resets the failed access count for a user after successful authentication.
     /// </summary>
-    private async Task ResetAccessFailedCountAsync(IIdentityContext ctx, ApplicationUser user, CancellationToken ct = default) {
+    /// <remarks>
+    /// Runs with <see cref="CancellationToken.None"/> for the same reason as
+    /// <see cref="IncrementAccessFailedCount"/>: the lockout counter is security state and its
+    /// single-row update is bounded.
+    /// </remarks>
+    /// <returns>
+    /// <see cref="ResponseStatus.NoContent"/> when there was nothing to reset,
+    /// <see cref="ResponseStatus.NotFound"/> when the user row is gone,
+    /// <see cref="ResponseStatus.ServerError"/> when an exception was logged, otherwise the
+    /// status of <see cref="N2.Core.Entity.IUnitOfWork.Complete(CancellationToken)"/>.
+    /// </returns>
+    private async Task<ResponseStatus> ResetAccessFailedCount(IIdentityContext ctx, ApplicationUser user) {
         if (user.AccessFailedCount == 0) {
-            return;
+            return ResponseStatus.NoContent;
         }
 
 #pragma warning disable CA1031 // Do not catch general exception types
         try {
-            var dbUser = await ctx.User.FirstOrDefaultAsync(m => m.Id == user.Id, ct);
+            var dbUser = await ctx.User.FirstOrDefaultAsync(m => m.Id == user.Id, CancellationToken.None);
             if (dbUser == null) {
-                return;
+                return ResponseStatus.NotFound;
             }
 
-            if (dbUser.AccessFailedCount > 0) {
-                logger.LogResetAccessFailedCount(dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount);
-
-                dbUser.AccessFailedCount = 0;
-                dbUser.LockoutEnd = null;
-
-                await ctx.Complete();
+            if (dbUser.AccessFailedCount == 0) {
+                return ResponseStatus.NoContent;
             }
-        } catch (Exception ex) {
+
+            logger.LogResetAccessFailedCount(dbUser.UserName ?? dbUser.Id.ToString(), dbUser.AccessFailedCount);
+
+            dbUser.AccessFailedCount = 0;
+            dbUser.LockoutEnd = null;
+
+            var (status, _) = await ctx.Complete(CancellationToken.None);
+            return status;
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogResetAccessCountFailure(user.UserName ?? user.Id.ToString(), ex);
+            return ResponseStatus.ServerError;
         }
 #pragma warning restore CA1031 // Do not catch general exception types
     }
@@ -964,7 +1049,7 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
             return (flowControl: false, value: RequestResult.NotFound(), null);
         }
 
-        var verified = await ValidateMultifactorAsync(dbUser, confirmationToken, ct);
+        var verified = await ValidateMultifactor(dbUser, confirmationToken, ct);
         if (verified == null) {
             return (flowControl: false, value: RequestResult.NotFound(), dbUser);
         }
@@ -973,7 +1058,7 @@ public sealed class N2UserManager : IN2UserManager, IHaveSecrets {
     }
 
     public async Task<ISecretOwner?> GetSecretOwner(Guid id, CancellationToken ct) {
-        using var ctx = await CreateContextAsync();
+        using var ctx = await CreateContext(ct);
         var dbUser = await ctx.UserFindRecord(id, ct);
         if (dbUser == null) {
             return null;

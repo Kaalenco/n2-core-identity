@@ -114,11 +114,11 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
     /// <summary>Looks up a refresh token by its raw value. Returns <c>null</c> when not found.</summary>
     Task<ApplicationRefreshToken?> RefreshTokenFind(string token, CancellationToken ct);
 
-    /// <summary>Adds a new refresh token to the context. Call <see cref="IUnitOfWork.Complete"/> to persist.</summary>
+    /// <summary>Adds a new refresh token to the context. Call <see cref="IUnitOfWork.Complete(CancellationToken)"/> to persist.</summary>
     void RefreshTokenAdd(ApplicationRefreshToken token);
 
     /// <summary>
-    /// Marks a refresh token as revoked. Call <see cref="IUnitOfWork.Complete"/> to persist.
+    /// Marks a refresh token as revoked. Call <see cref="IUnitOfWork.Complete(CancellationToken)"/> to persist.
     /// </summary>
     void RefreshTokenRevoke(ApplicationRefreshToken token);
 
@@ -137,20 +137,21 @@ public interface IIdentityContext : ICoreDataContext, IUnitOfWork
 
     /// <summary>
     /// Marks all active (non-revoked) refresh tokens for <paramref name="userId"/> as revoked.
-    /// Call <see cref="IUnitOfWork.Complete"/> to persist. Typically called when a security stamp
+    /// Call <see cref="IUnitOfWork.Complete(CancellationToken)"/> to persist. Typically called when a security stamp
     /// mismatch is detected to invalidate all outstanding sessions for the user.
     /// </summary>
-    Task RefreshTokenRevokeAll(Guid userId, CancellationToken ct);
+    /// <returns>The number of refresh tokens marked as revoked.</returns>
+    Task<int> RefreshTokenRevokeAll(Guid userId, CancellationToken ct);
 }
 
 public interface IIdentityContextFactory : ICoreDataContextFactory<IIdentityContext> {
     /// <summary>
     /// Creates an identity context using the default connection name and the specified database provider.
     /// </summary>
-    Task<IIdentityContext> CreateAsync(DatabaseProvider provider);
+    Task<IIdentityContext> Create(DatabaseProvider provider, CancellationToken cancellationToken);
 
     /// <summary>
     /// Creates an identity context using the specified database provider and named connection string.
     /// </summary>
-    Task<IIdentityContext> CreateAsync(DatabaseProvider provider, string connectionName);
+    Task<IIdentityContext> Create(DatabaseProvider provider, string connectionName, CancellationToken cancellationToken);
 }

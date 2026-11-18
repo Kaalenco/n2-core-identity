@@ -36,7 +36,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
     protected async Task<N2IdentityContext> CreateAndPrepareAsync() {
         var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, Provider, ConnectionName);
-        var context = (N2IdentityContext)await factory.CreateAsync(Provider, ConnectionName);
+        var context = (N2IdentityContext)await factory.Create(Provider, ConnectionName, CancellationToken.None);
         await IntegrationMigrationGate.EnsureMigratedAsync(context.Database);
         return context;
     }
@@ -45,7 +45,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
     protected async Task MigrateAsync_ShouldHaveNoPendingMigrationsCore() {
         var factory = new N2IdentityContextFactory(BuildMock(BuildConfiguration()).Object, Provider, ConnectionName);
-        using var context = (N2IdentityContext)await factory.CreateAsync(Provider, ConnectionName);
+        using var context = (N2IdentityContext)await factory.Create(Provider, ConnectionName, CancellationToken.None);
 
         await context.Database.MigrateAsync();
 
@@ -82,7 +82,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(uniqueName, retrieved.UserName);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -122,7 +122,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsFalse(retrieved.MfaConfirmed);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -142,7 +142,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.UserAdd(user, CancellationToken.None);
 
         context.UserDelete(user);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         var retrieved = await context.UserFindRecord(userId, CancellationToken.None);
@@ -190,7 +190,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
                 "Acknowledged alerts must be excluded by the filtered Include");
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -216,7 +216,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
                 "Alerts older than 7 days must be excluded by the filtered Include");
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -242,7 +242,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
                 "Filter is CreatedAt > UtcNow.AddDays(-7), so an alert exactly 7 days old is excluded");
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -285,7 +285,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual("Visible", found.ApplicationUserAlert.Single().Message);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -311,7 +311,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
             context.RoleDelete(role);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -328,7 +328,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.RoleAdd(role, CancellationToken.None);
 
         context.RoleDelete(role);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         var retrieved = await context.RoleFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
@@ -368,7 +368,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.UserRoleAdd(userRole, CancellationToken.None);
 
         context.UserRoleDelete(userRole);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         try {
             var retrieved = await context.UserRoleFindRecord(userId, roleId, CancellationToken.None);
@@ -392,7 +392,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         };
 
         var count = await context.TenantAdd(tenant, CancellationToken.None);
-        var updates = await context.Complete();
+        var updates = await context.Complete(CancellationToken.None);
 
         try {
             Assert.AreEqual(ResponseStatus.Success, updates.status);
@@ -402,7 +402,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -419,7 +419,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.TenantAdd(tenant, CancellationToken.None);
 
         context.TenantDelete(tenant);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.Success, status);
         var retrieved = await context.TenantFindRecord(uniqueName.ToUpperInvariant(), CancellationToken.None);
@@ -446,7 +446,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         using var context = await CreateAndPrepareAsync();
         var (user, tenant, userTenant) = await SeedUserAndTenantAsync(context, isLocked: false);
         context.UserTenantDelete(userTenant);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         try {
             var canSignIn = await context.UserCanSignInTenant(user.Id, tenant.Id, CancellationToken.None);
@@ -454,7 +454,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         } finally {
             context.TenantDelete(tenant);
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -471,7 +471,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(user.Id, retrieved.Id);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -486,7 +486,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(user.UserName, retrieved.UserName);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -501,7 +501,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(user.Id, retrieved.Id);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -517,7 +517,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(user.Id, result.Value.Id);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -541,7 +541,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(user.UserName, retrieved.UserName);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -556,7 +556,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(user.Id, retrieved.Id);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -574,7 +574,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
             context.RoleDelete(role);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -585,7 +585,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var uniqueName = $"LookupTenant_{tenantId:N}";
         var tenant = new ApplicationTenant { Id = tenantId, Name = uniqueName, AdminEmail = $"{uniqueName}@test.com" };
         await context.TenantAdd(tenant, CancellationToken.None);
-        var updates = await context.Complete();
+        var updates = await context.Complete(CancellationToken.None);
 
         try {
             Assert.AreEqual(ResponseStatus.Success, updates.status);
@@ -594,7 +594,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(uniqueName, retrieved.Name);
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -612,7 +612,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(tenantId, retrieved.Id);
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -639,7 +639,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(tenantId, retrieved.Id);
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -655,7 +655,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsTrue(canSignIn);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -681,7 +681,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsFalse(canSignIn);
         } finally {
             context.UserDelete(lockedUser);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -730,7 +730,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsFalse(canSignIn);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -763,7 +763,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             context.UserTenantDelete(userTenant);
             context.TenantDelete(tenant);
             context.UserDelete(lockedUser);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -786,7 +786,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var (user, role) = await SeedUserAndRoleAsync(context, userId, roleId);
         var userRole = new IdentityUserRole<Guid> { UserId = userId, RoleId = roleId };
         await context.UserRoleAdd(userRole, CancellationToken.None);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         try {
             var roles = await context.UserGetRoles(userId, CancellationToken.None);
@@ -794,7 +794,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         } finally {
             await CleanupUserRoleAsync(context, user, role, userRole);
         }
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
     }
 
     [TestMethod]
@@ -807,7 +807,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsFalse(roles.Any());
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -823,7 +823,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsFalse(string.IsNullOrWhiteSpace(name));
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -849,7 +849,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsFalse(string.IsNullOrWhiteSpace(name));
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -865,10 +865,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
         try {
             var roles = await context.RoleGetSelectList(CancellationToken.None);
-            Assert.IsTrue(roles.Any());
+            Assert.IsTrue(roles.Count > 0);
         } finally {
             context.RoleDelete(role);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -879,10 +879,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
         try {
             var users = await context.UserGetSelectList(CancellationToken.None);
-            Assert.IsTrue(users.Any());
+            Assert.IsTrue(users.Count > 0);
         } finally {
             context.UserDelete(user);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -896,10 +896,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
         try {
             var tenants = await context.TenantGetSelectList(CancellationToken.None);
-            Assert.IsTrue(tenants.Any());
+            Assert.IsTrue(tenants.Count > 0);
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -931,7 +931,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsFalse(users.Any());
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -968,7 +968,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
         try {
             role.Name = originalName + "_v2";
-            var (status, message) = await context.Complete();
+            var (status, message) = await context.Complete(CancellationToken.None);
 
             Assert.AreEqual(ResponseStatus.Success, status);
             Assert.IsNotNull(message);
@@ -979,7 +979,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(originalName + "_v2", updated.Name);
         } finally {
             context.RoleDelete(role);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1005,7 +1005,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         } finally {
             context.ApplicationDelete(app);
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1020,7 +1020,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.ApplicationAdd(app, CancellationToken.None);
 
         context.ApplicationDelete(app);
-        var (status, _) = await context.Complete();
+        var (status, _) = await context.Complete(CancellationToken.None);
 
         try {
             Assert.AreEqual(ResponseStatus.Success, status);
@@ -1028,7 +1028,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsNull(retrieved);
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1042,7 +1042,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         await context.TenantAdd(tenant, CancellationToken.None);
         var app = new ApplicationDefinition { Id = Guid.NewGuid(), Name = appName, ApplicationTenantId = tenantId };
         await context.ApplicationAdd(app, CancellationToken.None);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         try {
             var retrieved = await context.ApplicationFindRecord(tenantId, appName, CancellationToken.None);
@@ -1051,7 +1051,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         } finally {
             context.ApplicationDelete(app);
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1081,7 +1081,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             context.ApplicationDelete(app2);
             context.TenantDelete(tenant1);
             context.TenantDelete(tenant2);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1111,7 +1111,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         } finally {
             context.ApplicationDelete(app);
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1151,7 +1151,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         } finally {
             context.ApplicationDelete(app);
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1168,7 +1168,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.IsNull(retrieved);
         } finally {
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1178,7 +1178,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
         var list = await context.ApplicationGetSelectList(Guid.NewGuid(), CancellationToken.None);
 
-        Assert.IsFalse(list.Any());
+        Assert.AreEqual(0, list.Count);
     }
 
     [TestMethod]
@@ -1199,7 +1199,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         } finally {
             context.ApplicationDelete(app);
             context.TenantDelete(tenant);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1226,7 +1226,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             context.ApplicationDelete(app2);
             context.TenantDelete(tenant1);
             context.TenantDelete(tenant2);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1238,7 +1238,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
 
         context.SecretAdd(secret);
-        var (addCode, _) = await context.Complete();
+        var (addCode, _) = await context.Complete(CancellationToken.None);
 
         try {
             Assert.AreEqual(N2.Core.Commands.ResponseStatus.Success, addCode);
@@ -1247,7 +1247,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(secret.HashedToken, retrieved.HashedToken);
         } finally {
             context.SecretDelete(secret);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1257,7 +1257,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var hashedToken = $"hash_{Guid.NewGuid():N}";
         var secret = NewSecret(Guid.NewGuid(), hashedToken);
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         try {
             var retrieved = await context.SecretFindRecord(hashedToken, CancellationToken.None);
@@ -1265,7 +1265,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             Assert.AreEqual(secret.Id, retrieved.Id);
         } finally {
             context.SecretDelete(secret);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1292,10 +1292,10 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         using var context = await CreateAndPrepareAsync();
         var secret = NewSecret(Guid.NewGuid(), $"hash_{Guid.NewGuid():N}");
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         context.SecretDelete(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         var retrieved = await context.SecretFindRecord(secret.Id, CancellationToken.None);
         Assert.IsNull(retrieved);
@@ -1307,14 +1307,14 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var ownerId = Guid.NewGuid();
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "My Token", DateTime.UtcNow.AddDays(30));
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         try {
             var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
             Assert.IsTrue(list.Any(i => i.Key == secret.Id));
         } finally {
             context.SecretDelete(secret);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1324,14 +1324,14 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         var ownerId = Guid.NewGuid();
         var secret = NewSecret(ownerId, $"hash_{Guid.NewGuid():N}", "Expired Token", DateTime.UtcNow.AddDays(-1));
         context.SecretAdd(secret);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
 
         try {
             var list = await context.SecretGetSelectList(ownerId, "test", CancellationToken.None);
             Assert.IsFalse(list.Any(i => i.Key == secret.Id));
         } finally {
             context.SecretDelete(secret);
-            await context.Complete();
+            await context.Complete(CancellationToken.None);
         }
     }
 
@@ -1341,7 +1341,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
 
         var list = await context.SecretGetSelectList(Guid.NewGuid(), "test", CancellationToken.None);
 
-        Assert.IsFalse(list.Any());
+        Assert.AreEqual(0, list.Count);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -1411,7 +1411,7 @@ public abstract class N2IdentityContextIntegrationTestsBase {
         context.UserTenantDelete(userTenant);
         context.TenantDelete(tenant);
         context.UserDelete(user);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
     }
 
     private static async Task CleanupUserRoleAsync(
@@ -1423,6 +1423,6 @@ public abstract class N2IdentityContextIntegrationTestsBase {
             context.UserRoleDelete(userRole);
         context.RoleDelete(role);
         context.UserDelete(user);
-        await context.Complete();
+        await context.Complete(CancellationToken.None);
     }
 }

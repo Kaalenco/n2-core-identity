@@ -103,20 +103,20 @@ public class N2IdentityContext(
     public Task<IdentityUserRole<Guid>?> UserRoleFindRecord(Guid userId, Guid roleId, CancellationToken ct)
         => UserRoles.Where(ur => ur.UserId == userId && ur.RoleId == roleId).FirstOrDefaultAsync(ct);
 
-    public Task<List<KeyValuePair<string, string>>> GetSelectListAsync(string tableName)
+    public Task<List<KeyValuePair<string, string>>> GetSelectList(string tableName, CancellationToken cancellationToken)
     => tableName switch {
         nameof(TableNames.AspNetUsers) => base.Users
                 .Where(m => m.EmailConfirmed && m.UserName != null)
                 .Select(x => new KeyValuePair<string, string>(x.Id.ToString(), x.UserName ?? string.Empty))
-                .ToListAsync(),
+                .ToListAsync(cancellationToken),
         nameof(TableNames.AspNetRoles) => base.Roles
                 .Where(m => m.Name != null)
                 .Select(x => new KeyValuePair<string, string>(x.Id.ToString(), x.Name ?? string.Empty))
-                .ToListAsync(),
+                .ToListAsync(cancellationToken),
         nameof(TableNames.Tenants) => Tenants
                 .Where(m => m.Name != null)
                 .Select(x => new KeyValuePair<string, string>(x.Id.ToString(), x.Name ?? string.Empty))
-                .ToListAsync(),
+                .ToListAsync(cancellationToken),
         _ => throw new ArgumentOutOfRangeException(nameof(tableName), "Unknown table name.")
     };
 
@@ -174,11 +174,11 @@ public class N2IdentityContext(
 
     public void AddRecord<T>(T model) where T : class => Set<T>().Add(model);
 
-    public Task<T?> FindRecordAsync<T>(Guid publicId) where T : class => Set<T>().FindAsync(publicId).AsTask();
+    public Task<T?> FindRecord<T>(Guid publicId, CancellationToken cancellationToken) where T : class => Set<T>().FindAsync([publicId], cancellationToken).AsTask();
 
-    public async Task<(ResponseStatus status, string message)> DeleteAsync<T>(Guid publicId) where T : class {
+    public async Task<(ResponseStatus status, string message)> Delete<T>(Guid publicId, CancellationToken cancellationToken) where T : class {
         var dbSet = Set<T>();
-        var dbItem = await dbSet.FindAsync(publicId);
+        var dbItem = await dbSet.FindAsync([publicId], cancellationToken);
         if (dbItem == null) {
             return (ResponseStatus.NotFound, "Not found");
         }
@@ -190,10 +190,14 @@ public class N2IdentityContext(
 
     public bool IsActive => base.Database.CanConnect();
 
-    public async Task<(ResponseStatus status, string? message)> Complete() {
+    public async Task<(ResponseStatus status, string? message)> Complete(CancellationToken cancellationToken) {
         try {
-            var modified = await base.SaveChangesAsync();
+            var modified = await base.SaveChangesAsync(cancellationToken);
             return new(ResponseStatus.Success, $"{modified} records modified");
+        } catch (DbUpdateConcurrencyException ex) {
+            return new(ResponseStatus.Conflict, ex.Message);
+        } catch (DbUpdateException ex) {
+            return new(ResponseStatus.ServerError, ex.InnerException?.Message ?? ex.Message);
         } catch (DbException ex) {
             return new(ResponseStatus.ServerError, ex.Message);
         }
@@ -319,35 +323,25 @@ public class N2IdentityContext(
     }
 
     public async Task<bool> UserCanSignInTenant(Guid userId, Guid tenantId, CancellationToken ct) {
-        var userAllowed = await base.Users
-            .AsNoTracking()
-            .Where(u => u.Id == userId &&
-                (
-                    !u.LockoutEnabled ||
-                    (
-                        u.LockoutEnabled && (u.LockoutEnd == null || u.LockoutEnd < DateTime.UtcNow)
-                    )
-                )
-            )
-            .Select(u => u.EmailConfirmed || u.PhoneNumberConfirmed || u.MfaType == MultiFactorType.None)
-            .FirstOrDefaultAsync(ct);
-        if (!userAllowed)
+        // Same user rules as UserCanSignIn, then the tenant lockout check.
+        if (!await UserCanSignIn(userId, ct)) {
             return false;
+        }
+        return await UserTenantIsOpen(userId, tenantId, ct);
+    }
 
-        // check tenant lockout
-        var tenantAllowed = await UserTenants
+    /// <summary>
+    /// True when <paramref name="userId"/> is a member of <paramref name="tenantId"/> and the
+    /// tenant is not locked.
+    /// </summary>
+    private async Task<bool> UserTenantIsOpen(Guid userId, Guid tenantId, CancellationToken ct) {
+        var membership = await UserTenants
             .AsNoTracking()
             .Where(ut => ut.ApplicationUserId == userId && ut.ApplicationTenantId == tenantId)
             .Join(Tenants, ut => ut.ApplicationTenantId, t => t.Id, (ut, t) => t)
             .Select(t => new { t.Id, t.IsLocked })
             .FirstOrDefaultAsync(ct);
-        if (tenantAllowed == null) {
-            return false;
-        }
-        if (tenantAllowed.IsLocked) {
-            return false;
-        }
-        return true;
+        return membership is { IsLocked: false };
     }
 
     public async Task<IEnumerable<string>> TenantGetUsers(Guid tenantId, CancellationToken ct) {
@@ -434,7 +428,7 @@ public class N2IdentityContext(
         if (membership.IsAdmin == isAdmin)
             return (ResponseStatus.Success, "No change required.");
         membership.IsAdmin = isAdmin;
-        return await Complete();
+        return await Complete(ct);
     }
 
     public async Task<int> ApplicationAdd(ApplicationDefinition application, CancellationToken ct) {
@@ -593,7 +587,7 @@ public class N2IdentityContext(
         return base.SaveChangesAsync(ct);
     }
 
-    public async Task RefreshTokenRevokeAll(Guid userId, CancellationToken ct) {
+    public async Task<int> RefreshTokenRevokeAll(Guid userId, CancellationToken ct) {
         var active = await RefreshTokens
             .Where(r => r.ApplicationUserId == userId && r.RevokedAt == null)
             .ToListAsync(ct);
@@ -601,5 +595,6 @@ public class N2IdentityContext(
         foreach (var t in active) {
             t.RevokedAt = now;
         }
+        return active.Count;
     }
 }

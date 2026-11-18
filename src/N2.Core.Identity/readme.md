@@ -2,7 +2,7 @@
 
 ## Description
 
-**N2.Core.Identity** is a flexible identity and role management library for .NET applications, built on top of ASP.NET Core Identity. It provides a strongly-typed, extensible `N2IdentityDbContext` (extending `IdentityDbContext`) and a feature-rich `N2UserManager` for advanced user, role, and authentication scenarios. The library is designed for modern .NET (net8.0, net9.0) and supports custom user properties, role management, and token-based workflows.
+**N2.Core.Identity** is a flexible identity and role management library for .NET applications, built on top of ASP.NET Core Identity. It provides a strongly-typed, extensible `N2IdentityDbContext` (extending `IdentityDbContext`) and a feature-rich `N2UserManager` for advanced user, role, and authentication scenarios. The library targets .NET 10 and .NET 11 (net10.0, net11.0) and supports custom user properties, role management, and token-based workflows.
 
 ## Features
 
@@ -10,7 +10,7 @@
 - Strongly-typed `ApplicationUser` and `ApplicationRole` with support for custom properties.
 - Advanced user and role management via `N2UserManager`.
 - Token generation and email confirmation workflows.
-- Designed for .NET 8 and .NET 9.
+- Targets .NET 10 and .NET 11. Every asynchronous member takes a required `CancellationToken`; no member name ends in `Async` (since 2.0.0).
 
 ## License
 
@@ -20,6 +20,7 @@ AFL-3.0
 
 | Version | Changes |
 |---|---|
+| **2.0.0** | Breaking: targets net10.0 and net11.0 (net8.0 dropped); N2.Core.Abstractions 2.0.0; EF Core 10; MySQL support removed (planned as N2.Core.Identity.MySql); every async member takes a required `CancellationToken` and the `Async` suffix is removed from all member names. See CHANGELOG.md. |
 | **1.5.1** | MySQL integration test CI pipeline: Docker Compose environment, `Dockerfile.integration`, and `TestCategory`-based filtering (`Integration.MySql` / `Integration.SqlServer`). `PendingModelChangesWarning` downgraded to a logged warning for MySQL contexts. |
 | **1.5.0** | Unit test infrastructure fixes. |
 | **1.4.6** | Security hardening: constant-time comparisons to prevent timing/user-enumeration attacks, account lockout, MFA rate limiting, TOTP support, PBKDF2 iterations raised to 310,000 (OWASP 2023). Multi-targeted net8.0 + net9.0. Provider-agnostic EF Core migrations with MySQL / Pomelo support. |
@@ -34,9 +35,10 @@ AFL-3.0
 
 ### How migrations work
 
-The library ships a single set of EF Core migrations (in `Migrations/`) that run
-unchanged against **SQL Server** and **MySQL / Pomelo**. This is achieved through
-two design-time components in `Data/`:
+The library ships a single set of provider-neutral EF Core migrations (in `Migrations/`).
+Since 2.0.0 they run against **SQL Server** only (MySQL support was removed; see Known
+limitations). The migrations stay provider-neutral so a future N2.Core.Identity.MySql package
+can reuse them. This is achieved through two design-time components in `Data/`:
 
 | File | Purpose |
 |---|---|
@@ -49,12 +51,9 @@ the C# code is written and:
 1. **Nullifies `ColumnType`** on every column — `type: "nvarchar(256)"` etc. are
    omitted from the generated code. At runtime, `MigrateAsync` resolves the
    correct DDL type through the active provider's type mapper (e.g.
-   `uniqueidentifier` on SQL Server, `char(36)` on MySQL).
-2. **Adds `MySql:ValueGenerationStrategy = IdentityColumn`** alongside every
-   `SqlServer:Identity` annotation, so auto-increment columns work on both engines.
-3. **Removes `filter:` from unique indexes** — the SQL Server partial-index syntax
-   (`WHERE [NormalizedName] IS NOT NULL`) is not supported by MySQL. Both providers
-   allow multiple NULLs in a UNIQUE index by default, so the filter is unnecessary.
+   `uniqueidentifier` on SQL Server).
+2. **Removes `filter:` from unique indexes**, consistent with the indexes created by the
+   existing migrations.
 
 `AgnosticAnnotationCodeGenerator` intercepts snapshot and Designer-file generation
 and omits `HasColumnType()` from every property. Each provider then resolves the
@@ -75,29 +74,6 @@ operations for every column. Keeping the snapshot in SQL Server form prevents th
 **for legacy snapshots**. Migrations generated with the current tooling produce
 type-agnostic snapshots automatically.
 
-> **Warning — MySQL `PendingModelChangesWarning`**
->
-> When migrations were generated before `AgnosticAnnotationCodeGenerator` was
-> active, their Designer snapshots contain SQL Server column-type annotations
-> (e.g. `HasColumnType("uniqueidentifier")`). EF Core 8+ compares this snapshot
-> against the live MySQL model and finds a mismatch (SQL Server types vs. Pomelo
-> types), which would normally throw a `PendingModelChangesWarning` exception and
-> abort `MigrateAsync`.
->
-> `N2IdentityContextFactory` downgrades this to a **logged warning** for MySQL
-> contexts so that migrations can still run. The schema produced by the migration
-> `Up()` method is always correct because `AgnosticMigrationOperationGenerator`
-> strips provider-specific types from the migration code itself.
->
-> **To eliminate the warning entirely**, regenerate the migration after the
-> `AgnosticAnnotationCodeGenerator` is in place:
-> ```powershell
-> dotnet ef migrations remove --force --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext --framework net10.0
-> dotnet ef migrations add <MigrationName> --project src/N2.Core.Identity --startup-project src/N2.Core.Identity --context N2IdentityContext --framework net10.0
-> ```
-> The new Designer file and snapshot will have no `HasColumnType()` calls, and
-> the warning will no longer appear.
-
 ### Adding a new migration
 
 Connection string resolution order (SQL Server):
@@ -112,11 +88,17 @@ Run from the repository root (change the name for the migration):
 cd ..
 ```
 
-The generated migration file will contain **no `type:` parameters** and will carry
-both `SqlServer:Identity` and `MySql:ValueGenerationStrategy` annotations on
-auto-increment columns. The Designer file and snapshot will also contain no
+The generated migration file will contain **no `type:` parameters** and keeps the
+`SqlServer:Identity` annotation on auto-increment columns. The Designer file and snapshot will also contain no
 `HasColumnType()` calls. Commit the migration file, the Designer file, and the
 updated snapshot.
+
+## Known limitations
+
+- **No MySQL support since 2.0.0.** Pomelo.EntityFrameworkCore.MySql has no stable release
+  for EF Core 10, so the MySQL provider was removed. `DatabaseProvider` only has `SqlServer`;
+  any other value throws `IdentityConfigurationException`. MySQL support is planned as a
+  separate package, N2.Core.Identity.MySql, once a stable EF Core 10 MySQL provider exists.
 
 ## Basic Setup
 
@@ -134,10 +116,10 @@ public class AccountService { private readonly IUserManager<ApplicationUser> _us
        _userManager = userManager;
    }
 
-   public async Task CreateUserAsync(string email, string password)
+   public async Task<ICommandResponse> CreateUser(string email, string password, CancellationToken ct)
    {
        var user = new ApplicationUser { UserName = email, Email = email };
-       await _userManager.CreateAsync(user, password, CancellationToken.None);
+       return await _userManager.Create(user, password, ct);
    }
 }
 ```
@@ -165,7 +147,7 @@ public class AccountService { private readonly IUserManager<ApplicationUser> _us
 - Never expose raw tokens in logs or error messages.
 
 6. Role Management
-- Use AddToRoleAsync, RemoveFromRoleAsync, and RoleExistsAsync to manage user roles. Always check for role existence before assignment.
+- Use AddToRole, RemoveFromRole, and RoleExists to manage user roles. Always check for role existence before assignment.
 - Avoid hardcoding role names; use constants or configuration.
 
 7. DbContext Lifetime

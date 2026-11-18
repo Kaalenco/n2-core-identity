@@ -69,7 +69,7 @@ var tenant = new ApplicationTenant {
     AdminEmail = "admin@acme.com",
     UserLimit = 100
 };
-var result = await tenantManager.CreateAsync(tenant, ct);
+var result = await tenantManager.Create(tenant, ct);
 // ResponseStatus.NotAcceptable if a tenant with the same normalised name already exists
 ```
 
@@ -80,13 +80,13 @@ Only mutable properties are applied: `Name`, `Address`, `AdminEmail`, `ContactIn
 ```csharp
 existing.Address = "123 Main St";
 existing.UserLimit = 200;
-var result = await tenantManager.UpdateAsync(existing, ct);
+var result = await tenantManager.Update(existing, ct);
 ```
 
 ### Deleting a tenant
 
 ```csharp
-var result = await tenantManager.DeleteAsync(tenant, ct);
+var result = await tenantManager.Delete(tenant, ct);
 // ResponseStatus.NotFound if the tenant does not exist
 ```
 
@@ -98,16 +98,16 @@ var result = await tenantManager.DeleteAsync(tenant, ct);
 
 ```csharp
 // By ID
-var tenant = await tenantManager.FindByIdAsync(tenantId, ct);
+var tenant = await tenantManager.FindById(tenantId, ct);
 
 // By name (normalised internally — Trim().ToUpperInvariant())
-var tenant = await tenantManager.FindByNameAsync("Acme Corp", ct);
+var tenant = await tenantManager.FindByName("Acme Corp", ct);
 
 // By admin email (normalised internally)
-var tenant = await tenantManager.FindByEmailAsync("admin@acme.com", ct);
+var tenant = await tenantManager.FindByEmail("admin@acme.com", ct);
 
 // Select list for UI (excludes removed and hidden tenants)
-SelectItemList<UserSelectItem> list = await tenantManager.GetTenantsAsync(ct);
+SelectItemList<UserSelectItem> list = await tenantManager.GetTenants(ct);
 ```
 
 All `FindBy*` methods return `null` when nothing is found — they never throw for missing records.
@@ -119,8 +119,8 @@ All `FindBy*` methods return `null` when nothing is found — they never throw f
 Locking a tenant prevents **all users belonging to it** from signing in, even if those users are active in other tenants.
 
 ```csharp
-var lockResult = await tenantManager.LockAsync(tenant, ct);
-var unlockResult = await tenantManager.UnlockAsync(tenant, ct);
+var lockResult = await tenantManager.Lock(tenant, ct);
+var unlockResult = await tenantManager.Unlock(tenant, ct);
 // Both return NotFound if the tenant does not exist
 ```
 
@@ -131,7 +131,7 @@ var unlockResult = await tenantManager.UnlockAsync(tenant, ct);
 ### Assign a user to a tenant
 
 ```csharp
-var result = await tenantManager.AddUserAsync(user, tenant, ct);
+var result = await tenantManager.AddUser(user, tenant, ct);
 // Idempotent: Success if the user is already assigned
 // NotFound if either the user or the tenant does not exist
 ```
@@ -139,7 +139,7 @@ var result = await tenantManager.AddUserAsync(user, tenant, ct);
 ### Remove a user from a tenant
 
 ```csharp
-var result = await tenantManager.RemoveUserAsync(user, tenant, ct);
+var result = await tenantManager.RemoveUser(user, tenant, ct);
 // Idempotent: Success if the user was not assigned
 ```
 
@@ -147,10 +147,10 @@ var result = await tenantManager.RemoveUserAsync(user, tenant, ct);
 
 ```csharp
 // All normalised usernames belonging to a tenant
-IEnumerable<string> userNames = await tenantManager.GetUsersForTenantAsync(tenantId, ct);
+IEnumerable<string> userNames = await tenantManager.GetUsersForTenant(tenantId, ct);
 
 // All tenant IDs a user belongs to
-IEnumerable<Guid> tenantIds = await tenantManager.GetTenantIdsForUserAsync(userId, ct);
+IEnumerable<Guid> tenantIds = await tenantManager.GetTenantIdsForUser(userId, ct);
 ```
 
 ### Sign-in eligibility check
@@ -175,7 +175,7 @@ Before creating secrets, the tenant's `SecretKeyMaterial` column must be provisi
 
 ```csharp
 existing.SecretKeyMaterial = RandomNumberGenerator.GetBytes(32);
-await tenantManager.UpdateAsync(existing, ct);
+await tenantManager.Update(existing, ct);
 ```
 
 Then resolve the owner and use `ISecretManager`:
@@ -185,7 +185,7 @@ var owner = await tenantManager.GetSecretOwner(tenantId, ct);
 // null if the tenant does not exist
 // throws InvalidOperationException if SecretKeyMaterial is not set
 
-var result = await secretManager.CreateAsync(owner!, new CreateSecretDto {
+var result = await secretManager.Create(owner!, new CreateSecretDto {
     Name = "Integration Webhook Key",
     Expiration = DateTime.UtcNow.AddYears(1)
 }, ct);

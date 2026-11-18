@@ -41,11 +41,11 @@ public class UsingN2ApplicationManager {
     private async Task<ApplicationDefinition> CreateAppAsync(string name, Guid? tenantId = null) {
         var manager = BuildApplicationManager();
         var app = NewApp(tenantId ?? TestContext.TenantGuid, name);
-        var result = await manager.CreateAsync(app.ApplicationTenantId, app, CancellationToken.None);
+        var result = await manager.Create(app.ApplicationTenantId, app, CancellationToken.None);
         if (!result.Status.IsSuccess()) {
             throw new InvalidOperationException($"Failed to seed application: {result.Message}");
         }
-        var found = await manager.FindByIdAsync(app.ApplicationTenantId, app.Id, CancellationToken.None);
+        var found = await manager.FindById(app.ApplicationTenantId, app.Id, CancellationToken.None);
         return found ?? throw new InvalidOperationException("Failed to retrieve created application.");
     }
 
@@ -56,15 +56,15 @@ public class UsingN2ApplicationManager {
     private async Task<ApplicationDefinition> CreateAppWithKeyMaterialAsync(string name, byte[] keyMaterial) {
         var app = await CreateAppAsync(name);
         var factory = serviceProvider.GetRequiredService<IIdentityContextFactory>();
-        using var ctx = await factory.CreateAsync("IdentityDb");
+        using var ctx = await factory.Create("IdentityDb", CancellationToken.None);
         var record = await ctx.ApplicationFindRecord(app.Id, CancellationToken.None);
         record!.SecretKeyMaterial = keyMaterial;
-        await ctx.Complete();
+        await ctx.Complete(CancellationToken.None);
         return app;
     }
 
     // -------------------------------------------------------------------------
-    // CreateAsync
+    // Create
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -72,7 +72,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
         var app = NewApp(TestContext.TenantGuid, $"App {Guid.NewGuid()}");
 
-        var result = await manager.CreateAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        var result = await manager.Create(TestContext.TenantGuid, app, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
     }
@@ -83,10 +83,10 @@ public class UsingN2ApplicationManager {
         var name = $"  Norm App {Guid.NewGuid()}  ";
         var app = NewApp(TestContext.TenantGuid, name);
 
-        var result = await manager.CreateAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        var result = await manager.Create(TestContext.TenantGuid, app, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, app.Id, CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, app.Id, CancellationToken.None);
         Assert.IsNotNull(found);
         Assert.AreEqual(name.Trim().ToUpperInvariant(), found!.NormalizedName);
     }
@@ -97,7 +97,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         var duplicate = NewApp(TestContext.TenantGuid, app.Name!);
-        var result = await manager.CreateAsync(TestContext.TenantGuid, duplicate, CancellationToken.None);
+        var result = await manager.Create(TestContext.TenantGuid, duplicate, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotAcceptable, result.Status);
     }
@@ -109,8 +109,8 @@ public class UsingN2ApplicationManager {
 
         var app1 = NewApp(TestContext.TenantGuid, sharedName);
         var app2 = NewApp(TestContext.LockedTenantGuid, sharedName);
-        var result1 = await manager.CreateAsync(TestContext.TenantGuid, app1, CancellationToken.None);
-        var result2 = await manager.CreateAsync(TestContext.LockedTenantGuid, app2, CancellationToken.None);
+        var result1 = await manager.Create(TestContext.TenantGuid, app1, CancellationToken.None);
+        var result2 = await manager.Create(TestContext.LockedTenantGuid, app2, CancellationToken.None);
 
         Assert.IsTrue(result1.Status.IsSuccess());
         Assert.IsTrue(result2.Status.IsSuccess());
@@ -121,7 +121,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
         var app = NewApp(Guid.NewGuid(), "Ghost App");
 
-        var result = await manager.CreateAsync(app.ApplicationTenantId, app, CancellationToken.None);
+        var result = await manager.Create(app.ApplicationTenantId, app, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -131,7 +131,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.CreateAsync(Guid.Empty, NewApp(Guid.Empty), CancellationToken.None));
+            () => manager.Create(Guid.Empty, NewApp(Guid.Empty), CancellationToken.None));
     }
 
     [TestMethod]
@@ -140,11 +140,11 @@ public class UsingN2ApplicationManager {
         var app = NewApp(TestContext.TenantGuid, "   ");
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => manager.CreateAsync(TestContext.TenantGuid, app, CancellationToken.None));
+            () => manager.Create(TestContext.TenantGuid, app, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // DeleteAsync
+    // Delete
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -152,10 +152,10 @@ public class UsingN2ApplicationManager {
         var app = await CreateAppAsync($"To Delete {Guid.NewGuid()}");
         var manager = BuildApplicationManager();
 
-        var result = await manager.DeleteAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        var result = await manager.Delete(TestContext.TenantGuid, app, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, app.Id, CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, app.Id, CancellationToken.None);
         Assert.IsNull(found);
     }
 
@@ -164,7 +164,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
         var ghost = NewApp(TestContext.TenantGuid, "Ghost");
 
-        var result = await manager.DeleteAsync(TestContext.TenantGuid, ghost, CancellationToken.None);
+        var result = await manager.Delete(TestContext.TenantGuid, ghost, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -174,7 +174,7 @@ public class UsingN2ApplicationManager {
         var app = await CreateAppAsync($"Wrong Tenant App {Guid.NewGuid()}");
         var manager = BuildApplicationManager();
 
-        var result = await manager.DeleteAsync(TestContext.LockedTenantGuid, app, CancellationToken.None);
+        var result = await manager.Delete(TestContext.LockedTenantGuid, app, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -186,7 +186,7 @@ public class UsingN2ApplicationManager {
         bad.Id = Guid.Empty;
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.DeleteAsync(TestContext.TenantGuid, bad, CancellationToken.None));
+            () => manager.Delete(TestContext.TenantGuid, bad, CancellationToken.None));
     }
 
     [TestMethod]
@@ -194,11 +194,11 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.DeleteAsync(Guid.Empty, NewApp(Guid.Empty), CancellationToken.None));
+            () => manager.Delete(Guid.Empty, NewApp(Guid.Empty), CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // UpdateAsync
+    // Update
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -207,10 +207,10 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         app.Name = $"After Update {Guid.NewGuid()}";
-        var result = await manager.UpdateAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        var result = await manager.Update(TestContext.TenantGuid, app, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, app.Id, CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, app.Id, CancellationToken.None);
         Assert.IsNotNull(found);
         Assert.AreEqual(app.Name, found!.Name);
         Assert.AreEqual(app.Name.ToUpperInvariant(), found.NormalizedName);
@@ -220,7 +220,7 @@ public class UsingN2ApplicationManager {
     public async Task UpdateAsync_NonExistentApp_ShouldFail() {
         var manager = BuildApplicationManager();
 
-        var result = await manager.UpdateAsync(TestContext.TenantGuid, NewApp(TestContext.TenantGuid), CancellationToken.None);
+        var result = await manager.Update(TestContext.TenantGuid, NewApp(TestContext.TenantGuid), CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -230,7 +230,7 @@ public class UsingN2ApplicationManager {
         var app = await CreateAppAsync($"Wrong Tenant Update {Guid.NewGuid()}");
         var manager = BuildApplicationManager();
 
-        var result = await manager.UpdateAsync(TestContext.LockedTenantGuid, app, CancellationToken.None);
+        var result = await manager.Update(TestContext.LockedTenantGuid, app, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -242,18 +242,18 @@ public class UsingN2ApplicationManager {
         app.Name = "   ";
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => manager.UpdateAsync(TestContext.TenantGuid, app, CancellationToken.None));
+            () => manager.Update(TestContext.TenantGuid, app, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // FindByIdAsync
+    // FindById
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task FindByIdAsync_SeededApp_ShouldReturn() {
         var manager = BuildApplicationManager();
 
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, TestContext.ApplicationGuid, CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, TestContext.ApplicationGuid, CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.ApplicationGuid, found!.Id);
@@ -264,7 +264,7 @@ public class UsingN2ApplicationManager {
     public async Task FindByIdAsync_UnknownId_ShouldReturnNull() {
         var manager = BuildApplicationManager();
 
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, Guid.NewGuid(), CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsNull(found);
     }
@@ -273,7 +273,7 @@ public class UsingN2ApplicationManager {
     public async Task FindByIdAsync_WrongTenant_ShouldReturnNull() {
         var manager = BuildApplicationManager();
 
-        var found = await manager.FindByIdAsync(TestContext.LockedTenantGuid, TestContext.ApplicationGuid, CancellationToken.None);
+        var found = await manager.FindById(TestContext.LockedTenantGuid, TestContext.ApplicationGuid, CancellationToken.None);
 
         Assert.IsNull(found);
     }
@@ -283,7 +283,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.FindByIdAsync(TestContext.TenantGuid, Guid.Empty, CancellationToken.None));
+            () => manager.FindById(TestContext.TenantGuid, Guid.Empty, CancellationToken.None));
     }
 
     [TestMethod]
@@ -291,18 +291,18 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.FindByIdAsync(Guid.Empty, TestContext.ApplicationGuid, CancellationToken.None));
+            () => manager.FindById(Guid.Empty, TestContext.ApplicationGuid, CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
-    // FindByNameAsync
+    // FindByName
     // -------------------------------------------------------------------------
 
     [TestMethod]
     public async Task FindByNameAsync_SeededApp_ShouldReturn() {
         var manager = BuildApplicationManager();
 
-        var found = await manager.FindByNameAsync(TestContext.TenantGuid, "Test App", CancellationToken.None);
+        var found = await manager.FindByName(TestContext.TenantGuid, "Test App", CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.ApplicationGuid, found!.Id);
@@ -312,7 +312,7 @@ public class UsingN2ApplicationManager {
     public async Task FindByNameAsync_CaseInsensitive_ShouldReturn() {
         var manager = BuildApplicationManager();
 
-        var found = await manager.FindByNameAsync(TestContext.TenantGuid, "test app", CancellationToken.None);
+        var found = await manager.FindByName(TestContext.TenantGuid, "test app", CancellationToken.None);
 
         Assert.IsNotNull(found);
         Assert.AreEqual(TestContext.ApplicationGuid, found!.Id);
@@ -322,7 +322,7 @@ public class UsingN2ApplicationManager {
     public async Task FindByNameAsync_UnknownName_ShouldReturnNull() {
         var manager = BuildApplicationManager();
 
-        var found = await manager.FindByNameAsync(TestContext.TenantGuid, "Does Not Exist XYZ", CancellationToken.None);
+        var found = await manager.FindByName(TestContext.TenantGuid, "Does Not Exist XYZ", CancellationToken.None);
 
         Assert.IsNull(found);
     }
@@ -332,7 +332,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => manager.FindByNameAsync(TestContext.TenantGuid, "", CancellationToken.None));
+            () => manager.FindByName(TestContext.TenantGuid, "", CancellationToken.None));
     }
 
     [TestMethod]
@@ -340,7 +340,7 @@ public class UsingN2ApplicationManager {
         var manager = BuildApplicationManager();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => manager.FindByNameAsync(Guid.Empty, "Test App", CancellationToken.None));
+            () => manager.FindByName(Guid.Empty, "Test App", CancellationToken.None));
     }
 
     // -------------------------------------------------------------------------
@@ -375,7 +375,7 @@ public class UsingN2ApplicationManager {
     }
 
     // -------------------------------------------------------------------------
-    // LockAsync / UnlockAsync
+    // Lock / Unlock
     // -------------------------------------------------------------------------
 
     [TestMethod]
@@ -383,10 +383,10 @@ public class UsingN2ApplicationManager {
         var app = await CreateAppAsync($"To Lock {Guid.NewGuid()}");
         var manager = BuildApplicationManager();
 
-        var result = await manager.LockAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        var result = await manager.Lock(TestContext.TenantGuid, app, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, app.Id, CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, app.Id, CancellationToken.None);
         Assert.IsTrue(found!.IsLocked);
     }
 
@@ -394,7 +394,7 @@ public class UsingN2ApplicationManager {
     public async Task LockAsync_NonExistentApp_ShouldFail() {
         var manager = BuildApplicationManager();
 
-        var result = await manager.LockAsync(TestContext.TenantGuid, NewApp(TestContext.TenantGuid), CancellationToken.None);
+        var result = await manager.Lock(TestContext.TenantGuid, NewApp(TestContext.TenantGuid), CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -404,7 +404,7 @@ public class UsingN2ApplicationManager {
         var app = await CreateAppAsync($"Lock Wrong Tenant {Guid.NewGuid()}");
         var manager = BuildApplicationManager();
 
-        var result = await manager.LockAsync(TestContext.LockedTenantGuid, app, CancellationToken.None);
+        var result = await manager.Lock(TestContext.LockedTenantGuid, app, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -413,12 +413,12 @@ public class UsingN2ApplicationManager {
     public async Task UnlockAsync_LockedApp_ShouldSetIsLockedFalse() {
         var app = await CreateAppAsync($"To Unlock {Guid.NewGuid()}");
         var manager = BuildApplicationManager();
-        await manager.LockAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        await manager.Lock(TestContext.TenantGuid, app, CancellationToken.None);
 
-        var result = await manager.UnlockAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        var result = await manager.Unlock(TestContext.TenantGuid, app, CancellationToken.None);
 
         Assert.IsTrue(result.Status.IsSuccess());
-        var found = await manager.FindByIdAsync(TestContext.TenantGuid, app.Id, CancellationToken.None);
+        var found = await manager.FindById(TestContext.TenantGuid, app.Id, CancellationToken.None);
         Assert.IsFalse(found!.IsLocked);
     }
 
@@ -426,7 +426,7 @@ public class UsingN2ApplicationManager {
     public async Task UnlockAsync_NonExistentApp_ShouldFail() {
         var manager = BuildApplicationManager();
 
-        var result = await manager.UnlockAsync(TestContext.TenantGuid, NewApp(TestContext.TenantGuid), CancellationToken.None);
+        var result = await manager.Unlock(TestContext.TenantGuid, NewApp(TestContext.TenantGuid), CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }
@@ -435,9 +435,9 @@ public class UsingN2ApplicationManager {
     public async Task UnlockAsync_WrongTenant_ShouldFail() {
         var app = await CreateAppAsync($"Unlock Wrong Tenant {Guid.NewGuid()}");
         var manager = BuildApplicationManager();
-        await manager.LockAsync(TestContext.TenantGuid, app, CancellationToken.None);
+        await manager.Lock(TestContext.TenantGuid, app, CancellationToken.None);
 
-        var result = await manager.UnlockAsync(TestContext.LockedTenantGuid, app, CancellationToken.None);
+        var result = await manager.Unlock(TestContext.LockedTenantGuid, app, CancellationToken.None);
 
         Assert.AreEqual(ResponseStatus.NotFound, result.Status);
     }

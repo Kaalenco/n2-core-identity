@@ -12,9 +12,16 @@ internal sealed class TimeoutTimer {
         this.timer.Start();
     }
 
-    public async Task Wait() {
+    /// <summary>
+    /// Waits until the configured time budget has elapsed since construction.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> when the call had to pad (the work finished inside the budget); <c>false</c>
+    /// when the budget was already used up, so the caller's timing was not equalised.
+    /// </returns>
+    public async Task<bool> Wait(CancellationToken ct) {
         if (timer.ElapsedMilliseconds >= timeToWait) {
-            return;
+            return false;
         }
 
         if (timeToWait < 20) {
@@ -23,13 +30,15 @@ internal sealed class TimeoutTimer {
             // or under-sleep by several milliseconds — unacceptable for the
             // constant-time comparisons that use a 10 ms target.
             while (timer.ElapsedMilliseconds < timeToWait) {
+                ct.ThrowIfCancellationRequested();
                 await Task.Yield();
             }
         } else {
             var remaining = timeToWait - (int)timer.ElapsedMilliseconds;
             if (remaining > 0) {
-                await Task.Delay(remaining);
+                await Task.Delay(remaining, ct);
             }
         }
+        return true;
     }
 }

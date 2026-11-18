@@ -21,17 +21,17 @@ public class TimingAttackResistanceTests : N2IdentityTestsBase {
 
         for (var i = 0; i < iterations; i++) {
             sw.Restart();
-            await authService.AuthenticateAsync(new UserLogin {
+            await authService.Authenticate(new UserLogin {
                 Username = "validuser",
                 Password = "WrongPassword"
-            });
+            }, CancellationToken.None);
             validUserTimes.Add(sw.ElapsedMilliseconds);
 
             sw.Restart();
-            await authService.AuthenticateAsync(new UserLogin {
+            await authService.Authenticate(new UserLogin {
                 Username = "nonexistentuser" + i,
                 Password = "WrongPassword"
-            });
+            }, CancellationToken.None);
             invalidUserTimes.Add(sw.ElapsedMilliseconds);
         }
 
@@ -83,10 +83,10 @@ public class TimingAttackResistanceTests : N2IdentityTestsBase {
         await CreateTestUser(username, "P@ssword123", MultiFactorType.Email);
 
         var userManager = GetUserManager();
-        var userResponse = await userManager.FindByNameAsync(username, CancellationToken.None);
+        var userResponse = await userManager.FindByName(username, CancellationToken.None);
         var user = userResponse.Value!;
 
-        var validTokenResponse = await userManager.GenerateConfirmationTokenAsync(user, CancellationToken.None);
+        var validTokenResponse = await userManager.GenerateConfirmationToken(user, CancellationToken.None);
         var validToken = validTokenResponse.Value ?? "";
 
         var completelyWrongToken = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
@@ -98,11 +98,11 @@ public class TimingAttackResistanceTests : N2IdentityTestsBase {
 
         for (var i = 0; i < iterations; i++) {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await userManager.ValidateMultifactorAsync(user, completelyWrongToken, CancellationToken.None);
+            await userManager.ValidateMultifactor(user, completelyWrongToken, CancellationToken.None);
             wrongTimes.Add(sw.ElapsedTicks);
 
             sw.Restart();
-            await userManager.ValidateMultifactorAsync(user, partiallyWrongToken, CancellationToken.None);
+            await userManager.ValidateMultifactor(user, partiallyWrongToken, CancellationToken.None);
             partialTimes.Add(sw.ElapsedTicks);
         }
 
@@ -135,8 +135,8 @@ public class TimingAttackResistanceTests : N2IdentityTestsBase {
         var iterations = 100;
         var userManager = GetUserManager();
 
-        await userManager.ValidateAsync(user, "WarmupPassword1!", CancellationToken.None);
-        await userManager.ValidateAsync(user, "WarmupPassword2!", CancellationToken.None);
+        await userManager.Validate(user, "WarmupPassword1!", CancellationToken.None);
+        await userManager.Validate(user, "WarmupPassword2!", CancellationToken.None);
 
         var timesFirstChar = new List<long>();
         var timesLastChar = new List<long>();
@@ -144,12 +144,12 @@ public class TimingAttackResistanceTests : N2IdentityTestsBase {
         for (var i = 0; i < iterations; i++) {
             var wrongFirst = "XestPassword123!";
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await userManager.ValidateAsync(user, wrongFirst, CancellationToken.None);
+            await userManager.Validate(user, wrongFirst, CancellationToken.None);
             timesFirstChar.Add(sw.ElapsedTicks);
 
             var wrongLast = "TestPassword123X";
             sw.Restart();
-            await userManager.ValidateAsync(user, wrongLast, CancellationToken.None);
+            await userManager.Validate(user, wrongLast, CancellationToken.None);
             timesLastChar.Add(sw.ElapsedTicks);
         }
 
