@@ -10,7 +10,7 @@
 
     <Title>N2-Identity</Title>
     <Company>Kaalenco</Company>
-    <Copyright>(c) 2024 - rights reserved</Copyright>
+    <Copyright>(c) 2026 - rights reserved</Copyright>
     <Authors>gjkaal</Authors>
     <Description>Data context for identity services</Description>
     <IncludeSymbols>False</IncludeSymbols>
@@ -23,10 +23,11 @@
     <Product>N2.Core for .NET 10 and .NET 11</Product>
     <ProductName>N2.Core</ProductName>
 
-    <Version>2.0.1</Version>
-    <PackageVersion>2.0.1</PackageVersion>
-    <AssemblyVersion>2.0.1</AssemblyVersion>
-    <ProductVersion>2.0.1</ProductVersion>
+    <Version>3.0.1</Version>
+    <PackageVersion>3.0.1</PackageVersion>
+    <AssemblyVersion>3.0.0.0</AssemblyVersion>
+    <FileVersion>3.0.1.0</FileVersion>
+    <ProductVersion>3.0.1</ProductVersion>
 
     <RootNamespace>N2.Core.Identity</RootNamespace>
     <UserSecretsId>N2-Core-0c368d89-5cb3-4451-9c68-b79e69920a09</UserSecretsId>
@@ -60,12 +61,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="N2.Core.Abstractions" Version="2.0.0" />
-    <PackageReference Include="QRCoder" Version="1.8.1" />
+    <!-- TODO bump to 3.0.1 after N2.Core.Abstractions 3.0.1 is published -->
+    <PackageReference Include="N2.Core.Abstractions" Version="3.0.0" />
+    <PackageReference Include="QRCoder" Version="1.9.0" />
     <PackageReference Include="Otp.NET" Version="1.4.1" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.23.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="10.0.15" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.15" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
@@ -80,8 +84,23 @@
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.15" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.23.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="11.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="11.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="11.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="11.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; compile</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="11.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>

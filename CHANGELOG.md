@@ -5,6 +5,44 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## 3.0.1 - 2026-11-24
+
+Version unification release: all N2 packages move to 3.0.1. Major bump from 2.0.1 because the
+package moves to N2.Core.Abstractions 3.0.0 (token format v2) and EF Core 11 on net11.0.
+No public API of N2.Core.Identity changed.
+
+Upgrade guide: [MIGRATION-3.0.md](MIGRATION-3.0.md).
+
+### Version metadata
+
+- `Version`/`PackageVersion` 3.0.1, `AssemblyVersion` 3.0.0.0 (stable across patch releases),
+  `FileVersion` 3.0.1.0, `ProductVersion` 3.0.1.
+
+### Targets
+
+- `net10.0` and `net11.0` (unchanged). `netstandard2.0` is not added: ASP.NET Core Identity,
+  EF Core 10/11 and JwtBearer do not support it.
+
+### Dependencies
+
+- `N2.Core.Abstractions` 2.0.0 -> 3.0.0 (3.0.1 follows once published).
+- Per-TFM conditional groups: `net10.0` uses the 10.0.15 band, `net11.0` uses 11.0.0 for
+  `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*` and
+  `Microsoft.Extensions.Configuration.UserSecrets` (was 10.0.15 for both).
+- `QRCoder` 1.8.1 -> 1.9.0. `Microsoft.IdentityModel.Tokens` and `System.IdentityModel.Tokens.Jwt`
+  stay at 8.23.0, `Otp.NET` at 1.4.1.
+- Unit tests: `Microsoft.EntityFrameworkCore.InMemory` and `.Design` per TFM (10.0.15 / 11.0.0).
+
+### Publishing
+
+- Source of truth is GitHub (`Kaalenco/n2-core-identity`). The GitHub Actions workflow
+  `.github/workflows/dotnet.yml` builds, runs the unit tests and publishes to the `vault-packages`
+  feed on pushes to `trunk` (`--skip-duplicate`). nuget.org is handled by n2-publishing from the feed.
+- `src/nuget.config` maps `N2.*` to `vault-packages` and everything else to nuget.org.
+- CodeQL workflow restored to `.github/workflows/codeql.yml` (.NET 10 and 11, feed authentication).
+
+---
+
 ## 2.0.1 - 2026-11-18
 
 ### Security

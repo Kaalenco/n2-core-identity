@@ -59,10 +59,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup .NET 10.0
-      uses: actions/setup-dotnet@v4
+    - name: Setup .NET 10.0 and 11.0
+      uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: 10.0.x
+        dotnet-version: |
+          10.0.x
+          11.0.x
         
     # Add any setup steps before running the `github/codeql-action/init` action.
     # This includes steps like installing compilers or runtimes (`actions/setup-node`
@@ -87,11 +89,20 @@ jobs:
     # "We were unable to automatically build your code", modify the matrix above
     # to set the build mode to "manual" for that language. Then modify this step
     # to build your code.
-    # ℹ️ Command-line programs to run using the OS shell.
-    # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
+    #  Command-line programs to run using the OS shell.
+    #  See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
     - if: matrix.build-mode == 'manual'
       shell: bash
+      env:
+        NUGET_PAT: ${{ secrets.NUGET_PAT }}
       run: |
+        # N2.* packages come from the private vault-packages feed (src/nuget.config, no credentials).
+        # The PAT is added to the runner's copy only. Never echoed or committed.
+        if [ -z "$NUGET_PAT" ]; then
+          echo "::error::Repository secret NUGET_PAT is not set; cannot restore N2.* packages."
+          exit 1
+        fi
+        dotnet nuget update source vault-packages --username az --password "$NUGET_PAT" --store-password-in-clear-text --configfile src/nuget.config
         dotnet restore src
         dotnet build src --no-restore
 

@@ -57,36 +57,17 @@ It is planned to return as a separate package, N2.Core.Identity.MySql.
 
 ## CI/CD Pipeline
 
-### Build and publish (`.github/workflows/dotnet.yml`)
+### Build, test and publish (`.github/workflows/dotnet.yml`)
 
-Runs on push and PR to `trunk`, **only when files under `src/N2.*/**` have changed**. So only
-changes in source code that follows the required namespace will run this workflow. Three jobs
-execute in sequence:
+Runs on push and PR to `trunk`. Steps: authenticate to the private `vault-packages` feed,
+restore, Release build (produces the `.nupkg` through `GeneratePackageOnBuild`), unit tests
+(`TestCategory!=Integration`), and on pushes to `trunk` only: `dotnet nuget push` to
+`vault-packages` with `--skip-duplicate`, so only a version bump publishes a new package.
+nuget.org is handled by n2-publishing from the feed, not by this workflow.
 
-| # | Job | Trigger |
-|---|-----|---------|
-| 1 | **Build and Test** — restore, build, unit tests | push + PR to `trunk` |
-| 3 | **Publish NuGet** — Release build + `nuget push` | push to `trunk` only, after job 1 passes |
-
-The NuGet package is only published after the test stage passes, and only when the
-`<PackageVersion>` in the publishable `.csproj` is not yet present on nuget.org. PRs never
-trigger a publish.
-
-A `Verify workflow parameters` step runs first in the publish job and gates all subsequent
-steps — if any required parameter is missing the job fails immediately with a clear error
-message before any build work is done.
-
-The publish job reads two **repository variables** (set under `Settings → Secrets and variables → Actions → Variables`):
-
-| Variable | Description | Example value |
-|----------|-------------|---------------|
-| `CSPROJ_PATH` | Relative path to the `.csproj` of the project being published | `src/N2.Core.Identity/N2.Core.Identity.csproj` |
-| `NUGET_PACKAGE_ID` | NuGet package ID in lowercase, as it appears on nuget.org | `n2.core.identity` |
-
-> **Important:** `CSPROJ_PATH` must point to the single project that produces the NuGet package.
-> If the solution contains multiple publishable projects, each one needs its own workflow (or
-> a matrix job), with `CSPROJ_PATH` and `NUGET_PACKAGE_ID` set to match the correct project.
-> Test projects and other non-publishable projects should never be referenced here.
+`N2.*` packages come from `vault-packages` (see `src/nuget.config`, no credentials in the
+file). The repository secret `NUGET_PAT` (Packaging read and write) is added to the runner's
+copy of `src/nuget.config` only. For local restore use the Azure Artifacts Credential Provider.
 
 ### CodeQL security scanning (`.github/workflows/codeql.yml`)
 
@@ -99,37 +80,6 @@ tab.
 > an updated version at `github.com/github/codeql-action` releases and regenerate or update
 > the file accordingly — particularly when new CodeQL action major versions are released
 > (currently `github/codeql-action/init@v4` and `github/codeql-action/analyze@v4`).
-
-### Maintenance (`.github/workflows/maintenance.yml`)
-
-Runs every **Sunday at 03:00 UTC** (and can be triggered manually from the GitHub Actions UI).
-Executes `scripts/delete-workflow-runs.sh`, which deletes:
-
-- Failed workflow runs older than `RETENTION_DAYS` days (default: 10)
-- All `codeql.yml` runs older than `RETENTION_DAYS` days
-
-A `Verify workflow parameters` step runs first and gates all subsequent steps — if
-`GH_MAINTENANCE` is not set the job fails immediately with a clear error message.
-
-The script reads its configuration from environment variables set by the workflow:
-
-| Variable | Source | Description |
-|----------|--------|-------------|
-| `REPO` | `github.repository` | Set automatically — no configuration needed |
-| `RETENTION_DAYS` | repository variable (optional) | Override the default of 10 days |
-| `GH_TOKEN` | secret `GH_MAINTENANCE` | PAT for authenticating GitHub API calls |
-
-The script can also be run locally:
-```bash
-REPO="Kaalenco/n2-core-identity" bash scripts/delete-workflow-runs.sh
-# With custom retention:
-REPO="Kaalenco/n2-core-identity" RETENTION_DAYS=30 bash scripts/delete-workflow-runs.sh
-```
-
-**Required secret:** `GH_MAINTENANCE` — a fine-grained Personal Access Token with
-**Actions: Read and Write** permission on this repository. Create it at
-`GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens`
-and add it as a repository secret under `Settings → Secrets and variables → Actions`.
 
 ## Regular Maintenance
 
@@ -157,12 +107,14 @@ its `<TargetFramework>` entry from `N2.Core.Identity.csproj` and the correspondi
 The package version is set manually in `N2.Core.Identity.csproj`:
 
 ```xml
-<PackageVersion>2.0.1</PackageVersion>
-<AssemblyVersion>2.0.1</AssemblyVersion>
-<ProductVersion>2.0.1</ProductVersion>
+<Version>3.0.1</Version>
+<PackageVersion>3.0.1</PackageVersion>
+<AssemblyVersion>3.0.0.0</AssemblyVersion>
+<FileVersion>3.0.1.0</FileVersion>
+<ProductVersion>3.0.1</ProductVersion>
 ```
 
-Bump all three values together before merging a release to `trunk`.
+Bump the version values together (AssemblyVersion only on a major bump) before merging a release to `trunk`.
 
 ### NuGet dependencies
 

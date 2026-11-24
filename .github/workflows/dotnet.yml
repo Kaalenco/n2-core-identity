@@ -1,0 +1,65 @@
+# This workflow will build a .NET project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
+
+name: .NET Build and test
+
+on:
+  push:
+    branches: [ "trunk" ]
+  pull_request:
+    branches: [ "trunk" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+    - name: Setup .NET 10.0 and 11.0
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: |
+          10.0.x
+          11.0.x
+    # N2.* packages come from the private Azure Artifacts feed vault-packages (see src/nuget.config).
+    # NUGET_PAT is a Packaging (read & write) PAT stored as a repository secret. The credential is
+    # added to the runner's copy of src/nuget.config only; it is never committed or echoed.
+    - name: Authenticate to vault-packages
+      env:
+        NUGET_PAT: ${{ secrets.NUGET_PAT }}
+      run: |
+        if [ -z "$NUGET_PAT" ]; then
+          echo "::error::Repository secret NUGET_PAT is not set; cannot restore N2.* packages from vault-packages."
+          exit 1
+        fi
+        dotnet nuget update source vault-packages --username az --password "$NUGET_PAT" --store-password-in-clear-text --configfile src/nuget.config
+    - name: Restore dependencies
+      run: dotnet restore src
+    # Release build; GeneratePackageOnBuild=True makes it produce the .nupkg as well
+    # (a separate dotnet pack fails with NU5026 on this multi-target project).
+    - name: Build
+      run: dotnet build src --no-restore --configuration Release
+    - name: Test
+      run: dotnet test src --no-build --configuration Release --verbosity normal --filter "TestCategory!=Integration"
+    # Publish to vault-packages on pushes to trunk only (not on pull requests). The feed credential
+    # comes from the authenticated src/nuget.config; Azure Artifacts ignores the api-key value.
+    # An existing version is skipped, so only a version bump publishes a new package.
+    # nuget.org is not handled here: n2-publishing promotes packages from the feed.
+    - name: Publish to vault-packages
+      if: github.event_name == 'push' && github.ref == 'refs/heads/trunk'
+      working-directory: src
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        packages=(N2.Core.Identity/bin/Release/*.nupkg)
+        if [ ${#packages[@]} -eq 0 ]; then
+          echo "::error::No *.nupkg found in N2.Core.Identity/bin/Release; nothing to publish."
+          exit 1
+        fi
+        for pkg in "${packages[@]}"; do
+          dotnet nuget push "$pkg" --source vault-packages --api-key az --skip-duplicate
+        done

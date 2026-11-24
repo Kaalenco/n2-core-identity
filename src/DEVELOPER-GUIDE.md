@@ -6,9 +6,7 @@ This document explains how to build, test, and maintain the project locally and 
 
 ```
 n2-core-identity/
-├── Pipelines/
-│   ├── n2-core-identity-ci-pr.yml       # PR pipeline
-│   └── n2-core-identity-ci-publish.yml  # Trunk publish pipeline
+├── .github/workflows/                   # dotnet.yml, codeql.yml
 ├── docs/
 ├── scripts/
 └── src/
@@ -72,59 +70,27 @@ resolution and datetime precision. It is replaced by two tests with a 2-second m
 side of the boundary (`UserFindRecord_AlertJustOutside7DayWindow_ShouldNotBeIncluded`,
 `UserFindRecord_AlertJustInside7DayWindow_ShouldBeIncluded`).
 
-## CI/CD pipeline
+## CI/CD
 
-Two pipelines are registered in Azure DevOps:
+GitHub Actions (`.github/workflows/`) is the CI system:
 
 | File | Purpose | Trigger |
 |------|---------|---------|
-| `Pipelines/n2-core-identity-ci-pr.yml` | PR validation | PR targeting `trunk` |
-| `Pipelines/n2-core-identity-ci-publish.yml` | Build, analyse, and publish | Push to `trunk` |
+| `dotnet.yml` | Restore, Release build, unit tests, publish to `vault-packages` | push and PR to `trunk` (publish: push only) |
+| `codeql.yml` | CodeQL scan (C# and Actions) | push and PR to `trunk`, weekly |
 
-Path filter: only changes under `src/N2.*/**` trigger a run. Documentation-only commits are excluded.
-
-### PR pipeline stages
-
-| # | Stage | Runs on |
-|---|-------|---------|
-| 1 | Build and Test | every PR |
-| 2 | Code Analysis (coverage + complexity) | after Build passes |
-
-### Publish pipeline stages
-
-| # | Stage | Runs on |
-|---|-------|---------|
-| 1 | Build and Test | push to trunk |
-| 2 | Long-Running Tests | after Build, only for a new package version |
-| 3 | Code Analysis | after Build |
-| 4 | Publish NuGet | after Build and Long-Running Tests pass, only for a new package version |
-
-### Pipeline variables
-
-| Variable | Where set | Description |
-|----------|-----------|-------------|
-| `buildConfiguration` | YAML | MSBuild configuration (`Release`) |
-| `artifactsFeedName` | YAML | Azure Artifacts feed (`vault-packages`) |
-
-### Azure DevOps setup required
-
-- **Artifacts feed permissions:** `vault-packages` → Feed settings → Permissions → add `N2 Vault services Build Service (gjkaal)` with role **Contributor**.
-- **Pipeline setting:** enable **Allow scripts to access the OAuth token** (required for the run-retention steps).
-
-### Run retention
-
-- PR builds are retained for **3 days**.
-- Trunk builds are retained for **10 days**.
-- Published builds (after a successful Publish stage) are retained for **365 days**.
+The feed credential is the repository secret `NUGET_PAT`; it is added to the runner's copy of
+`src/nuget.config` and never committed. Publishing uses `--skip-duplicate`, so only a version bump
+produces a new package. nuget.org is handled by n2-publishing from the feed.
 
 ## Regular maintenance
 
 ### Runtime targets
 
-The library targets `net10.0` and `net11.0`. Both SDK versions are installed in the pipeline via `UseDotNet@2` steps. When adding or dropping a target framework:
+The library targets `net10.0` and `net11.0`. Both SDK versions are installed in the workflows via `actions/setup-dotnet`. When adding or dropping a target framework:
 
 1. Update `<TargetFrameworks>` in `src/N2.Core.Identity/N2.Core.Identity.csproj`.
-2. Add or remove the matching `UseDotNet@2` step in both pipeline YAML files.
+2. Update the `dotnet-version` list of `setup-dotnet` in both workflow files.
 3. Update the framework-conditional `<ItemGroup>` blocks in the `.csproj` for any packages that differ by TFM.
 
 ### Package version
@@ -132,12 +98,13 @@ The library targets `net10.0` and `net11.0`. Both SDK versions are installed in 
 The version is set in `src/N2.Core.Identity/N2.Core.Identity.csproj`:
 
 ```xml
-<Version>2.0.1</Version>
-<PackageVersion>2.0.1</PackageVersion>
-<AssemblyVersion>2.0.1</AssemblyVersion>
+<Version>3.0.1</Version>
+<PackageVersion>3.0.1</PackageVersion>
+<AssemblyVersion>3.0.0.0</AssemblyVersion>
+<FileVersion>3.0.1.0</FileVersion>
 ```
 
-Bump all three before tagging a release. The `.nupkg` is produced automatically by `GeneratePackageOnBuild` on Release builds.
+Bump them (AssemblyVersion only on a major bump) before tagging a release. The `.nupkg` is produced automatically by `GeneratePackageOnBuild` on Release builds.
 
 ### Dependencies
 
