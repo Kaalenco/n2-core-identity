@@ -59,6 +59,11 @@ Incremental SQL scripts (`Scripts/M00`, `M01`, `M02`) are included in the output
 | [src/WARNINGS.md](src/WARNINGS.md) | Suppressed analyser warnings — lists every `<NoWarn>` entry with severity rating and guidance. |
 | [CHANGELOG.md](CHANGELOG.md) | Full version history. |
 | [MIGRATION-2.0.md](MIGRATION-2.0.md) | Code migration guide from 1.x (1.7.5) to 2.0.0. |
+| [MIGRATION-3.0.md](MIGRATION-3.0.md) | Migration notes from 2.0.1 to 3.0.1. |
+
+## Upgrading to 3.0
+
+3.0.1 is a major version bump that unifies all N2 packages. N2.Core.Identity has no API changes, but it depends on N2.Core.Abstractions 3.0.0 (token format v2, mandatory purpose) and uses EF Core 11 on net11.0. See [MIGRATION-3.0.md](MIGRATION-3.0.md).
 
 ## Upgrading to 2.0
 
@@ -66,7 +71,7 @@ Incremental SQL scripts (`Scripts/M00`, `M01`, `M02`) are included in the output
 
 ## Change log
 
-See [CHANGELOG.md](CHANGELOG.md) for the full history. Current version: **2.0.1**.
+See [CHANGELOG.md](CHANGELOG.md) for the full history. Current version: **3.0.1**.
 
 ---
 

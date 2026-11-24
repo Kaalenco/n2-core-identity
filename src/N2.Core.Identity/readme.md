@@ -20,6 +20,7 @@ AFL-3.0
 
 | Version | Changes |
 |---|---|
+| **3.0.1** | Version unification (major bump, no API changes): N2.Core.Abstractions 3.0.0, EF Core 11 on net11.0, QRCoder 1.9.0, GitHub Actions publishing to vault-packages. See MIGRATION-3.0.md. |
 | **2.0.1** | Security: the wrong-password path now takes the same padded time as the unknown-user and locked-out paths (user enumeration by timing, CWE-208); present since 1.x. |
 | **2.0.0** | Breaking: targets net10.0 and net11.0 (net8.0 dropped); N2.Core.Abstractions 2.0.0; EF Core 10; MySQL support removed (planned as N2.Core.Identity.MySql); every async member takes a required `CancellationToken` and the `Async` suffix is removed from all member names. See CHANGELOG.md. |
 | **1.5.1** | MySQL integration test CI pipeline: Docker Compose environment, `Dockerfile.integration`, and `TestCategory`-based filtering (`Integration.MySql` / `Integration.SqlServer`). `PendingModelChangesWarning` downgraded to a logged warning for MySQL contexts. |
