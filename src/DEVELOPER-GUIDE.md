@@ -89,7 +89,7 @@ produces a new package. nuget.org is handled by n2-publishing from the feed.
 The library targets `net10.0` and `net11.0`. Both SDK versions are installed in the workflows via `actions/setup-dotnet`. When adding or dropping a target framework:
 
 1. Update `<TargetFrameworks>` in `src/N2.Core.Identity/N2.Core.Identity.csproj`.
-2. Update the `dotnet-version` list of `setup-dotnet` in both workflow files.
+2. Update the `dotnet-version` list of `setup-dotnet` in `.github/workflows/dotnet.yml`.
 3. Update the framework-conditional `<ItemGroup>` blocks in the `.csproj` for any packages that differ by TFM.
 
 ### Package version

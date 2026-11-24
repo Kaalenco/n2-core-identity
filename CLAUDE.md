@@ -213,12 +213,7 @@ Test users and data are configured via the `TestContext` service collection conf
 
 ## CI/CD
 
-Azure Pipelines (`Pipelines/`):
-- `n2-core-identity-ci-pr.yml` builds and runs the unit tests on every PR to `trunk`
-- `n2-core-identity-ci-publish.yml` builds, tests and, for a new package version, publishes to
-  the `vault-packages` Azure Artifacts feed (no nuget.org push)
-- Both install the .NET 11.0 and 10.0 SDKs; coverage runs on net10.0
-- The GitHub Actions workflows in `github-historic/` are no longer used
+GitHub Actions: workflow `.github/workflows/dotnet.yml` builds, tests and publishes to `vault-packages` on push to `trunk`.
 
 ## Coding conventions (2.0.0)
 
