@@ -6,7 +6,7 @@ This document explains how to build, test, and maintain the project locally and 
 
 ```
 n2-core-identity/
-├── .github/workflows/                   # dotnet.yml, codeql.yml
+├── .github/workflows/                   # dotnet.yml
 ├── docs/
 ├── scripts/
 └── src/
@@ -77,7 +77,6 @@ GitHub Actions (`.github/workflows/`) is the CI system:
 | File | Purpose | Trigger |
 |------|---------|---------|
 | `dotnet.yml` | Restore, Release build, unit tests, publish to `vault-packages` | push and PR to `trunk` (publish: push only) |
-| `codeql.yml` | CodeQL scan (C# and Actions) | push and PR to `trunk`, weekly |
 
 The feed credential is the repository secret `NUGET_PAT`; it is added to the runner's copy of
 `src/nuget.config` and never committed. Publishing uses `--skip-duplicate`, so only a version bump

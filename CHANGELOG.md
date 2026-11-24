@@ -39,7 +39,7 @@ Upgrade guide: [MIGRATION-3.0.md](MIGRATION-3.0.md).
   `.github/workflows/dotnet.yml` builds, runs the unit tests and publishes to the `vault-packages`
   feed on pushes to `trunk` (`--skip-duplicate`). nuget.org is handled by n2-publishing from the feed.
 - `src/nuget.config` maps `N2.*` to `vault-packages` and everything else to nuget.org.
-- CodeQL workflow restored to `.github/workflows/codeql.yml` (.NET 10 and 11, feed authentication).
+- CodeQL scanning is not used: no workflow, and GitHub default setup is off (the autobuild cannot reach the private feed).
 
 ---
 
